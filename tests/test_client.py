@@ -70,6 +70,7 @@ def client(tmp_path):
             database_url=f"sqlite:///{db_path}",
             server_url="http://testserver",
             server_token=token,
+            admin_token="admin-secret",
         )
         c = AMTodoClient(client_settings)
         c._client = httpx.Client(

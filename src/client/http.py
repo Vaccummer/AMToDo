@@ -14,6 +14,7 @@ class AMTodoClient:
 
     def __init__(self, settings: AppSettings) -> None:
         self._base = settings.server_url.rstrip("/")
+        self._admin_token = settings.admin_token
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if settings.server_token:
             headers["Authorization"] = f"Bearer {settings.server_token}"
@@ -28,24 +29,24 @@ class AMTodoClient:
         return self._get("/api/v1/health")
 
     def init_db(self) -> dict[str, Any]:
-        return self._post("/api/v1/admin/init-db")
+        return self._post("/api/v1/admin/init-db", headers=self._admin_headers())
 
     # ── users ──
 
     def user_create(self, name: str) -> dict[str, Any]:
-        return self._post("/api/v1/admin/users", json={"name": name})
+        return self._post("/api/v1/admin/users", json={"name": name}, headers=self._admin_headers())
 
     def user_list(self) -> dict[str, Any]:
-        return self._get("/api/v1/admin/users")
+        return self._get("/api/v1/admin/users", headers=self._admin_headers())
 
     def user_delete(self, user_id: int) -> dict[str, Any]:
-        return self._delete(f"/api/v1/admin/users/{user_id}")
+        return self._delete(f"/api/v1/admin/users/{user_id}", headers=self._admin_headers())
 
     def user_update(self, user_id: int, name: str) -> dict[str, Any]:
-        return self._patch(f"/api/v1/admin/users/{user_id}", json={"name": name})
+        return self._patch(f"/api/v1/admin/users/{user_id}", json={"name": name}, headers=self._admin_headers())
 
     def user_regenerate_token(self, user_id: int) -> dict[str, Any]:
-        return self._put(f"/api/v1/admin/users/{user_id}/token")
+        return self._put(f"/api/v1/admin/users/{user_id}/token", headers=self._admin_headers())
 
     # ── todos ──
 
@@ -214,6 +215,9 @@ class AMTodoClient:
         return self._get("/api/v1/schedules/stats", params=params)
 
     # ── internal helpers ──
+
+    def _admin_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._admin_token}"}
 
     def _get(self, path: str, **kwargs: Any) -> dict[str, Any]:
         return self._request("GET", path, **kwargs)

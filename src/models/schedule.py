@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Index, Integer, String, Text
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base, EpochAuditMixin
 
 
 class Schedule(EpochAuditMixin, Base):
-    """A fixed time-window schedule item stored as Unix epoch seconds."""
+    """A fixed time-window schedule item stored as Unix epoch seconds.
 
-    __tablename__ = "schedules"
-    __table_args__ = (
-        CheckConstraint("start_at < end_at", name="ck_schedules_time_window"),
-        Index("ix_schedules_time_window", "start_at", "end_at"),
-        {"sqlite_autoincrement": True},
-    )
+    This is an abstract base — concrete subclasses must supply ``__tablename__``
+    and ``__table_args__`` via :func:`models.factory.get_standalone_tables` or
+    :func:`models.factory.get_user_tables`.
+    """
+
+    __abstract__ = True
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
