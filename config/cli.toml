@@ -5,6 +5,6 @@
 # database_url = "sqlite:///db/amtodo.sqlite3"
 #
 # Remote mode (uncomment and set):
-server_url = "http://127.0.0.1:8000"
-# access_token = "<user token from server>"
+server_url = "http://127.0.0.1:3468"
+access_token = "_-jJMQ5pDF_xoxoWOvdDEkkhQ9v9oWSuDoSp3p5FNu4"
 admin_token = "123456"

@@ -1,12 +1,15 @@
-"""Admin routes: health check, database initialization, and agent guide."""
+"""Admin routes: health check, database initialization, agent guide, and current user."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 
 from config import __version__
 from db.base import Base
-from server.auth import require_admin
+from models.user import User
+from serialization import user_to_dict
+from server.auth import require_admin, require_user
 
 router = APIRouter()
 
@@ -26,6 +29,18 @@ def init_db(
     db = request.app.state.db
     Base.metadata.create_all(db.engine)
     return {"ok": True, "database": "initialized"}
+
+
+@router.get("/user")
+def current_user(
+    request: Request,
+    user_id: int = Depends(require_user),
+) -> dict[str, object]:
+    """Return the current authenticated user's information."""
+    db = request.app.state.db
+    with db.session() as session:
+        user = session.get(User, user_id)
+    return {"ok": True, "user": user_to_dict(user)}
 
 
 @router.get("/agent-guide")
@@ -72,6 +87,15 @@ def agent_guide() -> dict[str, object]:
                 "query_params": {},
                 "body": None,
                 "response": "<this document>",
+            },
+            {
+                "method": "GET",
+                "path": "/user",
+                "auth": "user",
+                "description": "Return the current authenticated user's information.",
+                "query_params": {},
+                "body": None,
+                "response": {"ok": True, "user": {"id": "<int>", "name": "<string>", "token": "<string>", "created_at": "<int>"}},
             },
             {
                 "method": "POST",

@@ -53,13 +53,13 @@ class TodoRepository:
         """Return ToDos with due boundaries in the requested range."""
 
         statement = select(self._model).where(
-            self._model.due_at >= start_at, self._model.due_at < end_at
+            self._model.created_at >= start_at, self._model.created_at < end_at
         )
         if completed is not None:
             statement = statement.where(self._model.completed.is_(completed))
 
         statement = statement.order_by(
-            self._model.due_at, self._model.completed, self._model.priority.desc(), self._model.id
+            self._model.created_at, self._model.completed, self._model.priority.desc(), self._model.id
         )
         return list(self._session.scalars(statement))
 
