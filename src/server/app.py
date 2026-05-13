@@ -1,0 +1,209 @@
+"""FastAPI application for AMToDo server."""
+
+from __future__ import annotations
+
+import logging
+import logging.config
+import sys
+import tomllib
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+
+from config import __version__, AppSettings, amtodo_root
+from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
+from models.user import User
+from serialization import error_to_dict
+from server.admin import router as admin_router
+from server.schedules import router as schedule_router
+from server.todos import router as todo_router
+from server.users import router as users_router
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+
+def _load_raw_config(path: str) -> dict:
+    """Load the TOML configuration file."""
+    config_path = Path(path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"config file not found: {config_path}")
+    with open(config_path, "rb") as fh:
+        return tomllib.load(fh)
+
+
+def _build_log_config(log_file: str) -> dict:
+    """Build a logging config dict: file gets INFO+, terminal gets WARNING+."""
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "file": {
+                "format": "%(asctime)s %(levelname)-8s %(name)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+            "terminal": {
+                "format": "%(levelname)s: %(message)s",
+            },
+        },
+        "handlers": {
+            "file": {
+                "class": "logging.FileHandler",
+                "filename": str(log_path),
+                "encoding": "utf-8",
+                "formatter": "file",
+                "level": "INFO",
+            },
+            "terminal": {
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+                "formatter": "terminal",
+                "level": "WARNING",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["file", "terminal"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["file", "terminal"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["file"], "level": "INFO", "propagate": False},
+            "amtodo": {"handlers": ["file", "terminal"], "level": "INFO", "propagate": False},
+        },
+    }
+
+
+def _build_token_map(db) -> dict[str, int]:
+    """Build token→user_id map from the _users table."""
+    from db.engine import Database
+
+    token_map: dict[str, int] = {}
+    with db.session() as session:
+        for user in session.scalars(select(User)):
+            token_map[user.token] = user.id
+    return token_map
+
+
+def _register_per_user_tables(db, token_map: dict[str, int]) -> None:
+    """Pre-register per-user ORM classes so create_schema creates all tables."""
+    from models.factory import get_user_tables
+
+    for user_id in token_map.values():
+        get_user_tables(user_id)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
+    """Startup: create single database, populate token map. Shutdown: dispose engine."""
+    from db.engine import Database, create_database
+
+    settings: AppSettings = app.state.settings
+    db: Database = create_database(settings)
+    db.create_schema()
+
+    token_map = _build_token_map(db)
+    _register_per_user_tables(db, token_map)
+    if token_map:
+        db.create_schema()
+
+    app.state.db = db
+    app.state.token_map = token_map
+
+    yield
+
+    db.engine.dispose()
+
+
+def create_app(settings: AppSettings) -> FastAPI:
+    """Build the FastAPI application."""
+    app = FastAPI(
+        title="AMToDo API",
+        version=__version__,
+        lifespan=lifespan,
+    )
+    app.state.settings = settings
+
+    @app.exception_handler(ValidationError)
+    async def handle_validation(request, exc):
+        return JSONResponse(
+            status_code=400,
+            content=error_to_dict(type(exc), str(exc)),
+        )
+
+    @app.exception_handler(NotFoundError)
+    async def handle_not_found(request, exc):
+        return JSONResponse(
+            status_code=404,
+            content=error_to_dict(type(exc), str(exc)),
+        )
+
+    @app.exception_handler(ConflictError)
+    async def handle_conflict(request, exc):
+        return JSONResponse(
+            status_code=409,
+            content=error_to_dict(type(exc), str(exc)),
+        )
+
+    @app.exception_handler(AMToDoError)
+    async def handle_domain_error(request, exc):
+        return JSONResponse(
+            status_code=500,
+            content=error_to_dict(type(exc), str(exc)),
+        )
+
+    app.include_router(admin_router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1/admin/users", tags=["admin"])
+    app.include_router(todo_router, prefix="/api/v1/todos", tags=["todos"])
+    app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
+
+    return app
+
+
+def main() -> None:
+    """Run the AMToDo HTTP server."""
+    root = amtodo_root()
+    raw = _load_raw_config(str(root / "config" / "server.toml"))
+
+    server = raw.get("server", {})
+    database_cfg = raw.get("database", {})
+    auth = raw.get("auth", {})
+    log_cfg = raw.get("log", {})
+
+    log_file = log_cfg.get("file", "log/server.log")
+    database_url = database_cfg.get("url", "sqlite:///db/amtodo.sqlite3")
+    host = server.get("host", "0.0.0.0")
+    port = server.get("port", 8000)
+    admin_token = auth.get("admin_token", "")
+
+    if not admin_token:
+        print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
+        sys.exit(1)
+
+    log_path = (root / log_file).resolve()
+
+    print(f"AMToDo Server v{__version__}")
+    print(f"  Log:       {log_path}")
+    print(f"  Database:  {database_url}")
+    print(f"  Listen:    http://{host}:{port}")
+    print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
+
+    settings = AppSettings(
+        database_url=database_url,
+        admin_token=admin_token,
+        server_host=host,
+        server_port=port,
+    )
+    app = create_app(settings)
+
+    log_config = _build_log_config(str(log_path))
+    try:
+        uvicorn.run(app, host=host, port=port, log_config=log_config)
+    except Exception:
+        logging.getLogger("amtodo").critical("Server failed to start", exc_info=True)
+        print("FATAL: Server failed to start", file=sys.stderr)
+        raise
