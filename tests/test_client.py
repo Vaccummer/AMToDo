@@ -1,0 +1,182 @@
+"""Tests for the HTTP client against a running server."""
+
+from __future__ import annotations
+
+import secrets
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from client.http import AMTodoClient
+from clock import SystemClock
+from config import AppSettings
+from models.factory import get_user_tables
+from models.user import User
+from server.app import create_app
+
+
+@pytest.fixture
+def client(tmp_path):
+    db_path = tmp_path / "test.sqlite3"
+    settings = AppSettings(
+        database_url=f"sqlite:///{db_path}",
+        admin_token="admin-secret",
+    )
+    app = create_app(settings)
+
+    token = secrets.token_urlsafe(32)
+    clock = SystemClock()
+
+    with TestClient(app) as test_client:
+        # lifespan has run, db and token_map are now on app.state
+        db = app.state.db
+        token_map: dict[str, int] = app.state.token_map
+
+        with db.session() as session:
+            user = User(
+                name="test",
+                token=token,
+                created_at=clock.now_epoch(),
+            )
+            session.add(user)
+            session.commit()
+            user_id = user.id
+
+        token_map[token] = user_id
+        get_user_tables(user_id)
+        db.create_schema()
+
+        class TestTransport(httpx.BaseTransport):
+            def handle_request(self, request):
+                headers = dict(request.headers)
+                path = request.url.path
+                if request.url.query:
+                    path += "?" + request.url.query.decode()
+                test_resp = test_client.request(
+                    method=request.method,
+                    url=path,
+                    headers=headers,
+                    content=request.read(),
+                )
+                return httpx.Response(
+                    status_code=test_resp.status_code,
+                    headers=dict(test_resp.headers),
+                    content=test_resp.content,
+                    request=request,
+                )
+
+        client_settings = AppSettings(
+            database_url=f"sqlite:///{db_path}",
+            server_url="http://testserver",
+            server_token=token,
+        )
+        c = AMTodoClient(client_settings)
+        c._client = httpx.Client(
+            transport=TestTransport(),
+            base_url="http://testserver",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        yield c
+        c.close()
+
+
+class TestTodoClient:
+    def test_add_and_show(self, client):
+        result = client.todo_add(title="Hello", priority=2)
+        assert result["ok"] is True
+        todo_id = result["todo"]["id"]
+        assert todo_id == 1
+
+        result = client.todo_show(todo_id)
+        assert result["todo"]["title"] == "Hello"
+        assert result["todo"]["priority"] == 2
+
+    def test_list(self, client):
+        client.todo_add(title="A")
+        client.todo_add(title="B")
+        result = client.todo_list(open_only=True)
+        assert result["count"] == 2
+
+    def test_search(self, client):
+        client.todo_add(title="Buy milk")
+        client.todo_add(title="Read book")
+        result = client.todo_search("milk")
+        assert result["count"] == 1
+
+    def test_update(self, client):
+        client.todo_add(title="Old")
+        result = client.todo_update(1, title="New", priority=9)
+        assert result["todo"]["title"] == "New"
+        assert result["todo"]["priority"] == 9
+
+    def test_done_and_reopen(self, client):
+        client.todo_add(title="Task")
+        result = client.todo_done([1])
+        assert result["results"][0]["todo"]["completed"] is True
+
+        result = client.todo_reopen([1])
+        assert result["results"][0]["todo"]["completed"] is False
+
+    def test_remove(self, client):
+        client.todo_add(title="To delete")
+        result = client.todo_remove([1])
+        assert result["results"][0]["ok"] is True
+
+        result = client.todo_show(1)
+        assert result["ok"] is False
+
+    def test_stats(self, client):
+        client.todo_add(title="Work 1", tag="work")
+        client.todo_add(title="Work 2", tag="work")
+        client.todo_add(title="Home 1", tag="home")
+        result = client.todo_stats()
+        assert result["stats"]["total"] == 3
+        assert result["stats"]["by_tag"]["work"] == 2
+        assert result["stats"]["by_tag"]["home"] == 1
+
+    def test_not_found_returns_error(self, client):
+        result = client.todo_show(99999)
+        assert result["ok"] is False
+        assert result["error"]["type"] == "NotFoundError"
+
+
+class TestScheduleClient:
+    def test_add_and_list(self, client):
+        result = client.schedule_add(title="Meeting", start_at=1000, end_at=2000, category="work")
+        assert result["ok"] is True
+        assert result["schedule"]["id"] == 1
+
+        result = client.schedule_list(start_at=0, end_at=5000)
+        assert result["count"] == 1
+
+    def test_conflicts(self, client):
+        client.schedule_add(title="Existing", start_at=1000, end_at=2000)
+        result = client.schedule_conflicts(start_at=1500, end_at=2500)
+        assert result["conflict"] is True
+
+    def test_update_and_remove(self, client):
+        client.schedule_add(title="Original", start_at=1000, end_at=2000)
+        result = client.schedule_update(1, title="Updated", location="Office")
+        assert result["schedule"]["title"] == "Updated"
+        assert result["schedule"]["location"] == "Office"
+
+        result = client.schedule_remove([1])
+        assert result["results"][0]["ok"] is True
+
+    def test_stats(self, client):
+        client.schedule_add(title="A", start_at=1000, end_at=2000, category="work")
+        client.schedule_add(title="B", start_at=3000, end_at=5000, category="personal")
+        result = client.schedule_stats()
+        assert result["stats"]["total"] == 2
+
+
+class TestAdminClient:
+    def test_health(self, client):
+        result = client.health()
+        assert result["status"] == "ok"
+        assert "version" in result
+
+    def test_init_db(self, client):
+        result = client.init_db()
+        assert result["ok"] is True

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amtodo"
+version = "0.1.0"
+description = "A desktop scheduling and planning application."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+  { name = "AMToDo contributors" },
+]
+dependencies = [
+  "fastapi>=0.115",
+  "httpx>=0.28",
+  "pyside6>=6.8",
+  "sqlalchemy>=2.0",
+  "typer>=0.15",
+  "tzdata>=2025.2; platform_system == 'Windows'",
+  "uvicorn[standard]>=0.34",
+]
+
+[project.scripts]
+amtodo = "cli:main"
+amtodo-server = "server.app:main"
+
+[project.gui-scripts]
+amtodo-ui = "ui.app:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+]
+
+[tool.hatch.build.targets.wheel]
+only-include = []
+force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
