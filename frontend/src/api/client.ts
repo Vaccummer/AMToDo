@@ -6,34 +6,59 @@ export type HealthResponse = {
 export type TodoItem = {
   id: number;
   title: string;
-  completed: boolean;
+  description: string | null;
   due_at: number | null;
-  due_date?: string | null;
+  completed: boolean;
+  priority: number;
+  tag: string | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
 };
 
 export type TodoListResponse = {
   ok: boolean;
+  filter: { completed: boolean | null };
   count: number;
   todos: TodoItem[];
+  range?: { start_at: number | null; end_at: number | null };
 };
 
 export type ScheduleItem = {
   id: number;
   title: string;
+  description: string | null;
   start_at: number;
   end_at: number;
+  duration: number;
   timezone: string;
-  location?: string | null;
-  category?: string | null;
+  location: string | null;
+  category: string | null;
+  created_at: number;
+  updated_at: number;
 };
 
 export type ScheduleListResponse = {
   ok: boolean;
+  range: { start_at: number; end_at: number };
   count: number;
   schedules: ScheduleItem[];
 };
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:8000";
+export type TargetResult = {
+  target: number;
+  ok: boolean;
+  todo?: TodoItem;
+  schedule?: ScheduleItem;
+  error?: { type: string; message: string };
+};
+
+export type TargetsResponse = {
+  ok: boolean;
+  results: TargetResult[];
+};
+
+const DEFAULT_BASE_URL = "http://127.0.0.1:3468";
 
 export class AMToDoApi {
   private readonly baseUrl: string;
@@ -52,11 +77,11 @@ export class AMToDoApi {
     return this.get(`/api/v1/todos?start_at=${startAt}&end_at=${endAt}`);
   }
 
-  completeTodo(id: number): Promise<unknown> {
+  completeTodo(id: number): Promise<TargetsResponse> {
     return this.post("/api/v1/todos/done", { targets: [id] });
   }
 
-  reopenTodo(id: number): Promise<unknown> {
+  reopenTodo(id: number): Promise<TargetsResponse> {
     return this.post("/api/v1/todos/reopen", { targets: [id] });
   }
 

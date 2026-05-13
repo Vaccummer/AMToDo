@@ -14,7 +14,7 @@ export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  const api = useMemo(() => new AMToDoApi(), []);
+  const api = useMemo(() => new AMToDoApi(undefined, "_-jJMQ5pDF_xoxoWOvdDEkkhQ9v9oWSuDoSp3p5FNu4"), []);
 
   useEffect(() => {
     api
