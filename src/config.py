@@ -23,7 +23,7 @@ class AppSettings:
     language: str = DEFAULT_LANGUAGE
     timezone: str = DEFAULT_TIMEZONE
     server_url: str = ""
-    server_token: str = ""
+    access_token: str = ""
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     admin_token: str = ""
@@ -65,7 +65,7 @@ def load_settings() -> AppSettings:
         language=os.environ.get("AMTODO_LANGUAGE", DEFAULT_LANGUAGE),
         timezone=os.environ.get("AMTODO_TIMEZONE", DEFAULT_TIMEZONE),
         server_url=os.environ.get("AMTODO_SERVER_URL", ""),
-        server_token=os.environ.get("AMTODO_SERVER_TOKEN", ""),
+        access_token=os.environ.get("AMTODO_SERVER_TOKEN", ""),
     )
 
 
@@ -81,13 +81,15 @@ def load_cli_settings() -> AppSettings:
 
     database_url = ""
     server_url = ""
-    server_token = ""
+    access_token = ""
+    admin_token = ""
 
     if config_path.is_file():
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
         database_url = data.get("database_url", "")
         server_url = data.get("server_url", "")
-        server_token = data.get("server_token", "")
+        access_token = data.get("access_token", "")
+        admin_token = data.get("admin_token", "")
 
     if not database_url and not server_url:
         database_url = _default_database_url(root)
@@ -95,5 +97,6 @@ def load_cli_settings() -> AppSettings:
     return AppSettings(
         database_url=database_url,
         server_url=server_url,
-        server_token=server_token,
+        access_token=access_token,
+        admin_token=admin_token,
     )
