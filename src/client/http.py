@@ -34,7 +34,12 @@ class AMTodoClient:
     def agent_guide(self) -> dict[str, Any]:
         return self._get("/api/v1/agent-guide")
 
-    # ── users ──
+    # ── user ──
+
+    def user_me(self) -> dict[str, Any]:
+        return self._get("/api/v1/user")
+
+    # ── admin users ──
 
     def user_create(self, name: str) -> dict[str, Any]:
         return self._post("/api/v1/admin/users", json={"name": name}, headers=self._admin_headers())

@@ -751,6 +751,14 @@ def schedule_stats(
 # ── user commands ──
 
 
+@user_app.command("me")
+def user_me() -> None:
+    """Show the current authenticated user's information."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_me(), settings)
+
+
 @user_app.command("create")
 def user_create(name: str = typer.Argument(..., help="User name.")) -> None:
     """Create a new user with a generated access token."""
