@@ -16,8 +16,8 @@ class AMTodoClient:
         self._base = settings.server_url.rstrip("/")
         self._admin_token = settings.admin_token
         headers: dict[str, str] = {"Content-Type": "application/json"}
-        if settings.server_token:
-            headers["Authorization"] = f"Bearer {settings.server_token}"
+        if settings.access_token:
+            headers["Authorization"] = f"Bearer {settings.access_token}"
         self._client = httpx.Client(base_url=self._base, headers=headers, timeout=30.0)
 
     def close(self) -> None:

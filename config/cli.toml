@@ -1,5 +1,10 @@
 # AMToDo CLI configuration.
 # database_url takes priority over server_url when both are set.
-
-database_url = "sqlite:///db/amtodo.sqlite3"
-# server_url = "http://127.0.0.1:8000"
+#
+# Local mode (default):
+# database_url = "sqlite:///db/amtodo.sqlite3"
+#
+# Remote mode (uncomment and set):
+server_url = "http://127.0.0.1:8000"
+# access_token = "<user token from server>"
+admin_token = "123456"

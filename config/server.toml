@@ -6,7 +6,7 @@ port = 8000
 url = "sqlite:///db/amtodo.sqlite3"
 
 [auth]
-admin_token = ""
+admin_token = "123456"
 
 [log]
 file = "log/server.log"
