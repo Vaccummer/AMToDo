@@ -11,4 +11,8 @@ __all__ = ["Schedule", "Setting", "Todo", "User", "register_models"]
 
 
 def register_models() -> None:
-    """Import models so SQLAlchemy metadata is populated."""
+    """Import models and register concrete standalone tables with metadata."""
+
+    from models.factory import get_standalone_tables
+
+    get_standalone_tables()
