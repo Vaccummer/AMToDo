@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 app = typer.Typer(invoke_without_command=True, no_args_is_help=True)
 todo_app = typer.Typer(no_args_is_help=True)
 schedule_app = typer.Typer(no_args_is_help=True)
+user_app = typer.Typer(no_args_is_help=True)
 
 
 @app.callback()
@@ -51,6 +52,22 @@ def init_db() -> None:
     context = create_application_context(settings)
     context.database.create_schema()
     _echo_json({"ok": True, "database_url": context.settings.database_url})
+
+
+@app.command("health")
+def health() -> None:
+    """Check server health status."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.health(), settings)
+
+
+@app.command("agent-guide")
+def agent_guide() -> None:
+    """Return a machine-oriented description of all API endpoints for AI agents."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.agent_guide(), settings)
 
 
 # ── todo commands ──
@@ -731,6 +748,52 @@ def schedule_stats(
         _exit_with_error(exc)
 
 
+# ── user commands ──
+
+
+@user_app.command("create")
+def user_create(name: str = typer.Argument(..., help="User name.")) -> None:
+    """Create a new user with a generated access token."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_create(name), settings)
+
+
+@user_app.command("list")
+def user_list() -> None:
+    """List all registered users."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_list(), settings)
+
+
+@user_app.command("delete")
+def user_delete(user_id: int = typer.Argument(..., help="User id.")) -> None:
+    """Delete a user by id."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_delete(user_id), settings)
+
+
+@user_app.command("update")
+def user_update(
+    user_id: int = typer.Argument(..., help="User id."),
+    name: str = typer.Option(..., "--name", "-n", help="New user name."),
+) -> None:
+    """Update a user's name."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_update(user_id, name), settings)
+
+
+@user_app.command("regen-token")
+def user_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> None:
+    """Regenerate a user's access token."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_regenerate_token(user_id), settings)
+
+
 # ── helpers ──
 
 
@@ -809,6 +872,7 @@ def _echo_json(payload: dict[str, object]) -> None:
 
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")
 app.add_typer(schedule_app, name="schedule", help="Manage schedule items.")
+app.add_typer(user_app, name="user", help="Manage users (admin).")
 
 
 def main() -> None:

@@ -31,6 +31,9 @@ class AMTodoClient:
     def init_db(self) -> dict[str, Any]:
         return self._post("/api/v1/admin/init-db", headers=self._admin_headers())
 
+    def agent_guide(self) -> dict[str, Any]:
+        return self._get("/api/v1/agent-guide")
+
     # ── users ──
 
     def user_create(self, name: str) -> dict[str, Any]:
