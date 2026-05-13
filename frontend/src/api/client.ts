@@ -24,6 +24,11 @@ export type TodoListResponse = {
   range?: { start_at: number | null; end_at: number | null };
 };
 
+export type TodoResponse = {
+  ok: boolean;
+  todo: TodoItem;
+};
+
 export type ScheduleItem = {
   id: number;
   title: string;
@@ -77,12 +82,22 @@ export class AMToDoApi {
     return this.get(`/api/v1/todos?start_at=${startAt}&end_at=${endAt}`);
   }
 
+  createTodo(title: string): Promise<TodoResponse> {
+    return this.post("/api/v1/todos", {
+      title
+    });
+  }
+
   completeTodo(id: number): Promise<TargetsResponse> {
     return this.post("/api/v1/todos/done", { targets: [id] });
   }
 
   reopenTodo(id: number): Promise<TargetsResponse> {
     return this.post("/api/v1/todos/reopen", { targets: [id] });
+  }
+
+  updateTodo(id: number, title: string): Promise<unknown> {
+    return this.patch(`/api/v1/todos/${id}`, { title });
   }
 
   listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
@@ -96,6 +111,13 @@ export class AMToDoApi {
   private post<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>(path, {
       method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+
+  private patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: "PATCH",
       body: JSON.stringify(body)
     });
   }

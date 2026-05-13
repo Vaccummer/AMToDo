@@ -75,6 +75,11 @@ button {
   height: 14px;
   border-radius: 999px;
   background: var(--accent);
+  transition: background 0.3s;
+}
+
+.brand-dot.ok {
+  background: var(--green);
 }
 
 .brand-title {
@@ -326,9 +331,48 @@ button {
   margin-bottom: 8px;
 }
 
+.todo-title {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.todo-title:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.todo-edit-input {
+  flex: 1;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  outline: none;
+}
+
 .todo-row.completed span {
   color: var(--muted);
   text-decoration: line-through;
+}
+
+.add-todo-button {
+  width: 100%;
+  min-height: 48px;
+  border: 2px dashed #d4cdc2;
+  border-radius: 10px;
+  background: transparent;
+  color: #8c8277;
+  margin-top: 8px;
+}
+
+.add-todo-button:hover {
+  border-color: var(--accent);
+  background: rgba(198, 47, 47, 0.06);
+  color: var(--accent);
 }
 
 .check-button {

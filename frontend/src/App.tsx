@@ -38,7 +38,7 @@ export function App() {
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar-drag">
-          <div className="brand-dot" />
+          <div className={health ? "brand-dot ok" : "brand-dot"} />
           <span className="brand-title">AMToDo</span>
           <span className={health ? "server-pill ok" : "server-pill"}>
             {health ? `API ${health.version}` : healthError ? "API 离线" : "API 检查中"}

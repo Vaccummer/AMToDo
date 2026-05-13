@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, TodoItem } from "../api/client";
-import { addDays, formatDay, formatWeekday, startOfLocalDayEpoch } from "../lib/time";
+import {
+  addDaysToDateKey,
+  dateKeyFromDate,
+  dateKeyFromEpoch,
+  formatDateKeyDay,
+  formatDateKeyWeekday,
+  monthLabelFromDateKey,
+  startOfDateKeyEpoch
+} from "../lib/time";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
 import toTodayIcon from "../assets/ToToday.svg";
@@ -14,18 +22,23 @@ export function TodoView({ api }: Props) {
   const [selectedOffset, setSelectedOffset] = useState(0);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [status, setStatus] = useState<string>("加载中");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
 
-  const weekStart = useMemo(() => addDays(new Date(), weekOffset * 7), [weekOffset]);
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const selectedDay = days[selectedOffset];
+  const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
+  const weekStart = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekStart, i)),
+    [weekStart]
+  );
+  const selectedDayKey = days[selectedOffset];
 
-  const todayStr = useMemo(() => new Date().toDateString(), []);
-  const isTodaySelected = days[selectedOffset]?.toDateString() === todayStr;
-  const monthLabel = `${selectedDay.getFullYear()}年${selectedDay.getMonth() + 1}月`;
+  const isTodaySelected = selectedDayKey === todayKey;
+  const monthLabel = monthLabelFromDateKey(selectedDayKey);
 
   useEffect(() => {
-    const start = startOfLocalDayEpoch(selectedDay);
-    const end = startOfLocalDayEpoch(addDays(selectedDay, 1));
+    const start = startOfDateKeyEpoch(selectedDayKey);
+    const end = startOfDateKeyEpoch(addDaysToDateKey(selectedDayKey, 1));
     api
       .listTodos(start, end)
       .then((result) => {
@@ -36,7 +49,7 @@ export function TodoView({ api }: Props) {
         setTodos([]);
         setStatus(error instanceof Error ? error.message : "无法加载 ToDo");
       });
-  }, [api, selectedDay]);
+  }, [api, selectedDayKey]);
 
   async function toggle(todo: TodoItem) {
     if (todo.completed) {
@@ -47,6 +60,61 @@ export function TodoView({ api }: Props) {
     setTodos((items) =>
       items.map((item) => (item.id === todo.id ? { ...item, completed: !item.completed } : item))
     );
+  }
+
+  async function addTodo() {
+    const title = "新待办";
+    try {
+      const result = await api.createTodo(title);
+      const createdDayKey = dateKeyFromEpoch(result.todo.created_at);
+      if (createdDayKey !== selectedDayKey) {
+        goToToday();
+        setTodos([result.todo]);
+      } else {
+        setTodos((items) => [...items, result.todo]);
+      }
+      setEditingId(result.todo.id);
+      setEditText("");
+      setStatus("");
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : "无法创建 ToDo");
+    }
+  }
+
+  function startEdit(todo: TodoItem) {
+    setEditingId(todo.id);
+    setEditText(todo.title);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function saveEdit(id: number) {
+    const trimmed = editText.trim();
+    if (!trimmed || trimmed === todos.find((t) => t.id === id)?.title) {
+      cancelEdit();
+      return;
+    }
+    try {
+      await api.updateTodo(id, trimmed);
+      setTodos((items) =>
+        items.map((item) => (item.id === id ? { ...item, title: trimmed } : item))
+      );
+    } catch {
+      // keep old title on failure
+    }
+    cancelEdit();
+  }
+
+  function handleEditKey(e: React.KeyboardEvent, id: number) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveEdit(id);
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    }
   }
 
   function prevWeek() {
@@ -74,8 +142,8 @@ export function TodoView({ api }: Props) {
         <button type="button" className="cal-nav" aria-label="上一周" onClick={prevWeek}>
           <img src={leftIcon} alt="" />
         </button>
-        {days.map((day, index) => {
-          const isToday = day.toDateString() === todayStr;
+        {days.map((dayKey, index) => {
+          const isToday = dayKey === todayKey;
           const isSelected = index === selectedOffset;
           const className = ["day-cell", isSelected ? "selected" : "", isToday ? "today" : ""]
             .filter(Boolean)
@@ -83,12 +151,12 @@ export function TodoView({ api }: Props) {
           return (
           <button
             type="button"
-            key={day.toISOString()}
+            key={dayKey}
             className={className}
             onClick={() => setSelectedOffset(index)}
           >
-            <span>{formatWeekday(day)}</span>
-            <strong>{formatDay(day)}</strong>
+            <span>{formatDateKeyWeekday(dayKey)}</span>
+            <strong>{formatDateKeyDay(dayKey)}</strong>
           </button>
           );
         })}
@@ -104,14 +172,38 @@ export function TodoView({ api }: Props) {
       <div className="todo-list">
         {status ? <div className="empty-state">{status}</div> : null}
         {!status && todos.length === 0 ? <div className="empty-state">这一天还没有 ToDo</div> : null}
-        {todos.map((todo) => (
+        {todos.map((todo) => {
+          const isEditing = editingId === todo.id;
+          return (
           <div className={todo.completed ? "todo-row completed" : "todo-row"} key={todo.id}>
             <button type="button" className="check-button" onClick={() => void toggle(todo)}>
               {todo.completed ? "✓" : ""}
             </button>
-            <span>{todo.title}</span>
+            {isEditing ? (
+              <input
+                type="text"
+                className="todo-edit-input"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => handleEditKey(e, todo.id)}
+                onBlur={() => saveEdit(todo.id)}
+                autoFocus
+              />
+            ) : (
+              <span
+                className="todo-title"
+                onDoubleClick={() => startEdit(todo)}
+                title="双击编辑"
+              >
+                {todo.title}
+              </span>
+            )}
           </div>
-        ))}
+          );
+        })}
+        <button type="button" className="add-todo-button" onClick={() => void addTodo()}>
+          + 添加待办
+        </button>
       </div>
     </div>
   );
