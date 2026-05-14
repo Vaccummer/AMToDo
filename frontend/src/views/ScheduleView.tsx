@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { AMToDoApi, ScheduleItem } from "../api/client";
 import {
   addDaysToDateKey,
@@ -11,12 +12,29 @@ import {
   weekOfMonth
 } from "../lib/time";
 import { CalendarPopup } from "./CalendarPopup";
+import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
 import toTodayIcon from "../assets/ToToday.svg";
 
 type Props = {
   api: AMToDoApi;
+};
+
+const HOUR_HEIGHT = 64;
+const VISIBLE_END_HOUR = 24;
+const EVENT_COLOR_COUNT = 5;
+
+type ScheduleTextMode = "tiny" | "mini" | "mid" | "full";
+
+type RenderedScheduleBlock = {
+  item: ScheduleItem;
+  top: number;
+  height: number;
+  colorClass: string;
+  textMode: ScheduleTextMode;
+  titleLines: number;
 };
 
 export function ScheduleView({ api }: Props) {
@@ -26,6 +44,8 @@ export function ScheduleView({ api }: Props) {
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [status, setStatus] = useState<string>("加载中");
   const [fullHours, setFullHours] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const weekLabelRef = useRef<HTMLDivElement>(null);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
 
@@ -55,7 +75,14 @@ export function ScheduleView({ api }: Props) {
     return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
   }, [weekMondayKey]);
 
-  const selectedInView = days.includes(selectedDateKey);
+  const visibleStartHour = fullHours ? 0 : 6;
+  const blocksByDay = useMemo(
+    () => buildScheduleBlocks(items, days, visibleStartHour, VISIBLE_END_HOUR),
+    [items, days, visibleStartHour]
+  );
+  const gridStyle = {
+    "--schedule-hour-height": `${HOUR_HEIGHT}px`
+  } as CSSProperties;
 
   // Fetch schedules for the displayed week
   useEffect(() => {
@@ -93,6 +120,15 @@ export function ScheduleView({ api }: Props) {
     );
     setWeekOffset(Math.round(diffDays / 7));
     setSelectedDateKey(dateKey);
+  }
+
+  async function deleteSchedule(id: number) {
+    try {
+      await api.deleteSchedule(id);
+    } catch {
+      // keep going
+    }
+    setItems((prev) => prev.filter((item) => item.id !== id));
   }
 
   function toggleCalendar() {
@@ -174,43 +210,168 @@ export function ScheduleView({ api }: Props) {
       </div>
 
       <div className="schedule-grid-scroll">
-        <div className="schedule-grid">
+        <div className="schedule-grid" style={gridStyle}>
           {hours.map((hour) => (
-            <TimeRow key={hour} hour={hour} days={days} items={items} />
+            <TimeRow key={hour} hour={hour} days={days} />
           ))}
+          <div className="schedule-events-layer">
+            {days.map((dayKey, dayIndex) => (
+              <div
+                className="schedule-day-overlay"
+                key={`${dayKey}-events`}
+                style={{ gridColumn: dayIndex + 2 }}
+              >
+                {(blocksByDay[dayKey] ?? []).map((block) => (
+                  <ScheduleEventBlock
+                    block={block}
+                    key={`${dayKey}-${block.item.id}`}
+                    onClick={() => setDetailId(block.item.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setContextMenu({ id: block.item.id, x: e.clientX, y: e.clientY });
+                    }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {status ? <div className="empty-state schedule-status">{status}</div> : null}
+
+      {detailId != null ? (
+        <ScheduleDetailModal
+          schedule={items.find((s) => s.id === detailId)!}
+          api={api}
+          onClose={() => setDetailId(null)}
+          onDelete={(id) => deleteSchedule(id)}
+          onUpdate={(updated) => {
+            setItems((prev) =>
+              prev.map((item) => (item.id === updated.id ? updated : item))
+            );
+          }}
+        />
+      ) : null}
+
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              label: "编辑",
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              ),
+              action: () => setDetailId(contextMenu.id)
+            },
+            {
+              label: "删除",
+              icon: <TrashIcon />,
+              danger: true,
+              action: () => deleteSchedule(contextMenu.id)
+            }
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function TimeRow({ hour, days, items }: {
+function TimeRow({ hour, days }: {
   hour: number;
   days: string[];
-  items: ScheduleItem[];
 }) {
   return (
     <>
       <div className="time-label">{hour.toString().padStart(2, "0")}:00</div>
-      {days.map((dayKey) => {
-        const dayStart = startOfDateKeyEpoch(dayKey);
-        const start = dayStart + hour * 3600;
-        const end = start + 3600;
-        const hits = items.filter((item) => item.start_at < end && item.end_at > start);
-        return (
-          <div className="schedule-cell" key={`${dayKey}-${hour}`}>
-            {hits.map((item) => (
-              <button type="button" className="schedule-block" key={item.id}>
-                <span>
-                  {formatTime(item.start_at)}-{formatTime(item.end_at)}
-                </span>
-                <strong>{item.title}</strong>
-              </button>
-            ))}
-          </div>
-        );
-      })}
+      {days.map((dayKey) => (
+        <div className="schedule-cell" key={`${dayKey}-${hour}`} />
+      ))}
     </>
   );
+}
+
+function ScheduleEventBlock({ block, onClick, onContextMenu }: {
+  block: RenderedScheduleBlock;
+  onClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  const style = {
+    top: `${block.top}px`,
+    height: `${block.height}px`,
+    "--title-lines": block.titleLines
+  } as CSSProperties & Record<"--title-lines", number>;
+  const className = ["schedule-event", block.colorClass, block.textMode].join(" ");
+  const timeText = `${formatTime(block.item.start_at)}-${formatTime(block.item.end_at)}`;
+
+  return (
+    <button
+      type="button"
+      className={className}
+      style={style}
+      title={`${timeText} ${block.item.title}`}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      {block.textMode === "tiny" ? null : (
+        <>
+          {(block.textMode === "mid" || block.textMode === "full") ? (
+            <span className="schedule-event-time">{timeText}</span>
+          ) : null}
+          <strong className="schedule-event-title">{block.item.title}</strong>
+        </>
+      )}
+    </button>
+  );
+}
+
+function buildScheduleBlocks(
+  items: ScheduleItem[],
+  days: string[],
+  visibleStartHour: number,
+  visibleEndHour: number
+): Record<string, RenderedScheduleBlock[]> {
+  return Object.fromEntries(
+    days.map((dayKey) => {
+      const dayStart = startOfDateKeyEpoch(dayKey);
+      const visibleStart = dayStart + visibleStartHour * 3600;
+      const visibleEnd = dayStart + visibleEndHour * 3600;
+      const blocks = items
+        .filter((item) => item.start_at < visibleEnd && item.end_at > visibleStart)
+        .sort((a, b) => a.start_at - b.start_at || a.end_at - b.end_at || a.id - b.id)
+        .map((item, index) => {
+          const clippedStart = Math.max(item.start_at, visibleStart);
+          const clippedEnd = Math.min(item.end_at, visibleEnd);
+          const top = ((clippedStart - visibleStart) / 3600) * HOUR_HEIGHT;
+          const height = Math.max(2, ((clippedEnd - clippedStart) / 3600) * HOUR_HEIGHT);
+          return {
+            item,
+            top,
+            height,
+            colorClass: `event-color-${index % EVENT_COLOR_COUNT}`,
+            textMode: textModeForHeight(height),
+            titleLines: titleLinesForHeight(height)
+          };
+        });
+      return [dayKey, blocks];
+    })
+  );
+}
+
+function textModeForHeight(height: number): ScheduleTextMode {
+  if (height < 18) return "tiny";
+  if (height < 34) return "mini";
+  if (height < 58) return "mid";
+  return "full";
+}
+
+function titleLinesForHeight(height: number): number {
+  if (height < 58) return 1;
+  return Math.max(1, Math.min(4, Math.floor((height - 24) / 18)));
 }
