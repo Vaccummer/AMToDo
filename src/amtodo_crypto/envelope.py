@@ -33,8 +33,8 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s)
 
 
-def seal(payload: dict, public_key_pem: bytes, key_id: str) -> dict:
-    """Encrypt *payload* into an envelope dict ready for JSON serialization."""
+def seal(payload: dict, public_key_pem: bytes, key_id: str) -> tuple[dict, bytes]:
+    """Encrypt *payload* into an envelope dict and return (envelope, data_key)."""
     server_public = load_public_key(public_key_pem)
     if not isinstance(server_public, ec.EllipticCurvePublicKey):
         raise TypeError("server public key must be P-256")
@@ -59,7 +59,7 @@ def seal(payload: dict, public_key_pem: bytes, key_id: str) -> dict:
         format=serialization.PublicFormat.UncompressedPoint,
     )
 
-    return {
+    envelope = {
         "version": _ENVELOPE_VERSION,
         "keyId": key_id,
         "alg": _ALGORITHM,
@@ -68,10 +68,11 @@ def seal(payload: dict, public_key_pem: bytes, key_id: str) -> dict:
         "data": _b64url(ciphertext),
         "tag": _b64url(tag),
     }
+    return envelope, data_key
 
 
-def open_envelope(envelope: dict, private_keys: dict[str, bytes]) -> dict:
-    """Decrypt *envelope* and return the inner payload dict.
+def open_envelope(envelope: dict, private_keys: dict[str, bytes]) -> tuple[dict, bytes]:
+    """Decrypt *envelope* and return (inner_payload, data_key).
 
     *private_keys* maps key_id → private key PEM bytes.
     Raises ValueError on any decryption or format error.
@@ -124,12 +125,60 @@ def open_envelope(envelope: dict, private_keys: dict[str, bytes]) -> dict:
         if field not in inner:
             raise ValueError(f"inner payload missing field: {field}")
 
-    return inner
+    return inner, data_key
 
 
-_ENVELOPE_REQUIRED = frozenset({"ek", "nonce", "data", "tag"})
+_REQUEST_ENVELOPE_FIELDS = frozenset({"ek", "nonce", "data", "tag"})
+_RESPONSE_ENVELOPE_FIELDS = frozenset({"nonce", "data", "tag"})
 
 
 def is_envelope(body: dict) -> bool:
-    """Return True if *body* looks like an encrypted envelope."""
-    return _ENVELOPE_REQUIRED.issubset(body.keys())
+    """Return True if *body* looks like a request envelope (has ek)."""
+    return _REQUEST_ENVELOPE_FIELDS.issubset(body.keys())
+
+
+def is_response_envelope(body: dict) -> bool:
+    """Return True if *body* looks like a response envelope (no ek)."""
+    return _RESPONSE_ENVELOPE_FIELDS.issubset(body.keys()) and "ek" not in body
+
+
+def seal_response(payload: dict, data_key: bytes) -> dict:
+    """Encrypt *payload* into a response envelope using the session data_key."""
+    nonce = generate_nonce()
+    inner = json.dumps(payload).encode("utf-8")
+    ciphertext = aes_gcm_encrypt(inner, data_key, nonce)
+    tag = ciphertext[-16:]
+    ciphertext = ciphertext[:-16]
+
+    return {
+        "version": _ENVELOPE_VERSION,
+        "alg": _ALGORITHM,
+        "nonce": _b64url(nonce),
+        "data": _b64url(ciphertext),
+        "tag": _b64url(tag),
+    }
+
+
+def open_response(envelope: dict, data_key: bytes) -> dict:
+    """Decrypt a response envelope using the session data_key."""
+    try:
+        nonce = _b64url_decode(envelope["nonce"])
+        ciphertext = _b64url_decode(envelope["data"])
+        tag = _b64url_decode(envelope["tag"])
+    except (KeyError, ValueError) as exc:
+        raise ValueError(f"malformed response envelope: {exc}") from exc
+
+    try:
+        plaintext = aes_gcm_decrypt(ciphertext + tag, data_key, nonce)
+    except Exception as exc:
+        raise ValueError("failed to decrypt response data") from exc
+
+    try:
+        inner = json.loads(plaintext)
+    except json.JSONDecodeError as exc:
+        raise ValueError("response payload is not valid JSON") from exc
+
+    if not isinstance(inner, dict):
+        raise ValueError("response payload must be a JSON object")
+
+    return inner
