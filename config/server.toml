@@ -10,3 +10,8 @@ admin_token = "123456"
 
 [log]
 file = "log/server.log"
+
+[encryption]
+public_key_path = "config/keys/server_public.pem"
+private_key_path = "config/keys/server_private.pem"
+request_timestamp_tolerance_seconds = 300

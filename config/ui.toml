@@ -1,0 +1,4 @@
+# AMToDo UI configuration (non-visual parameters).
+server_url = "http://127.0.0.1:8000"
+access_token = "ZPIAhpVXmyGPnyIE1ifEG-q9oc-XNZL2ZJToNvxaL-A"
+admin_token = "123456"
