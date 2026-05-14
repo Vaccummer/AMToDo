@@ -128,6 +128,8 @@ export function ScheduleView({ api }: Props) {
     } catch {
       // keep going
     }
+    if (detailId === id) setDetailId(null);
+    if (contextMenu?.id === id) setContextMenu(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
   }
 
