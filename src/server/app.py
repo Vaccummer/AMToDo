@@ -15,7 +15,10 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
+import json
+
 from config import __version__, AppSettings, amtodo_root
+from amtodo_crypto import ReplayProtector, is_envelope, open_envelope
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
@@ -119,6 +122,86 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
     db.engine.dispose()
 
 
+def _build_replay_protector(settings: AppSettings) -> ReplayProtector:
+    return ReplayProtector(tolerance_seconds=settings.request_timestamp_tolerance_seconds)
+
+
+def _load_private_keys(settings: AppSettings) -> dict[str, bytes]:
+    """Load the P-256 private key, validate it, return key_id → PEM bytes."""
+    root = amtodo_root()
+    key_path = root / settings.server_private_key_path
+    if not key_path.is_file():
+        print(f"FATAL: private key not found: {key_path}", file=sys.stderr)
+        sys.exit(1)
+
+    pem = key_path.read_bytes()
+    try:
+        from amtodo_crypto.keys import load_private_key
+        from cryptography.hazmat.primitives.asymmetric import ec
+        key = load_private_key(pem)
+        if not isinstance(key, ec.EllipticCurvePrivateKey):
+            raise TypeError("key is not a P-256 private key")
+    except Exception as exc:
+        print(f"FATAL: invalid private key: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    return {"server-key-v1": pem}
+
+
+def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
+    private_keys = _load_private_keys(settings)
+
+    @app.middleware("http")
+    async def decryption_middleware(request, call_next):
+        from starlette.requests import Request
+
+        if request.method not in ("POST", "PATCH", "PUT", "DELETE"):
+            return await call_next(request)
+
+        content_type = request.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            return await call_next(request)
+
+        body = await request.body()
+        if not body:
+            return await call_next(request)
+
+        try:
+            body_json = json.loads(body)
+        except json.JSONDecodeError:
+            return await call_next(request)
+
+        if not is_envelope(body_json):
+            return await call_next(request)
+
+        try:
+            inner = open_envelope(body_json, private_keys)
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, str(exc)),
+            )
+
+        try:
+            app.state.replay_protector.check_and_record(
+                inner["requestId"], inner["timestamp"]
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, str(exc)),
+            )
+
+        decrypted_body = json.dumps(inner["payload"]).encode("utf-8")
+
+        async def _receive():
+            return {"type": "http.request", "body": decrypted_body}
+
+        request._receive = _receive
+        request._body = decrypted_body
+        return await call_next(request)
+
+
 def create_app(settings: AppSettings) -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(
@@ -127,6 +210,10 @@ def create_app(settings: AppSettings) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.replay_protector = _build_replay_protector(settings)
+
+    if settings.server_private_key_path:
+        _setup_encryption_middleware(app, settings)
 
     @app.exception_handler(ValidationError)
     async def handle_validation(request, exc):
@@ -173,12 +260,16 @@ def main() -> None:
     database_cfg = raw.get("database", {})
     auth = raw.get("auth", {})
     log_cfg = raw.get("log", {})
+    encryption_cfg = raw.get("encryption", {})
 
     log_file = log_cfg.get("file", "log/server.log")
     database_url = database_cfg.get("url", "sqlite:///db/amtodo.sqlite3")
     host = server.get("host", "0.0.0.0")
     port = server.get("port", 8000)
     admin_token = auth.get("admin_token", "")
+    private_key_path = encryption_cfg.get("private_key_path", "")
+    public_key_path = encryption_cfg.get("public_key_path", "")
+    tolerance = encryption_cfg.get("request_timestamp_tolerance_seconds", 300)
 
     if not admin_token:
         print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
@@ -197,6 +288,9 @@ def main() -> None:
         admin_token=admin_token,
         server_host=host,
         server_port=port,
+        server_private_key_path=private_key_path,
+        server_public_key_path=public_key_path,
+        request_timestamp_tolerance_seconds=tolerance,
     )
     app = create_app(settings)
 

@@ -13,6 +13,7 @@ __version__ = "0.1.0"
 DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
+AMTODO_ROOT_ENV_VAR = Path()
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,9 @@ class AppSettings:
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     admin_token: str = ""
+    server_public_key_path: str = ""
+    server_private_key_path: str = ""
+    request_timestamp_tolerance_seconds: int = 300
 
 
 def amtodo_root() -> Path:
@@ -36,7 +40,11 @@ def amtodo_root() -> Path:
     directory.  Exits with an error message if the variable is missing or the
     path is invalid.
     """
-
+    global AMTODO_ROOT_ENV_VAR
+    
+    if AMTODO_ROOT_ENV_VAR:
+        return AMTODO_ROOT_ENV_VAR
+    
     raw = os.environ.get("AMTODO_ROOT")
     if not raw:
         print("FATAL: AMTODO_ROOT environment variable is not set", file=sys.stderr)
@@ -46,8 +54,9 @@ def amtodo_root() -> Path:
     if not root.is_dir():
         print(f"FATAL: AMTODO_ROOT is not a directory: {root}", file=sys.stderr)
         sys.exit(1)
-
+    AMTODO_ROOT_ENV_VAR = root
     return root
+
 
 
 def _default_database_url(root: Path) -> str:
@@ -83,6 +92,7 @@ def load_cli_settings() -> AppSettings:
     server_url = ""
     access_token = ""
     admin_token = ""
+    server_public_key_path = ""
 
     if config_path.is_file():
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -90,12 +100,38 @@ def load_cli_settings() -> AppSettings:
         server_url = data.get("server_url", "")
         access_token = data.get("access_token", "")
         admin_token = data.get("admin_token", "")
+        server_public_key_path = data.get("server_public_key_path", "")
 
     if not database_url and not server_url:
         database_url = _default_database_url(root)
 
     return AppSettings(
         database_url=database_url,
+        server_url=server_url,
+        access_token=access_token,
+        admin_token=admin_token,
+        server_public_key_path=server_public_key_path,
+    )
+
+
+def load_ui_settings() -> AppSettings:
+    """Load UI settings from $AMTODO_ROOT/config/ui.toml."""
+
+    root = amtodo_root()
+    config_path = root / "config" / "ui.toml"
+
+    server_url = ""
+    access_token = ""
+    admin_token = ""
+
+    if config_path.is_file():
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        server_url = data.get("server_url", "")
+        access_token = data.get("access_token", "")
+        admin_token = data.get("admin_token", "")
+
+    return AppSettings(
+        database_url="",
         server_url=server_url,
         access_token=access_token,
         admin_token=admin_token,
