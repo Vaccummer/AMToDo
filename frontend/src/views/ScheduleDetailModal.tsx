@@ -433,11 +433,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           </div>
 
           <div className="schedule-modal-ro-field">
-            <span className="schedule-modal-ro-label">时区</span>
-            <span className="schedule-modal-ro-value">{schedule.timezone}</span>
-          </div>
-
-          <div className="schedule-modal-ro-field">
             <span className="schedule-modal-ro-label">创建时间</span>
             <span className="schedule-modal-ro-value">{fmtDatetime(schedule.created_at)}</span>
           </div>
