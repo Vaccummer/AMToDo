@@ -24,6 +24,33 @@ export function dateKeyFromEpoch(epoch: number, timezone = DEFAULT_TIMEZONE): st
   return dateKeyFromDate(new Date(epoch * 1000), timezone);
 }
 
+export function datetimeLocalFromEpoch(epoch: number, timezone = DEFAULT_TIMEZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(new Date(epoch * 1000));
+  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}T${lookup.hour}:${lookup.minute}:${lookup.second}`;
+}
+
+export function epochFromDatetimeLocal(dt: string, timezone = DEFAULT_TIMEZONE): number {
+  const [datePart, timePart] = dt.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const times = timePart.split(":").map(Number);
+  const hour = times[0] ?? 0;
+  const minute = times[1] ?? 0;
+  const second = times[2] ?? 0;
+  const naiveUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const offset = timezoneOffsetMs(new Date(naiveUtc), timezone);
+  return Math.floor((naiveUtc - offset) / 1000);
+}
+
 export function addDaysToDateKey(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   const value = new Date(Date.UTC(year, month - 1, day + days, 12));
@@ -39,6 +66,10 @@ export function addDays(value: Date, days: number): Date {
 export function formatDateKeyDay(dateKey: string): string {
   const [_year, month, day] = dateKey.split("-").map(Number);
   return `${month}月${day}日`;
+}
+
+export function formatDateKeyDayNumber(dateKey: string): string {
+  return String(Number(dateKey.split("-")[2]));
 }
 
 export function formatDateKeyWeekday(dateKey: string): string {
@@ -76,6 +107,18 @@ export function formatTime(epoch: number, timezone = DEFAULT_TIMEZONE): string {
   }).format(epoch * 1000);
 }
 
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+export function firstWeekdayOfMonth(year: number, month: number): number {
+  return new Date(year, month - 1, 1).getDay();
+}
+
+export function dateKeyFromParts(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function dateParts(value: Date, timezone: string): { year: number; month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -92,6 +135,10 @@ function dateParts(value: Date, timezone: string): { year: number; month: number
   };
 }
 
+export function isOverdueTodo(todo: { due_at: number | null; completed: boolean }): boolean {
+  return todo.due_at !== null && !todo.completed && todo.due_at < Math.floor(Date.now() / 1000);
+}
+
 function timezoneOffsetMs(value: Date, timezone: string): number {
   const asUtc = new Date(value.toLocaleString("en-US", { timeZone: "UTC" }));
   const asLocal = new Date(value.toLocaleString("en-US", { timeZone: timezone }));
@@ -101,4 +148,22 @@ function timezoneOffsetMs(value: Date, timezone: string): number {
 function dateKeyToNoonUtc(dateKey: string): Date {
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+export function mondayOfDateKey(dateKey: string): string {
+  const d = dateKeyToNoonUtc(dateKey);
+  const dow = d.getUTCDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  return addDaysToDateKey(dateKey, offset);
+}
+
+export function weekOfMonth(dateKey: string): number {
+  const monday = mondayOfDateKey(dateKey);
+  const [year, month] = monday.split("-").map(Number);
+  const firstOfMonth = `${year}-${String(month).padStart(2, "0")}-01`;
+  const firstMonday = mondayOfDateKey(firstOfMonth);
+  const diffDays = Math.round(
+    (startOfDateKeyEpoch(monday) - startOfDateKeyEpoch(firstMonday)) / 86400
+  );
+  return Math.floor(diffDays / 7) + 1;
 }

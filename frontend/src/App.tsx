@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AMToDoApi, type HealthResponse } from "./api/client";
+import { ACCESS_TOKEN } from "./config";
+import { importP256PublicKey } from "./crypto/envelope";
 import { ScheduleView } from "./views/ScheduleView";
 import { TodoView } from "./views/TodoView";
 import closeIcon from "./assets/close.svg";
@@ -14,20 +16,30 @@ export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  const api = useMemo(() => new AMToDoApi(undefined, "_-jJMQ5pDF_xoxoWOvdDEkkhQ9v9oWSuDoSp3p5FNu4"), []);
+  const [api, setApi] = useState<AMToDoApi>(
+    () => new AMToDoApi(undefined, ACCESS_TOKEN)
+  );
 
   useEffect(() => {
-    api
-      .health()
-      .then((result) => {
-        setHealth(result);
-        setHealthError(null);
-      })
-      .catch((error: unknown) => {
-        setHealth(null);
-        setHealthError(error instanceof Error ? error.message : "无法连接后端");
-      });
-  }, [api]);
+    const bootstrap = async () => {
+      const baseApi = new AMToDoApi(undefined, ACCESS_TOKEN);
+      const result = await baseApi.health();
+      setHealth(result);
+      setHealthError(null);
+
+      if (result.public_key) {
+        const p256Key = await importP256PublicKey(result.public_key);
+        setApi(new AMToDoApi(undefined, ACCESS_TOKEN, p256Key));
+      } else {
+        setApi(baseApi);
+      }
+    };
+
+    bootstrap().catch((error: unknown) => {
+      setHealth(null);
+      setHealthError(error instanceof Error ? error.message : "无法连接后端");
+    });
+  }, []);
 
   useEffect(() => {
     window.amtodoShell.isMaximized().then(setMaximized).catch(() => setMaximized(false));

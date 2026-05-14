@@ -1,12 +1,16 @@
+import { SERVER_URL } from "../config";
+
 export type HealthResponse = {
   status: string;
   version: string;
+  public_key?: string;
 };
 
 export type TodoItem = {
   id: number;
   title: string;
   description: string | null;
+  planned_at: number | null;
   due_at: number | null;
   completed: boolean;
   priority: number;
@@ -63,15 +67,31 @@ export type TargetsResponse = {
   results: TargetResult[];
 };
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:3468";
+export type TodoUpdateRequest = {
+  title?: string;
+  description?: string | null;
+  planned_at?: number | null;
+  due_at?: number | null;
+  priority?: number;
+  tag?: string | null;
+};
+
+const DEFAULT_BASE_URL = SERVER_URL;
+const KEY_ID = "server-key-v1";
 
 export class AMToDoApi {
   private readonly baseUrl: string;
   private readonly token: string | null;
+  private readonly p256PublicKey: CryptoKey | null;
 
-  constructor(baseUrl = DEFAULT_BASE_URL, token: string | null = null) {
+  constructor(
+    baseUrl = DEFAULT_BASE_URL,
+    token: string | null = null,
+    p256PublicKey: CryptoKey | null = null
+  ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
+    this.p256PublicKey = p256PublicKey;
   }
 
   health(): Promise<HealthResponse> {
@@ -82,9 +102,10 @@ export class AMToDoApi {
     return this.get(`/api/v1/todos?start_at=${startAt}&end_at=${endAt}`);
   }
 
-  createTodo(title: string): Promise<TodoResponse> {
+  createTodo(title: string, plannedAt: number): Promise<TodoResponse> {
     return this.post("/api/v1/todos", {
-      title
+      title,
+      planned_at: plannedAt
     });
   }
 
@@ -96,8 +117,16 @@ export class AMToDoApi {
     return this.post("/api/v1/todos/reopen", { targets: [id] });
   }
 
-  updateTodo(id: number, title: string): Promise<unknown> {
-    return this.patch(`/api/v1/todos/${id}`, { title });
+  getTodo(id: number): Promise<TodoResponse> {
+    return this.get(`/api/v1/todos/${id}`);
+  }
+
+  deleteTodo(id: number): Promise<TargetsResponse> {
+    return this.post("/api/v1/todos/remove", { targets: [id] });
+  }
+
+  updateTodo(id: number, fields: TodoUpdateRequest): Promise<TodoResponse> {
+    return this.patch(`/api/v1/todos/${id}`, fields);
   }
 
   listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
@@ -129,14 +158,23 @@ export class AMToDoApi {
       headers.set("Authorization", `Bearer ${this.token}`);
     }
 
+    let body = init.body;
+    if (body != null && this.p256PublicKey) {
+      const { seal } = await import("../crypto/envelope");
+      const payload = JSON.parse(body as string);
+      const envelope = await seal(payload, this.p256PublicKey, KEY_ID);
+      body = JSON.stringify(envelope);
+    }
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
+      body,
       headers
     });
-    const payload = await response.json();
+    const responsePayload = await response.json();
     if (!response.ok) {
-      throw new Error(payload?.error?.message ?? response.statusText);
+      throw new Error(responsePayload?.error?.message ?? response.statusText);
     }
-    return payload as T;
+    return responsePayload as T;
   }
 }
