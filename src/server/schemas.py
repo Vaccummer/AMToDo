@@ -1,11 +1,86 @@
-"""Pydantic request models for FastAPI endpoints."""
+"""Pydantic request models for FastAPI endpoints.
+
+All POST request bodies include an auth field:
+  - Admin endpoints: ``admin_token``
+  - User endpoints:  ``access_token``
+"""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
 
-class TodoCreateRequest(BaseModel):
+# ── Auth mixins ──
+
+class AdminAuthMixin(BaseModel):
+    admin_token: str
+
+
+class UserAuthMixin(BaseModel):
+    access_token: str
+
+
+# ── Admin ──
+
+class AdminInitDbRequest(AdminAuthMixin):
+    pass
+
+
+class AdminUserListRequest(AdminAuthMixin):
+    pass
+
+
+class AdminUserCreateRequest(AdminAuthMixin):
+    name: str
+
+
+class AdminUserDeleteRequest(AdminAuthMixin):
+    user_id: int
+
+
+class AdminUserUpdateRequest(AdminAuthMixin):
+    user_id: int
+    name: str | None = None
+
+
+class AdminUserRegenTokenRequest(AdminAuthMixin):
+    user_id: int
+
+
+# ── User ──
+
+class UserMeRequest(UserAuthMixin):
+    pass
+
+
+# ── ToDo ──
+
+class TodoListRequest(UserAuthMixin):
+    start_at: int | None = None
+    end_at: int | None = None
+    open_only: bool = False
+    completed_only: bool = False
+
+
+class TodoSearchRequest(UserAuthMixin):
+    pattern: str
+    start_at: int | None = None
+    end_at: int | None = None
+    planned_start_at: int | None = None
+    planned_end_at: int | None = None
+    created_start_at: int | None = None
+    created_end_at: int | None = None
+    ignore_case: bool = False
+    open_only: bool = False
+    completed_only: bool = False
+
+
+class TodoStatsRequest(UserAuthMixin):
+    start_at: int | None = None
+    end_at: int | None = None
+
+
+class TodoCreateRequest(UserAuthMixin):
     title: str
     planned_at: int | None = None
     due_at: int | None = None
@@ -14,7 +89,12 @@ class TodoCreateRequest(BaseModel):
     tag: str | None = None
 
 
-class TodoUpdateRequest(BaseModel):
+class TodoGetRequest(UserAuthMixin):
+    todo_id: int
+
+
+class TodoUpdateRequest(UserAuthMixin):
+    todo_id: int
     title: str | None = None
     planned_at: int | None = None
     due_at: int | None = None
@@ -23,7 +103,36 @@ class TodoUpdateRequest(BaseModel):
     tag: str | None = None
 
 
-class ScheduleCreateRequest(BaseModel):
+class TodoTargetsRequest(UserAuthMixin):
+    targets: list[int]
+
+
+# ── Schedule ──
+
+class ScheduleListRequest(UserAuthMixin):
+    start_at: int | None = None
+    end_at: int | None = None
+
+
+class ScheduleSearchRequest(UserAuthMixin):
+    pattern: str
+    start_at: int | None = None
+    end_at: int | None = None
+    ignore_case: bool = False
+
+
+class ScheduleStatsRequest(UserAuthMixin):
+    start_at: int | None = None
+    end_at: int | None = None
+
+
+class ScheduleConflictsRequest(UserAuthMixin):
+    start_at: int
+    end_at: int
+    exclude_id: int | None = None
+
+
+class ScheduleCreateRequest(UserAuthMixin):
     title: str
     start_at: int
     end_at: int
@@ -32,7 +141,12 @@ class ScheduleCreateRequest(BaseModel):
     category: str | None = None
 
 
-class ScheduleUpdateRequest(BaseModel):
+class ScheduleGetRequest(UserAuthMixin):
+    schedule_id: int
+
+
+class ScheduleUpdateRequest(UserAuthMixin):
+    schedule_id: int
     title: str | None = None
     start_at: int | None = None
     end_at: int | None = None
@@ -41,13 +155,5 @@ class ScheduleUpdateRequest(BaseModel):
     category: str | None = None
 
 
-class TargetsRequest(BaseModel):
+class ScheduleTargetsRequest(UserAuthMixin):
     targets: list[int]
-
-
-class UserCreateRequest(BaseModel):
-    name: str
-
-
-class UserUpdateRequest(BaseModel):
-    name: str | None = None
