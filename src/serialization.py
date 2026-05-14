@@ -22,6 +22,7 @@ def todo_to_dict(todo: Todo, timezone: str) -> dict[str, object]:
         "id": todo.id,
         "title": todo.title,
         "description": todo.description,
+        "planned_at": todo.planned_at,
         "due_at": todo.due_at,
         "completed": todo.completed,
         "priority": todo.priority,

@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
+from clock import FixedClock
 from config import AppSettings
 from dates import day_after, day_start_epoch
 from db.engine import create_database
 from exceptions import NotFoundError, ValidationError
 from services import TodoDraft, TodoService, TodoUpdate
 from services.uow import UnitOfWork
-from clock import FixedClock
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -111,7 +111,7 @@ def test_show_update_and_reopen_todo(tmp_path: Path) -> None:
 
 
 def test_incomplete_overdue_todos_keep_original_due_at(tmp_path: Path) -> None:
-    """Incomplete overdue ToDos stay on their original due timestamp."""
+    """Planned-date listing does not mutate an overdue ToDo's due timestamp."""
 
     database = _create_test_database(tmp_path)
     today = date(2026, 5, 11)
@@ -131,7 +131,7 @@ def test_incomplete_overdue_todos_keep_original_due_at(tmp_path: Path) -> None:
         listed = service.list_between(today_at, tomorrow_at)
         overdue_todo = uow.todos.get(open_id)
 
-        assert listed == []
+        assert [todo.id for todo in listed] == [open_id]
         assert overdue_todo is not None
         assert overdue_todo.due_at == yesterday_at
 
@@ -161,7 +161,7 @@ def test_remove_deletes_todo_and_ids_are_not_reused(tmp_path: Path) -> None:
 
 
 def test_search_matches_regex_and_optional_epoch_bounds(tmp_path: Path) -> None:
-    """Search matches ToDo text with optional due timestamp bounds."""
+    """Search matches ToDo text with optional planned timestamp bounds."""
 
     database = _create_test_database(tmp_path)
     clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
@@ -171,26 +171,60 @@ def test_search_matches_regex_and_optional_epoch_bounds(tmp_path: Path) -> None:
 
     with UnitOfWork(database) as uow:
         service = TodoService(uow.todos, clock, uow.todo_model)
-        service.create(TodoDraft(title="Read paper", due_at=before_at, tag="study"))
+        service.create(TodoDraft(title="Read paper", planned_at=before_at, tag="study"))
         inside = service.create(
             TodoDraft(
                 title="Write project plan",
-                due_at=inside_at,
+                planned_at=inside_at,
                 description="Planning notes",
                 tag="planning",
             )
         )
-        service.create(TodoDraft(title="Buy coffee", due_at=after_at, tag="errand"))
+        service.create(TodoDraft(title="Buy coffee", planned_at=after_at, tag="errand"))
         uow.session.flush()
         inside_id = inside.id
 
     with UnitOfWork(database) as uow:
         service = TodoService(uow.todos, clock, uow.todo_model)
         all_matches = service.search("plan|study")
-        bounded_matches = service.search("plan|study", start_at=inside_at, end_at=after_at)
+        bounded_matches = service.search(
+            "plan|study",
+            planned_start_at=inside_at,
+            planned_end_at=after_at,
+        )
 
         assert [todo.title for todo in all_matches] == ["Read paper", "Write project plan"]
         assert [todo.id for todo in bounded_matches] == [inside_id]
+
+
+def test_search_can_filter_by_planned_and_created_ranges(tmp_path: Path) -> None:
+    """Search can combine planned_at and created_at bounds."""
+
+    database = _create_test_database(tmp_path)
+    planned_at = day_start_epoch(date(2026, 5, 11), TIMEZONE)
+    created_before = planned_at - 86_400
+    created_inside = planned_at + 3600
+    planned_end = planned_at + 86_400
+
+    with UnitOfWork(database) as uow:
+        old_service = TodoService(uow.todos, FixedClock(created_before), uow.todo_model)
+        old_service.create(TodoDraft(title="Shared old", planned_at=planned_at))
+        new_service = TodoService(uow.todos, FixedClock(created_inside), uow.todo_model)
+        inside = new_service.create(TodoDraft(title="Shared new", planned_at=planned_at))
+        uow.session.flush()
+        inside_id = inside.id
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, FixedClock(created_inside), uow.todo_model)
+        matches = service.search(
+            "Shared",
+            planned_start_at=planned_at,
+            planned_end_at=planned_end,
+            created_start_at=planned_at,
+            created_end_at=planned_end,
+        )
+
+        assert [todo.id for todo in matches] == [inside_id]
 
 
 def test_list_and_search_can_filter_by_completion(tmp_path: Path) -> None:

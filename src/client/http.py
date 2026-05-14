@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from config import AppSettings
+from config import AppSettings, amtodo_root
 
 
 class AMTodoClient:
@@ -19,6 +20,14 @@ class AMTodoClient:
         if settings.access_token:
             headers["Authorization"] = f"Bearer {settings.access_token}"
         self._client = httpx.Client(base_url=self._base, headers=headers, timeout=30.0)
+        self._public_key_pem: bytes | None = None
+        self._public_key_path = settings.server_public_key_path
+        if self._public_key_path:
+            key_path = Path(self._public_key_path)
+            if not key_path.is_absolute():
+                key_path = amtodo_root() / self._public_key_path
+            if key_path.is_file():
+                self._public_key_pem = key_path.read_bytes()
 
     def close(self) -> None:
         self._client.close()
@@ -61,12 +70,15 @@ class AMTodoClient:
     def todo_add(
         self,
         title: str,
+        planned_at: int | None = None,
         due_at: int | None = None,
         description: str | None = None,
         priority: int = 0,
         tag: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"title": title, "priority": priority}
+        if planned_at is not None:
+            body["planned_at"] = planned_at
         if due_at is not None:
             body["due_at"] = due_at
         if description is not None:
@@ -96,17 +108,23 @@ class AMTodoClient:
     def todo_search(
         self,
         pattern: str,
-        start_at: int | None = None,
-        end_at: int | None = None,
+        planned_start_at: int | None = None,
+        planned_end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
         ignore_case: bool = False,
         open_only: bool = False,
         completed_only: bool = False,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"pattern": pattern}
-        if start_at is not None:
-            params["start_at"] = start_at
-        if end_at is not None:
-            params["end_at"] = end_at
+        if planned_start_at is not None:
+            params["planned_start_at"] = planned_start_at
+        if planned_end_at is not None:
+            params["planned_end_at"] = planned_end_at
+        if created_start_at is not None:
+            params["created_start_at"] = created_start_at
+        if created_end_at is not None:
+            params["created_end_at"] = created_end_at
         if ignore_case:
             params["ignore_case"] = True
         if open_only:
@@ -243,6 +261,11 @@ class AMTodoClient:
         return self._request("PATCH", path, **kwargs)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if self._public_key_pem and "json" in kwargs:
+            from amtodo_crypto import seal
+
+            kwargs["json"] = seal(kwargs["json"], self._public_key_pem, "server-key-v1")
+
         try:
             response = self._client.request(method, path, **kwargs)
             response.raise_for_status()

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import typer
 
-from config import __version__
+from config import __version__, amtodo_root
 from config import load_cli_settings
 from exceptions import AMToDoError, ValidationError
 from serialization import schedule_to_dict, todo_to_dict
@@ -76,6 +76,11 @@ def agent_guide() -> None:
 @todo_app.command("add")
 def todo_add(
     title: str = typer.Argument(..., help="ToDo title."),
+    planned_at: int | None = typer.Option(
+        None,
+        "--planned-at",
+        help="Optional Unix epoch planning timestamp in seconds.",
+    ),
     due_at: int | None = typer.Option(
         None,
         "--date",
@@ -91,7 +96,12 @@ def todo_add(
     settings = load_cli_settings()
     if settings.server_url:
         _run_http(lambda client: client.todo_add(
-            title=title, due_at=due_at, description=description, priority=priority, tag=tag,
+            title=title,
+            planned_at=planned_at,
+            due_at=due_at,
+            description=description,
+            priority=priority,
+            tag=tag,
         ), settings)
         return
 
@@ -104,6 +114,7 @@ def todo_add(
             todo = service.create(
                 TodoDraft(
                     title=title,
+                    planned_at=planned_at,
                     due_at=due_at,
                     description=description,
                     priority=priority,
@@ -122,13 +133,13 @@ def todo_list(
         None,
         "--from",
         "-f",
-        help="Optional Unix epoch range start in seconds.",
+        help="Optional Unix epoch planned_at range start in seconds.",
     ),
     end_at: int | None = typer.Option(
         None,
         "--to",
         "-t",
-        help="Optional Unix epoch range end in seconds.",
+        help="Optional Unix epoch planned_at range end in seconds.",
     ),
     open_only: bool = typer.Option(False, "--open", help="Only return open ToDos."),
     completed_only: bool = typer.Option(False, "--completed", help="Only return completed ToDos."),
@@ -172,17 +183,29 @@ def todo_list(
 @todo_app.command("search")
 def todo_search(
     pattern: str = typer.Argument(..., help="Regular expression matched against ToDo text."),
-    start_at: int | None = typer.Option(
+    planned_start_at: int | None = typer.Option(
         None,
         "--from",
+        "--planned-from",
         "-f",
-        help="Optional Unix epoch range start in seconds.",
+        help="Optional Unix epoch planned_at range start in seconds.",
     ),
-    end_at: int | None = typer.Option(
+    planned_end_at: int | None = typer.Option(
         None,
         "--to",
+        "--planned-to",
         "-t",
-        help="Optional Unix epoch range end in seconds.",
+        help="Optional Unix epoch planned_at range end in seconds.",
+    ),
+    created_start_at: int | None = typer.Option(
+        None,
+        "--created-from",
+        help="Optional Unix epoch created_at range start in seconds.",
+    ),
+    created_end_at: int | None = typer.Option(
+        None,
+        "--created-to",
+        help="Optional Unix epoch created_at range end in seconds.",
     ),
     ignore_case: bool = typer.Option(
         False,
@@ -197,7 +220,11 @@ def todo_search(
     settings = load_cli_settings()
     if settings.server_url:
         _run_http(lambda client: client.todo_search(
-            pattern=pattern, start_at=start_at, end_at=end_at,
+            pattern=pattern,
+            planned_start_at=planned_start_at,
+            planned_end_at=planned_end_at,
+            created_start_at=created_start_at,
+            created_end_at=created_end_at,
             ignore_case=ignore_case, open_only=open_only, completed_only=completed_only,
         ), settings)
         return
@@ -211,8 +238,10 @@ def todo_search(
             completed = _completion_filter(open_only=open_only, completed_only=completed_only)
             todos = service.search(
                 pattern,
-                start_at=start_at,
-                end_at=end_at,
+                planned_start_at=planned_start_at,
+                planned_end_at=planned_end_at,
+                created_start_at=created_start_at,
+                created_end_at=created_end_at,
                 completed=completed,
                 case_sensitive=not ignore_case,
             )
@@ -222,7 +251,12 @@ def todo_search(
                 "ok": True,
                 "pattern": pattern,
                 "case_sensitive": not ignore_case,
-                "range": {"start_at": start_at, "end_at": end_at},
+                "range": {
+                    "planned_start_at": planned_start_at,
+                    "planned_end_at": planned_end_at,
+                    "created_start_at": created_start_at,
+                    "created_end_at": created_end_at,
+                },
                 "filter": {"completed": completed},
                 "count": len(todos),
                 "todos": [todo_to_dict(todo, context.settings.timezone) for todo in todos],
@@ -257,6 +291,11 @@ def todo_show(todo_id: int = typer.Argument(..., help="ToDo id.")) -> None:
 def todo_update(
     todo_id: int = typer.Argument(..., help="ToDo id."),
     title: str | None = typer.Option(None, "--title", help="New title."),
+    planned_at: int | None = typer.Option(
+        None,
+        "--planned-at",
+        help="New Unix epoch planning timestamp.",
+    ),
     due_at: int | None = typer.Option(None, "--date", "-d", help="New Unix epoch due timestamp."),
     description: str | None = typer.Option(None, "--description", "-m", help="New details."),
     priority: int | None = typer.Option(None, "--priority", "-p", min=0, help="New priority."),
@@ -269,6 +308,8 @@ def todo_update(
         fields: dict[str, object] = {}
         if title is not None:
             fields["title"] = title
+        if planned_at is not None:
+            fields["planned_at"] = planned_at
         if due_at is not None:
             fields["due_at"] = due_at
         if description is not None:
@@ -290,6 +331,7 @@ def todo_update(
                 todo_id,
                 TodoUpdate(
                     title=title,
+                    planned_at=planned_at,
                     due_at=due_at,
                     description=description,
                     priority=priority,
@@ -876,6 +918,30 @@ def _schedule_target_result(
 
 def _echo_json(payload: dict[str, object]) -> None:
     typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@app.command("gen-keys")
+def gen_keys() -> None:
+    """Generate a P-256 key pair for request encryption."""
+    from amtodo_crypto import generate_keypair
+
+    root = amtodo_root()
+    keys_dir = root / "config" / "keys"
+    keys_dir.mkdir(parents=True, exist_ok=True)
+
+    private_pem, public_pem = generate_keypair()
+    (keys_dir / "server_private.pem").write_bytes(private_pem)
+    (keys_dir / "server_public.pem").write_bytes(public_pem)
+
+    _echo_json({
+        "ok": True,
+        "private_key": str(keys_dir / "server_private.pem"),
+        "public_key": str(keys_dir / "server_public.pem"),
+        "message": (
+            "Keep the private key on the server. Distribute the public key to clients. "
+            "Algorithm: P-256 + AES-256-GCM."
+        ),
+    })
 
 
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")

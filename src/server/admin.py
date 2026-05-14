@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 
-from config import __version__
+from config import __version__, amtodo_root
 from db.base import Base
 from models.user import User
 from serialization import user_to_dict
@@ -15,9 +17,23 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict[str, str]:
-    """Return server health status."""
-    return {"status": "ok", "version": __version__}
+def health(request: Request) -> dict[str, object]:
+    """Return server health status and P-256 public key for request encryption."""
+    result: dict[str, object] = {"status": "ok", "version": __version__}
+    settings = request.app.state.settings
+
+    if settings.server_public_key_path:
+        try:
+            from amtodo_crypto.keys import public_key_spki
+            root = amtodo_root()
+            pub_path = root / settings.server_public_key_path
+            if pub_path.is_file():
+                raw = public_key_spki(pub_path.read_bytes())
+                result["public_key"] = base64.b64encode(raw).decode("ascii")
+        except Exception:
+            pass
+
+    return result
 
 
 @router.post("/admin/init-db")
@@ -159,21 +175,22 @@ def agent_guide() -> dict[str, object]:
                 "query_params": {},
                 "body": {
                     "title": "<string, required>",
+                    "planned_at": "<int | null, epoch seconds; defaults to created_at>",
                     "due_at": "<int | null, epoch seconds>",
                     "description": "<string | null>",
                     "priority": "<int, default 0, min 0>",
                     "tag": "<string | null>",
                 },
-                "response": {"ok": True, "todo": "{id, title, due_at, description, priority, tag, completed, created_at, updated_at}"},
+                "response": {"ok": True, "todo": "{id, title, planned_at, due_at, description, priority, tag, completed, created_at, updated_at}"},
             },
             {
                 "method": "GET",
                 "path": "/todos",
                 "auth": "user",
-                "description": "List ToDos. Optionally filter by time range and completion status.",
+                "description": "List ToDos. Optionally filter by planned_at range and completion status.",
                 "query_params": {
-                    "start_at": "<int | null, epoch seconds, filter by due_at >= this>",
-                    "end_at": "<int | null, epoch seconds, filter by due_at <= this>",
+                    "start_at": "<int | null, epoch seconds, filter by planned_at >= this>",
+                    "end_at": "<int | null, epoch seconds, filter by planned_at < this>",
                     "open_only": "<bool, default false, show only incomplete>",
                     "completed_only": "<bool, default false, show only completed>",
                 },
@@ -187,8 +204,12 @@ def agent_guide() -> dict[str, object]:
                 "description": "Search ToDos with a regular expression against title and description.",
                 "query_params": {
                     "pattern": "<string, required, regex>",
-                    "start_at": "<int | null>",
-                    "end_at": "<int | null>",
+                    "start_at": "<int | null, legacy alias for planned_start_at>",
+                    "end_at": "<int | null, legacy alias for planned_end_at>",
+                    "planned_start_at": "<int | null>",
+                    "planned_end_at": "<int | null>",
+                    "created_start_at": "<int | null>",
+                    "created_end_at": "<int | null>",
                     "ignore_case": "<bool, default false>",
                     "open_only": "<bool, default false>",
                     "completed_only": "<bool, default false>",
@@ -252,6 +273,7 @@ def agent_guide() -> dict[str, object]:
                 "query_params": {},
                 "body": {
                     "title": "<string | null>",
+                    "planned_at": "<int | null>",
                     "due_at": "<int | null>",
                     "description": "<string | null>",
                     "priority": "<int | null, min 0>",

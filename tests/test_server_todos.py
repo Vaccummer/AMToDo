@@ -26,6 +26,7 @@ class TestCreateTodo:
         resp = client.post("/api/v1/todos", json={"title": "test"})
         assert resp.status_code == 200
         assert resp.json()["todo"]["due_at"] is None
+        assert resp.json()["todo"]["planned_at"] is not None
 
     def test_create_rejects_empty_title(self, client: AuthedClient):
         resp = client.post("/api/v1/todos", json={"title": "  "})
@@ -67,6 +68,15 @@ class TestListTodos:
         completed_resp = client.get("/api/v1/todos", params={"completed_only": True})
         assert completed_resp.json()["count"] == 1
         assert completed_resp.json()["todos"][0]["title"] == "Done"
+
+    def test_list_filters_by_planned_range(self, client: AuthedClient):
+        client.post("/api/v1/todos", json={"title": "Today", "planned_at": 100})
+        client.post("/api/v1/todos", json={"title": "Tomorrow", "planned_at": 200})
+
+        resp = client.get("/api/v1/todos", params={"start_at": 150, "end_at": 250})
+
+        assert resp.status_code == 200
+        assert [todo["title"] for todo in resp.json()["todos"]] == ["Tomorrow"]
 
 
 class TestShowTodo:
@@ -158,6 +168,23 @@ class TestSearchTodos:
             params={"pattern": "uppercase", "ignore_case": True},
         )
         assert resp.json()["count"] == 1
+
+    def test_search_filters_by_planned_and_created_ranges(self, client: AuthedClient):
+        client.post("/api/v1/todos", json={"title": "Shared old", "planned_at": 100})
+        client.post("/api/v1/todos", json={"title": "Shared new", "planned_at": 200})
+        resp = client.get(
+            "/api/v1/todos/search",
+            params={
+                "pattern": "Shared",
+                "planned_start_at": 150,
+                "planned_end_at": 250,
+                "created_start_at": 0,
+                "created_end_at": 9_999_999_999,
+            },
+        )
+
+        assert resp.status_code == 200
+        assert [todo["title"] for todo in resp.json()["todos"]] == ["Shared new"]
 
     def test_search_invalid_regex_returns_400(self, client: AuthedClient):
         resp = client.get("/api/v1/todos/search", params={"pattern": "["})

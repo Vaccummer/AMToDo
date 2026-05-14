@@ -24,6 +24,7 @@ def get_standalone_tables() -> tuple[type, type, type]:
         {
             "__tablename__": "todos",
             "__table_args__": (
+                Index("ix_todos_planned_completed", "planned_at", "completed"),
                 Index("ix_todos_due_completed", "due_at", "completed"),
                 {"sqlite_autoincrement": True},
             ),
@@ -71,7 +72,10 @@ def get_user_tables(user_id: int) -> tuple[type, type, type]:
         (Todo,),
         {
             "__tablename__": todo_table,
-            "__table_args__": ({"sqlite_autoincrement": True},),
+            "__table_args__": (
+                Index(f"ix_{todo_table}_planned_completed", "planned_at", "completed"),
+                {"sqlite_autoincrement": True},
+            ),
         },
     )
     ScheduleModel = type(

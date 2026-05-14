@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
@@ -35,6 +35,46 @@ class Database:
 
         register_models()
         Base.metadata.create_all(self.engine)
+        self._upgrade_sqlite_todo_tables()
+
+    def _upgrade_sqlite_todo_tables(self) -> None:
+        """Apply tiny additive SQLite upgrades for existing local databases."""
+
+        if self.engine.dialect.name != "sqlite":
+            return
+
+        inspector = inspect(self.engine)
+        todo_tables = {
+            table.name
+            for table in Base.metadata.sorted_tables
+            if table.name == "todos" or table.name.startswith("todos_")
+        }
+        todo_tables.update(
+            table_name
+            for table_name in inspector.get_table_names()
+            if table_name == "todos" or table_name.startswith("todos_")
+        )
+        with self.engine.begin() as connection:
+            for table_name in sorted(todo_tables):
+                columns = {column["name"] for column in inspector.get_columns(table_name)}
+                quoted_table = _quote_identifier(table_name)
+                if "planned_at" not in columns:
+                    connection.execute(
+                        text(f"ALTER TABLE {quoted_table} ADD COLUMN planned_at INTEGER")
+                    )
+                connection.execute(
+                    text(
+                        f"UPDATE {quoted_table} "
+                        "SET planned_at = created_at WHERE planned_at IS NULL"
+                    )
+                )
+                quoted_index = _quote_identifier(f"ix_{table_name}_planned_completed")
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {quoted_index} "
+                        f"ON {quoted_table} (planned_at, completed)"
+                    )
+                )
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -57,7 +97,9 @@ def create_database_from_url(database_url: str) -> Database:
     """Create the database adapter from a URL string."""
 
     ensure_sqlite_parent(database_url)
-    connect_args: dict[str, object] = {"check_same_thread": False} if _is_sqlite(database_url) else {}
+    connect_args: dict[str, object] = (
+        {"check_same_thread": False} if _is_sqlite(database_url) else {}
+    )
     engine = create_engine(database_url, future=True, connect_args=connect_args)
     return Database(engine=engine, session_factory=sessionmaker(engine, expire_on_commit=False))
 
@@ -79,3 +121,9 @@ def _is_sqlite(database_url: str) -> bool:
     """Return True if the database URL targets SQLite."""
     url = make_url(database_url)
     return url.drivername in {"sqlite", "sqlite+pysqlite"}
+
+
+def _quote_identifier(value: str) -> str:
+    """Quote an SQLite identifier from SQLAlchemy metadata."""
+
+    return '"' + value.replace('"', '""') + '"'

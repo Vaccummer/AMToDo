@@ -37,29 +37,78 @@ class TodoRepository:
         """Return all ToDos ordered for stable display."""
 
         statement = select(self._model).order_by(
-            self._model.due_at,
+            self._model.planned_at,
             self._model.completed,
             self._model.priority.desc(),
             self._model.id,
         )
         return list(self._session.scalars(statement))
 
-    def list_due_between(
+    def list_planned_between(
         self,
         start_at: int,
         end_at: int,
         completed: bool | None = None,
     ) -> list[object]:
-        """Return ToDos with due boundaries in the requested range."""
+        """Return ToDos planned in the requested range."""
 
         statement = select(self._model).where(
-            self._model.created_at >= start_at, self._model.created_at < end_at
+            self._model.planned_at >= start_at, self._model.planned_at < end_at
         )
         if completed is not None:
             statement = statement.where(self._model.completed.is_(completed))
 
         statement = statement.order_by(
-            self._model.created_at, self._model.completed, self._model.priority.desc(), self._model.id
+            self._model.planned_at,
+            self._model.completed,
+            self._model.priority.desc(),
+            self._model.id,
+        )
+        return list(self._session.scalars(statement))
+
+    def list_created_between(
+        self,
+        start_at: int,
+        end_at: int,
+        completed: bool | None = None,
+    ) -> list[object]:
+        """Return ToDos created in the requested range."""
+
+        return self.list_filtered(
+            created_start_at=start_at,
+            created_end_at=end_at,
+            completed=completed,
+        )
+
+    def list_filtered(
+        self,
+        *,
+        planned_start_at: int | None = None,
+        planned_end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
+        completed: bool | None = None,
+    ) -> list[object]:
+        """Return ToDos matching optional planned and created timestamp bounds."""
+
+        statement = select(self._model)
+        if planned_start_at is not None:
+            statement = statement.where(self._model.planned_at >= planned_start_at)
+        if planned_end_at is not None:
+            statement = statement.where(self._model.planned_at < planned_end_at)
+        if created_start_at is not None:
+            statement = statement.where(self._model.created_at >= created_start_at)
+        if created_end_at is not None:
+            statement = statement.where(self._model.created_at < created_end_at)
+        if completed is not None:
+            statement = statement.where(self._model.completed.is_(completed))
+
+        statement = statement.order_by(
+            self._model.planned_at,
+            self._model.created_at,
+            self._model.completed,
+            self._model.priority.desc(),
+            self._model.id,
         )
         return list(self._session.scalars(statement))
 
@@ -80,6 +129,9 @@ class TodoRepository:
             statement = statement.where(self._model.completed.is_(completed))
 
         statement = statement.order_by(
-            self._model.due_at, self._model.completed, self._model.priority.desc(), self._model.id
+            self._model.due_at,
+            self._model.completed,
+            self._model.priority.desc(),
+            self._model.id,
         )
         return list(self._session.scalars(statement))
