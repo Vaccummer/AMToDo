@@ -13,6 +13,7 @@ authors = [
   { name = "AMToDo contributors" },
 ]
 dependencies = [
+  "cryptography>=42.0",
   "fastapi>=0.115",
   "httpx>=0.28",
   "pyside6>=6.8",
@@ -37,7 +38,7 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 only-include = []
-force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui" }
+force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/amtodo_crypto" = "amtodo_crypto", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui" }
 
 [tool.ruff]
 line-length = 100
