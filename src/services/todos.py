@@ -11,8 +11,8 @@ from exceptions import NotFoundError, ValidationError
 from models import Todo
 
 if TYPE_CHECKING:
-    from repositories import TodoRepository
     from clock import Clock
+    from repositories import TodoRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +20,7 @@ class TodoDraft:
     """Input data for creating a ToDo item."""
 
     title: str
+    planned_at: int | None = None
     due_at: int | None = None
     description: str | None = None
     priority: int = 0
@@ -31,6 +32,7 @@ class TodoUpdate:
     """Input data for updating a ToDo item."""
 
     title: str | None = None
+    planned_at: int | None = None
     due_at: int | None = None
     description: str | None = None
     priority: int | None = None
@@ -53,6 +55,8 @@ class TodoService:
             raise ValidationError("todo title cannot be empty")
         if draft.priority < 0:
             raise ValidationError("todo priority cannot be negative")
+        if draft.planned_at is not None and draft.planned_at < 0:
+            raise ValidationError("todo planned_at cannot be negative")
         if draft.due_at is not None and draft.due_at < 0:
             raise ValidationError("todo due_at cannot be negative")
 
@@ -60,6 +64,7 @@ class TodoService:
         todo = self._model(
             title=title,
             description=draft.description,
+            planned_at=draft.planned_at if draft.planned_at is not None else now,
             due_at=draft.due_at,
             completed=False,
             priority=draft.priority,
@@ -72,7 +77,7 @@ class TodoService:
 
     def list_all(self, completed: bool | None = None) -> list[Todo]:
         """Return all ToDos, optionally filtered by completion."""
-        return self._repository.list_due_range(completed=completed)
+        return self._repository.list_filtered(completed=completed)
 
     def show(self, todo_id: int) -> Todo:
         """Return a ToDo by id."""
@@ -88,29 +93,37 @@ class TodoService:
         end_at: int,
         completed: bool | None = None,
     ) -> list[Todo]:
-        """Return ToDos due in a date range."""
+        """Return ToDos planned in a date range."""
 
         if start_at >= end_at:
             raise ValidationError("start_at must be earlier than end_at")
-        return self._repository.list_due_between(start_at, end_at, completed=completed)
+        return self._repository.list_planned_between(start_at, end_at, completed=completed)
 
     def search(
         self,
         pattern: str,
-        start_at: int | None = None,
-        end_at: int | None = None,
+        planned_start_at: int | None = None,
+        planned_end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
         completed: bool | None = None,
         *,
         case_sensitive: bool = True,
     ) -> list[Todo]:
-        """Search ToDos using a regular expression and optional epoch bounds."""
+        """Search ToDos using a regular expression and optional timestamp bounds."""
 
-        if start_at is not None and start_at < 0:
-            raise ValidationError("start_at cannot be negative")
-        if end_at is not None and end_at < 0:
-            raise ValidationError("end_at cannot be negative")
-        if start_at is not None and end_at is not None and start_at >= end_at:
-            raise ValidationError("start_at must be earlier than end_at")
+        _validate_optional_range(
+            planned_start_at,
+            planned_end_at,
+            start_name="planned_start_at",
+            end_name="planned_end_at",
+        )
+        _validate_optional_range(
+            created_start_at,
+            created_end_at,
+            start_name="created_start_at",
+            end_name="created_end_at",
+        )
 
         flags = 0 if case_sensitive else re.IGNORECASE
         try:
@@ -119,9 +132,11 @@ class TodoService:
             msg = f"invalid regex pattern: {exc}"
             raise ValidationError(msg) from exc
 
-        todos = self._repository.list_due_range(
-            start_at=start_at,
-            end_at=end_at,
+        todos = self._repository.list_filtered(
+            planned_start_at=planned_start_at,
+            planned_end_at=planned_end_at,
+            created_start_at=created_start_at,
+            created_end_at=created_end_at,
             completed=completed,
         )
         return [todo for todo in todos if regex.search(_search_text(todo))]
@@ -137,6 +152,11 @@ class TodoService:
             if not title:
                 raise ValidationError("todo title cannot be empty")
             todo.title = title
+            changed = True
+        if update.planned_at is not None:
+            if update.planned_at < 0:
+                raise ValidationError("todo planned_at cannot be negative")
+            todo.planned_at = update.planned_at
             changed = True
         if update.due_at is not None:
             if update.due_at < 0:
@@ -227,3 +247,18 @@ def _search_text(todo: Todo) -> str:
         )
         if value
     )
+
+
+def _validate_optional_range(
+    start_at: int | None,
+    end_at: int | None,
+    *,
+    start_name: str,
+    end_name: str,
+) -> None:
+    if start_at is not None and start_at < 0:
+        raise ValidationError(f"{start_name} cannot be negative")
+    if end_at is not None and end_at < 0:
+        raise ValidationError(f"{end_name} cannot be negative")
+    if start_at is not None and end_at is not None and start_at >= end_at:
+        raise ValidationError(f"{start_name} must be earlier than {end_name}")

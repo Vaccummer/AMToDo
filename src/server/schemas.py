@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class TodoCreateRequest(BaseModel):
     title: str
+    planned_at: int | None = None
     due_at: int | None = None
     description: str | None = None
     priority: int = Field(default=0, ge=0)
@@ -15,6 +16,7 @@ class TodoCreateRequest(BaseModel):
 
 class TodoUpdateRequest(BaseModel):
     title: str | None = None
+    planned_at: int | None = None
     due_at: int | None = None
     description: str | None = None
     priority: int | None = Field(default=None, ge=0)
