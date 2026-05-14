@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMToDoApi, TodoItem } from "../api/client";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
-  dateKeyFromEpoch,
   formatDateKeyDay,
   formatDateKeyWeekday,
+  formatTime,
+  isOverdueTodo,
   monthLabelFromDateKey,
   startOfDateKeyEpoch
 } from "../lib/time";
+import { CalendarPopup } from "./CalendarPopup";
+import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { TodoDetailModal } from "./TodoDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
 import toTodayIcon from "../assets/ToToday.svg";
@@ -17,6 +21,24 @@ type Props = {
   api: AMToDoApi;
 };
 
+function EditIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
 export function TodoView({ api }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedOffset, setSelectedOffset] = useState(0);
@@ -24,6 +46,11 @@ export function TodoView({ api }: Props) {
   const [status, setStatus] = useState<string>("加载中");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const calendarStripRef = useRef<HTMLDivElement>(null);
 
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const weekStart = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
@@ -65,14 +92,9 @@ export function TodoView({ api }: Props) {
   async function addTodo() {
     const title = "新待办";
     try {
-      const result = await api.createTodo(title);
-      const createdDayKey = dateKeyFromEpoch(result.todo.created_at);
-      if (createdDayKey !== selectedDayKey) {
-        goToToday();
-        setTodos([result.todo]);
-      } else {
-        setTodos((items) => [...items, result.todo]);
-      }
+      const plannedAt = startOfDateKeyEpoch(selectedDayKey);
+      const result = await api.createTodo(title, plannedAt);
+      setTodos((items) => [...items, result.todo]);
       setEditingId(result.todo.id);
       setEditText("");
       setStatus("");
@@ -98,7 +120,7 @@ export function TodoView({ api }: Props) {
       return;
     }
     try {
-      await api.updateTodo(id, trimmed);
+      await api.updateTodo(id, { title: trimmed });
       setTodos((items) =>
         items.map((item) => (item.id === id ? { ...item, title: trimmed } : item))
       );
@@ -132,11 +154,52 @@ export function TodoView({ api }: Props) {
     setSelectedOffset(0);
   }
 
+  function goToDate(dateKey: string) {
+    const todayEpoch = startOfDateKeyEpoch(todayKey);
+    const targetEpoch = startOfDateKeyEpoch(dateKey);
+    const diff = Math.round((targetEpoch - todayEpoch) / 86400);
+    setWeekOffset(Math.floor(diff / 7));
+    setSelectedOffset(((diff % 7) + 7) % 7);
+  }
+
+  async function deleteTodo(id: number) {
+    try {
+      await api.deleteTodo(id);
+    } catch {
+      // remove locally even if API fails to keep UI responsive
+    }
+    setTodos((items) => items.filter((t) => t.id !== id));
+  }
+
+  function handleContextMenu(e: React.MouseEvent, id: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ id, x: e.clientX, y: e.clientY });
+  }
+
   return (
     <div className="todo-view">
-      <div className="calendar-strip">
+      <div className="calendar-strip" ref={calendarStripRef}>
         <div className="cal-month-row">
-          <button type="button" className="cal-month-label" onClick={goToToday}>{monthLabel}</button>
+          <button
+            type="button"
+            className="cal-month-label"
+            onClick={() => {
+              if (!showCalendar && calendarStripRef.current) {
+                setAnchorRect(calendarStripRef.current.getBoundingClientRect());
+              }
+              setShowCalendar((v) => !v);
+            }}
+          >
+            {monthLabel}
+            <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
+              {showCalendar ? (
+                <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
+              ) : (
+                <path d="M18 78 H82 Q90 78 86 70 L56 26 Q50 18 44 26 L14 70 Q10 78 18 78 Z" fill="currentColor" />
+              )}
+            </svg>
+          </button>
         </div>
         <div className="cal-day-row">
         <button type="button" className="cal-nav" aria-label="上一周" onClick={prevWeek}>
@@ -169,14 +232,32 @@ export function TodoView({ api }: Props) {
         </div>
       </div>
 
+      {showCalendar && anchorRect ? (
+        <CalendarPopup
+          selectedDateKey={selectedDayKey}
+          todayKey={todayKey}
+          anchorRect={anchorRect}
+          onSelect={goToDate}
+          onClose={() => setShowCalendar(false)}
+        />
+      ) : null}
+
       <div className="todo-list">
         {status ? <div className="empty-state">{status}</div> : null}
         {!status && todos.length === 0 ? <div className="empty-state">这一天还没有 ToDo</div> : null}
         {todos.map((todo) => {
           const isEditing = editingId === todo.id;
+          const overdue = isOverdueTodo(todo);
+          const hasDue = todo.due_at !== null;
+          const rowClass = ["todo-row", todo.completed ? "completed" : "", overdue ? "overdue" : ""]
+            .filter(Boolean).join(" ");
           return (
-          <div className={todo.completed ? "todo-row completed" : "todo-row"} key={todo.id}>
-            <button type="button" className="check-button" onClick={() => void toggle(todo)}>
+          <div
+            className={rowClass}
+            key={todo.id}
+            onContextMenu={(e) => handleContextMenu(e, todo.id)}
+          >
+            <button type="button" className="check-button" onClick={(e) => { e.stopPropagation(); void toggle(todo); }}>
               {todo.completed ? "✓" : ""}
             </button>
             {isEditing ? (
@@ -198,6 +279,7 @@ export function TodoView({ api }: Props) {
                 {todo.title}
               </span>
             )}
+            {hasDue ? <span className="due-time">{formatTime(todo.due_at!)}</span> : null}
           </div>
           );
         })}
@@ -205,6 +287,41 @@ export function TodoView({ api }: Props) {
           + 添加待办
         </button>
       </div>
+
+      {detailId != null ? (
+        <TodoDetailModal
+          todo={todos.find((t) => t.id === detailId)!}
+          api={api}
+          onClose={() => setDetailId(null)}
+          onDelete={(id) => deleteTodo(id)}
+          onUpdate={(updated) => {
+            setTodos((items) =>
+              items.map((item) => (item.id === updated.id ? updated : item))
+            );
+          }}
+        />
+      ) : null}
+
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              label: "编辑",
+              icon: <EditIcon />,
+              action: () => setDetailId(contextMenu.id)
+            },
+            {
+              label: "删除",
+              icon: <TrashIcon />,
+              danger: true,
+              action: () => deleteTodo(contextMenu.id)
+            }
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }
