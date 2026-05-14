@@ -1,4 +1,4 @@
-"""Admin routes for user management (protected by admin token)."""
+"""Admin routes for user management (protected by admin_token in body)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ from models.factory import get_user_tables
 from models.user import User
 from serialization import user_to_dict
 from server.auth import require_admin
-from server.schemas import UserCreateRequest, UserUpdateRequest
+from server.schemas import (
+    AdminUserCreateRequest,
+    AdminUserDeleteRequest,
+    AdminUserListRequest,
+    AdminUserRegenTokenRequest,
+    AdminUserUpdateRequest,
+)
 
 router = APIRouter()
 
@@ -25,9 +31,29 @@ def _next_user_id(session) -> int:
     return (row + 1) if row is not None else 1
 
 
-@router.post("")
+@router.post("/list")
+def list_users(
+    body: AdminUserListRequest,
+    request: Request,
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """List all registered users."""
+    db = request.app.state.db
+
+    with db.session() as session:
+        users = list(
+            session.execute(select(User).order_by(User.id)).scalars().all()
+        )
+        return {
+            "ok": True,
+            "count": len(users),
+            "users": [user_to_dict(u) for u in users],
+        }
+
+
+@router.post("/create")
 def create_user(
-    body: UserCreateRequest,
+    body: AdminUserCreateRequest,
     request: Request,
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
@@ -67,28 +93,9 @@ def create_user(
     return {"ok": True, "user": result}
 
 
-@router.get("")
-def list_users(
-    request: Request,
-    _auth: None = Depends(require_admin),
-) -> dict[str, object]:
-    """List all registered users."""
-    db = request.app.state.db
-
-    with db.session() as session:
-        users = list(session.execute(
-            select(User).order_by(User.id)
-        ).scalars().all())
-        return {
-            "ok": True,
-            "count": len(users),
-            "users": [user_to_dict(u) for u in users],
-        }
-
-
-@router.delete("/{user_id}")
+@router.post("/delete")
 def delete_user(
-    user_id: int,
+    body: AdminUserDeleteRequest,
     request: Request,
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
@@ -97,9 +104,9 @@ def delete_user(
     token_map: dict[str, int] = request.app.state.token_map
 
     with db.session() as session:
-        user = session.get(User, user_id)
+        user = session.get(User, body.user_id)
         if user is None:
-            raise NotFoundError(f"user {user_id} not found")
+            raise NotFoundError(f"user {body.user_id} not found")
 
         token = user.token
         name = user.name
@@ -110,13 +117,12 @@ def delete_user(
     # Remove from token map
     token_map.pop(token, None)
 
-    return {"ok": True, "deleted": {"id": user_id, "name": name}}
+    return {"ok": True, "deleted": {"id": body.user_id, "name": name}}
 
 
-@router.patch("/{user_id}")
+@router.post("/update")
 def update_user(
-    user_id: int,
-    body: UserUpdateRequest,
+    body: AdminUserUpdateRequest,
     request: Request,
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
@@ -130,13 +136,13 @@ def update_user(
     db = request.app.state.db
 
     with db.session() as session:
-        user = session.get(User, user_id)
+        user = session.get(User, body.user_id)
         if user is None:
-            raise NotFoundError(f"user {user_id} not found")
+            raise NotFoundError(f"user {body.user_id} not found")
 
         if body.name is not None:
             existing = session.execute(
-                select(User).where(User.name == body.name, User.id != user_id)
+                select(User).where(User.name == body.name, User.id != body.user_id)
             ).scalar_one_or_none()
             if existing is not None:
                 raise ConflictError(f"user with name '{body.name}' already exists")
@@ -146,9 +152,9 @@ def update_user(
         return {"ok": True, "user": user_to_dict(user)}
 
 
-@router.put("/{user_id}/token")
+@router.post("/regen-token")
 def regenerate_token(
-    user_id: int,
+    body: AdminUserRegenTokenRequest,
     request: Request,
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
@@ -157,9 +163,9 @@ def regenerate_token(
     token_map: dict[str, int] = request.app.state.token_map
 
     with db.session() as session:
-        user = session.get(User, user_id)
+        user = session.get(User, body.user_id)
         if user is None:
-            raise NotFoundError(f"user {user_id} not found")
+            raise NotFoundError(f"user {body.user_id} not found")
 
         old_token = user.token
 
@@ -182,6 +188,6 @@ def regenerate_token(
         session.commit()
 
         token_map.pop(old_token, None)
-        token_map[new_token] = user_id
+        token_map[new_token] = body.user_id
 
         return {"ok": True, "user": user_to_dict(user)}

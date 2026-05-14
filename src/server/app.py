@@ -18,7 +18,7 @@ from sqlalchemy import select
 import json
 
 from config import __version__, AppSettings, amtodo_root
-from amtodo_crypto import ReplayProtector, is_envelope, open_envelope
+from amtodo_crypto import ReplayProtector, is_envelope, open_envelope, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
@@ -155,27 +155,44 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
     async def decryption_middleware(request, call_next):
         from starlette.requests import Request
 
-        if request.method not in ("POST", "PATCH", "PUT", "DELETE"):
+        # Health check passes through unencrypted
+        if request.url.path.rstrip("/") == "/api/v1/health":
+            return await call_next(request)
+
+        # Read-only methods pass through without body encryption
+        if request.method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
 
         content_type = request.headers.get("content-type", "")
         if "application/json" not in content_type:
-            return await call_next(request)
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, "request must be encrypted"),
+            )
 
         body = await request.body()
         if not body:
-            return await call_next(request)
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, "request must be encrypted"),
+            )
 
         try:
             body_json = json.loads(body)
         except json.JSONDecodeError:
-            return await call_next(request)
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, "request body must be valid JSON"),
+            )
 
         if not is_envelope(body_json):
-            return await call_next(request)
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, "request must be encrypted"),
+            )
 
         try:
-            inner = open_envelope(body_json, private_keys)
+            inner, data_key = open_envelope(body_json, private_keys)
         except ValueError as exc:
             return JSONResponse(
                 status_code=400,
@@ -199,7 +216,32 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
 
         request._receive = _receive
         request._body = decrypted_body
-        return await call_next(request)
+        request.state.encryption_data_key = data_key
+
+        response = await call_next(request)
+
+        # Encrypt JSON responses with the session data key
+        if response.status_code < 500 and _is_json_response(response):
+            body_chunks = [chunk async for chunk in response.body_iterator]
+            raw_body = b"".join(body_chunks)
+            response_body = json.loads(raw_body)
+            encrypted = seal_response(response_body, data_key)
+            clean_headers = {
+                k: v for k, v in response.headers.items()
+                if k.lower() not in ("content-length", "transfer-encoding")
+            }
+            return JSONResponse(
+                content=encrypted,
+                status_code=response.status_code,
+                headers=clean_headers,
+            )
+
+        return response
+
+
+def _is_json_response(response) -> bool:
+    content_type = response.headers.get("content-type", "")
+    return "application/json" in content_type
 
 
 def create_app(settings: AppSettings) -> FastAPI:
