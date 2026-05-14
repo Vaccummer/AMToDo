@@ -95,7 +95,7 @@ def todo_add(
 
     settings = load_cli_settings()
     if settings.server_url:
-        _run_http(lambda client: client.todo_add(
+        _run_http(lambda client: client.todo_create(
             title=title,
             planned_at=planned_at,
             due_at=due_at,
@@ -272,7 +272,7 @@ def todo_show(todo_id: int = typer.Argument(..., help="ToDo id.")) -> None:
 
     settings = load_cli_settings()
     if settings.server_url:
-        _run_http(lambda client: client.todo_show(todo_id), settings)
+        _run_http(lambda client: client.todo_get(todo_id), settings)
         return
 
     context = create_application_context(settings)
@@ -481,7 +481,7 @@ def schedule_add(
 
     settings = load_cli_settings()
     if settings.server_url:
-        _run_http(lambda client: client.schedule_add(
+        _run_http(lambda client: client.schedule_create(
             title=title, start_at=start_at, end_at=end_at,
             description=description, location=location, category=category,
         ), settings)
@@ -617,7 +617,7 @@ def schedule_show(schedule_id: int = typer.Argument(..., help="Schedule id.")) -
 
     settings = load_cli_settings()
     if settings.server_url:
-        _run_http(lambda client: client.schedule_show(schedule_id), settings)
+        _run_http(lambda client: client.schedule_get(schedule_id), settings)
         return
 
     context = create_application_context(settings)
