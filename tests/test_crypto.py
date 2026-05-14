@@ -36,8 +36,8 @@ class TestSealAndOpen:
     def test_roundtrip(self, keypair):
         private_pem, public_pem = keypair
         payload = {"title": "hello", "priority": 3, "description": None}
-        envelope = seal(payload, public_pem, "server-key-v1")
-        inner = open_envelope(envelope, {"server-key-v1": private_pem})
+        envelope, _ = seal(payload, public_pem, "server-key-v1")
+        inner, _ = open_envelope(envelope, {"server-key-v1": private_pem})
         assert inner["payload"] == payload
 
     def test_roundtrip_complex_payload(self, keypair):
@@ -48,19 +48,19 @@ class TestSealAndOpen:
             "empty_list": [],
             "zero": 0,
         }
-        envelope = seal(payload, public_pem, "server-key-v1")
-        inner = open_envelope(envelope, {"server-key-v1": private_pem})
+        envelope, _ = seal(payload, public_pem, "server-key-v1")
+        inner, _ = open_envelope(envelope, {"server-key-v1": private_pem})
         assert inner["payload"] == payload
 
     def test_envelope_has_required_fields(self, keypair):
         _, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         for field in ("version", "keyId", "alg", "ek", "nonce", "data", "tag"):
             assert field in envelope
 
     def test_envelope_fields_are_strings(self, keypair):
         _, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         assert isinstance(envelope["version"], int)
         assert isinstance(envelope["keyId"], str)
         assert isinstance(envelope["alg"], str)
@@ -72,26 +72,26 @@ class TestSealAndOpen:
     def test_wrong_private_key_fails(self, keypair):
         _, public_pem = keypair
         other_priv, _ = generate_keypair()
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         with pytest.raises(ValueError, match="decrypt"):
             open_envelope(envelope, {"server-key-v1": other_priv})
 
     def test_unknown_key_id_fails(self, keypair):
         _, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         with pytest.raises(ValueError, match="unknown"):
             open_envelope(envelope, {"other-key": b""})
 
     def test_malformed_ek_fails(self, keypair):
         private_pem, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         envelope["ek"] = "!!!not-base64!!!"
         with pytest.raises(ValueError, match="malformed"):
             open_envelope(envelope, {"server-key-v1": private_pem})
 
     def test_missing_field_fails(self, keypair):
         private_pem, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         del envelope["data"]
         with pytest.raises(ValueError, match="malformed"):
             open_envelope(envelope, {"server-key-v1": private_pem})
@@ -103,21 +103,21 @@ class TestSealAndOpen:
 
     def test_non_overlapping_nonces(self, keypair):
         _, public_pem = keypair
-        e1 = seal({"a": 1}, public_pem, "server-key-v1")
-        e2 = seal({"b": 2}, public_pem, "server-key-v1")
+        e1, _ = seal({"a": 1}, public_pem, "server-key-v1")
+        e2, _ = seal({"b": 2}, public_pem, "server-key-v1")
         assert e1["nonce"] != e2["nonce"]
 
     def test_non_overlapping_ek(self, keypair):
         _, public_pem = keypair
-        e1 = seal({"a": 1}, public_pem, "server-key-v1")
-        e2 = seal({"b": 2}, public_pem, "server-key-v1")
+        e1, _ = seal({"a": 1}, public_pem, "server-key-v1")
+        e2, _ = seal({"b": 2}, public_pem, "server-key-v1")
         assert e1["ek"] != e2["ek"]
 
 
 class TestIsEnvelope:
     def test_valid_envelope_is_detected(self, keypair):
         _, public_pem = keypair
-        envelope = seal({"x": 1}, public_pem, "server-key-v1")
+        envelope, _ = seal({"x": 1}, public_pem, "server-key-v1")
         assert is_envelope(envelope) is True
 
     def test_plain_body_is_not_envelope(self):

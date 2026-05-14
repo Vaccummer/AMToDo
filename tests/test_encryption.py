@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from clock import SystemClock
 from config import AppSettings
-from amtodo_crypto import generate_keypair, seal
+from amtodo_crypto import generate_keypair, open_response, seal
 from models.user import User
 from server.app import create_app
 
@@ -61,7 +61,7 @@ class TestEncryptedRequests:
     def test_create_todo_encrypted(self, encrypted_setup):
         client, public_pem, token, _user_id = encrypted_setup
         payload = {"title": "encrypted todo", "priority": 5}
-        envelope = seal(payload, public_pem, "server-key-v1")
+        envelope, data_key = seal(payload, public_pem, "server-key-v1")
 
         response = client.post(
             "/api/v1/todos",
@@ -69,27 +69,26 @@ class TestEncryptedRequests:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
-        data = response.json()
+        data = open_response(response.json(), data_key)
         assert data["ok"] is True
         assert data["todo"]["title"] == "encrypted todo"
         assert data["todo"]["priority"] == 5
 
-    def test_plain_request_still_works(self, encrypted_setup):
+    def test_plain_request_is_rejected(self, encrypted_setup):
         client, _public_pem, token, _user_id = encrypted_setup
         response = client.post(
             "/api/v1/todos",
             json={"title": "plain todo", "priority": 1},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 400
         data = response.json()
-        assert data["ok"] is True
-        assert data["todo"]["title"] == "plain todo"
+        assert "encrypted" in data["error"]["message"].lower()
 
     def test_replayed_request_rejected(self, encrypted_setup):
         client, public_pem, token, _user_id = encrypted_setup
         payload = {"title": "replay test", "priority": 1}
-        envelope = seal(payload, public_pem, "server-key-v1")
+        envelope, _ = seal(payload, public_pem, "server-key-v1")
 
         # First request succeeds
         r1 = client.post(
@@ -112,7 +111,7 @@ class TestEncryptedRequests:
         client, public_pem, token, _user_id = encrypted_setup
         # Generate a valid envelope, then corrupt it
         payload = {"title": "test", "priority": 1}
-        envelope = seal(payload, public_pem, "server-key-v1")
+        envelope, _ = seal(payload, public_pem, "server-key-v1")
         envelope["ek"] = "AAAA"  # corrupt
 
         response = client.post(
@@ -137,7 +136,7 @@ class TestEncryptedRequests:
         client, public_pem, token, _user_id = encrypted_setup
         # Seal with a different key_id than what the server has
         payload = {"title": "test", "priority": 1}
-        envelope = seal(payload, public_pem, "wrong-key-id")
+        envelope, _ = seal(payload, public_pem, "wrong-key-id")
 
         response = client.post(
             "/api/v1/todos",

@@ -76,7 +76,6 @@ def client(tmp_path):
         c._client = httpx.Client(
             transport=TestTransport(),
             base_url="http://testserver",
-            headers={"Authorization": f"Bearer {token}"},
         )
         yield c
         c.close()
@@ -84,35 +83,35 @@ def client(tmp_path):
 
 class TestTodoClient:
     def test_add_and_show(self, client):
-        result = client.todo_add(title="Hello", priority=2)
+        result = client.todo_create(title="Hello", priority=2)
         assert result["ok"] is True
         todo_id = result["todo"]["id"]
         assert todo_id == 1
 
-        result = client.todo_show(todo_id)
+        result = client.todo_get(todo_id)
         assert result["todo"]["title"] == "Hello"
         assert result["todo"]["priority"] == 2
 
     def test_list(self, client):
-        client.todo_add(title="A")
-        client.todo_add(title="B")
+        client.todo_create(title="A")
+        client.todo_create(title="B")
         result = client.todo_list(open_only=True)
         assert result["count"] == 2
 
     def test_search(self, client):
-        client.todo_add(title="Buy milk")
-        client.todo_add(title="Read book")
+        client.todo_create(title="Buy milk")
+        client.todo_create(title="Read book")
         result = client.todo_search("milk")
         assert result["count"] == 1
 
     def test_update(self, client):
-        client.todo_add(title="Old")
+        client.todo_create(title="Old")
         result = client.todo_update(1, title="New", priority=9)
         assert result["todo"]["title"] == "New"
         assert result["todo"]["priority"] == 9
 
     def test_done_and_reopen(self, client):
-        client.todo_add(title="Task")
+        client.todo_create(title="Task")
         result = client.todo_done([1])
         assert result["results"][0]["todo"]["completed"] is True
 
@@ -120,31 +119,31 @@ class TestTodoClient:
         assert result["results"][0]["todo"]["completed"] is False
 
     def test_remove(self, client):
-        client.todo_add(title="To delete")
+        client.todo_create(title="To delete")
         result = client.todo_remove([1])
         assert result["results"][0]["ok"] is True
 
-        result = client.todo_show(1)
+        result = client.todo_get(1)
         assert result["ok"] is False
 
     def test_stats(self, client):
-        client.todo_add(title="Work 1", tag="work")
-        client.todo_add(title="Work 2", tag="work")
-        client.todo_add(title="Home 1", tag="home")
+        client.todo_create(title="Work 1", tag="work")
+        client.todo_create(title="Work 2", tag="work")
+        client.todo_create(title="Home 1", tag="home")
         result = client.todo_stats()
         assert result["stats"]["total"] == 3
         assert result["stats"]["by_tag"]["work"] == 2
         assert result["stats"]["by_tag"]["home"] == 1
 
     def test_not_found_returns_error(self, client):
-        result = client.todo_show(99999)
+        result = client.todo_get(99999)
         assert result["ok"] is False
         assert result["error"]["type"] == "NotFoundError"
 
 
 class TestScheduleClient:
     def test_add_and_list(self, client):
-        result = client.schedule_add(title="Meeting", start_at=1000, end_at=2000, category="work")
+        result = client.schedule_create(title="Meeting", start_at=1000, end_at=2000, category="work")
         assert result["ok"] is True
         assert result["schedule"]["id"] == 1
 
@@ -152,12 +151,12 @@ class TestScheduleClient:
         assert result["count"] == 1
 
     def test_conflicts(self, client):
-        client.schedule_add(title="Existing", start_at=1000, end_at=2000)
+        client.schedule_create(title="Existing", start_at=1000, end_at=2000)
         result = client.schedule_conflicts(start_at=1500, end_at=2500)
         assert result["conflict"] is True
 
     def test_update_and_remove(self, client):
-        client.schedule_add(title="Original", start_at=1000, end_at=2000)
+        client.schedule_create(title="Original", start_at=1000, end_at=2000)
         result = client.schedule_update(1, title="Updated", location="Office")
         assert result["schedule"]["title"] == "Updated"
         assert result["schedule"]["location"] == "Office"
@@ -166,8 +165,8 @@ class TestScheduleClient:
         assert result["results"][0]["ok"] is True
 
     def test_stats(self, client):
-        client.schedule_add(title="A", start_at=1000, end_at=2000, category="work")
-        client.schedule_add(title="B", start_at=3000, end_at=5000, category="personal")
+        client.schedule_create(title="A", start_at=1000, end_at=2000, category="work")
+        client.schedule_create(title="B", start_at=3000, end_at=5000, category="personal")
         result = client.schedule_stats()
         assert result["stats"]["total"] == 2
 
