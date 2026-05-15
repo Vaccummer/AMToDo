@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 import json
 
-from config import __version__, AppSettings, amtodo_root
+from config import DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, __version__, AppSettings, amtodo_root
 from amtodo_crypto import ReplayProtector, is_envelope, open_envelope, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
@@ -25,7 +25,7 @@ from serialization import error_to_dict
 from server.admin import router as admin_router
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
-from server.users import router as users_router
+
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -265,6 +265,37 @@ def _is_attachment_upload(request) -> bool:
     )
 
 
+def _setup_request_size_middleware(app: FastAPI, settings: AppSettings) -> None:
+    """Add middleware to reject oversized JSON attachment upload bodies early."""
+
+    import re
+
+    _json_upload_pattern = re.compile(
+        r"^/api/v1/(todos|schedules)/attachments/upload$"
+    )
+
+    @app.middleware("http")
+    async def request_size_middleware(request, call_next):
+        if request.method == "POST" and _json_upload_pattern.match(
+            request.url.path
+        ):
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > settings.max_attachment_request_body_bytes:
+                        return JSONResponse(
+                            status_code=413,
+                            content=error_to_dict(
+                                ValidationError,
+                                f"request body ({content_length} bytes) exceeds limit "
+                                f"({settings.max_attachment_request_body_bytes} bytes)",
+                            ),
+                        )
+                except ValueError:
+                    pass
+        return await call_next(request)
+
+
 def create_app(settings: AppSettings) -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(
@@ -281,6 +312,8 @@ def create_app(settings: AppSettings) -> FastAPI:
 
     if settings.server_private_key_path:
         _setup_encryption_middleware(app, settings)
+
+    _setup_request_size_middleware(app, settings)
 
     @app.exception_handler(ValidationError)
     async def handle_validation(request, exc):
@@ -311,7 +344,7 @@ def create_app(settings: AppSettings) -> FastAPI:
         )
 
     app.include_router(admin_router, prefix="/api/v1")
-    app.include_router(users_router, prefix="/api/v1/admin/users", tags=["admin"])
+
     app.include_router(todo_router, prefix="/api/v1/todos", tags=["todos"])
     app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
 
@@ -336,6 +369,13 @@ def main() -> None:
     port = server.get("port", 8000)
     admin_token = auth.get("admin_token", "")
     attachment_root = storage_cfg.get("attachment_root", "")
+    max_attachment_size_bytes = storage_cfg.get(
+        "max_attachment_size_bytes", DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
+    )
+    max_attachment_request_body_bytes = storage_cfg.get(
+        "max_attachment_request_body_bytes",
+        int(max_attachment_size_bytes * 1.5),
+    )
     private_key_path = encryption_cfg.get("private_key_path", "")
     public_key_path = encryption_cfg.get("public_key_path", "")
     tolerance = encryption_cfg.get("request_timestamp_tolerance_seconds", 300)
@@ -365,6 +405,8 @@ def main() -> None:
         server_public_key_path=public_key_path,
         request_timestamp_tolerance_seconds=tolerance,
         attachment_root=attachment_root,
+        max_attachment_size_bytes=max_attachment_size_bytes,
+        max_attachment_request_body_bytes=max_attachment_request_body_bytes,
     )
     app = create_app(settings)
 

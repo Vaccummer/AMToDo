@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from exceptions import NotFoundError, ValidationError
 from models import Todo
@@ -13,6 +13,19 @@ from models import Todo
 if TYPE_CHECKING:
     from clock import Clock
     from repositories import TodoRepository
+
+TODO_SEARCH_FIELDS = frozenset({"title", "description", "tag"})
+TODO_SORT_FIELDS = frozenset(
+    {
+        "created_at",
+        "updated_at",
+        "planned_at",
+        "due_at",
+        "priority",
+        "title",
+        "completed_at",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +42,12 @@ class TodoDraft:
 
 @dataclass(frozen=True, slots=True)
 class TodoUpdate:
-    """Input data for updating a ToDo item."""
+    """Input data for updating a ToDo item.
+
+    Each optional field defaults to None.  Use ``_fields_set`` (a frozenset of
+    field names) to distinguish between *not passed* and *explicitly passed as
+    None* so callers can clear nullable columns.
+    """
 
     title: str | None = None
     planned_at: int | None = None
@@ -37,6 +55,7 @@ class TodoUpdate:
     description: str | None = None
     priority: int | None = None
     tag: str | None = None
+    _fields_set: frozenset[str] = frozenset()
 
 
 class TodoService:
@@ -101,17 +120,30 @@ class TodoService:
 
     def search(
         self,
-        pattern: str,
+        query: str,
+        fields: list[str] | None = None,
+        *,
+        use_regex: bool = False,
+        ignore_case: bool = True,
         planned_start_at: int | None = None,
         planned_end_at: int | None = None,
+        due_start_at: int | None = None,
+        due_end_at: int | None = None,
         created_start_at: int | None = None,
         created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
         completed: bool | None = None,
-        *,
-        case_sensitive: bool = True,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        tag: str | None = None,
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
     ) -> list[Todo]:
-        """Search ToDos using a regular expression and optional timestamp bounds."""
+        """Search ToDos with field selection, filters, and deterministic sorting."""
 
+        resolved_fields = _validate_fields(fields, TODO_SEARCH_FIELDS, "todo search fields")
+        _validate_sort(sort_by, sort_order, TODO_SORT_FIELDS)
         _validate_optional_range(
             planned_start_at,
             planned_end_at,
@@ -119,61 +151,120 @@ class TodoService:
             end_name="planned_end_at",
         )
         _validate_optional_range(
+            due_start_at,
+            due_end_at,
+            start_name="due_start_at",
+            end_name="due_end_at",
+        )
+        _validate_optional_range(
             created_start_at,
             created_end_at,
             start_name="created_start_at",
             end_name="created_end_at",
         )
+        _validate_optional_range(
+            updated_start_at,
+            updated_end_at,
+            start_name="updated_start_at",
+            end_name="updated_end_at",
+        )
+        if priority_min is not None and priority_min < 0:
+            raise ValidationError("priority_min cannot be negative")
+        if priority_max is not None and priority_max < 0:
+            raise ValidationError("priority_max cannot be negative")
+        if (
+            priority_min is not None
+            and priority_max is not None
+            and priority_min > priority_max
+        ):
+            raise ValidationError("priority_min cannot be greater than priority_max")
 
-        flags = 0 if case_sensitive else re.IGNORECASE
-        try:
-            regex = re.compile(pattern, flags=flags)
-        except re.error as exc:
-            msg = f"invalid regex pattern: {exc}"
-            raise ValidationError(msg) from exc
+        regex = _compile_search_query(query, use_regex=use_regex, ignore_case=ignore_case)
 
         todos = self._repository.list_filtered(
             planned_start_at=planned_start_at,
             planned_end_at=planned_end_at,
+            due_start_at=due_start_at,
+            due_end_at=due_end_at,
             created_start_at=created_start_at,
             created_end_at=created_end_at,
+            updated_start_at=updated_start_at,
+            updated_end_at=updated_end_at,
             completed=completed,
+            priority_min=priority_min,
+            priority_max=priority_max,
+            tag=tag,
         )
-        return [todo for todo in todos if regex.search(_search_text(todo))]
+        matched = [
+            todo
+            for todo in todos
+            if regex.search(_search_text(todo, resolved_fields))
+        ]
+        return _sort_results(matched, sort_by=sort_by, sort_order=sort_order)
 
     def update(self, todo_id: int, update: TodoUpdate) -> Todo:
         """Update mutable ToDo fields."""
 
         todo = self.show(todo_id)
         changed = False
+        explicit = update._fields_set
 
-        if update.title is not None:
-            title = update.title.strip()
-            if not title:
-                raise ValidationError("todo title cannot be empty")
-            todo.title = title
-            changed = True
-        if update.planned_at is not None:
-            if update.planned_at < 0:
-                raise ValidationError("todo planned_at cannot be negative")
-            todo.planned_at = update.planned_at
-            changed = True
-        if update.due_at is not None:
-            if update.due_at < 0:
-                raise ValidationError("todo due_at cannot be negative")
-            todo.due_at = update.due_at
-            changed = True
-        if update.description is not None:
-            todo.description = update.description
-            changed = True
-        if update.priority is not None:
-            if update.priority < 0:
-                raise ValidationError("todo priority cannot be negative")
-            todo.priority = update.priority
-            changed = True
-        if update.tag is not None:
-            todo.tag = update.tag
-            changed = True
+        if explicit:
+            if "title" in explicit:
+                title = update.title.strip()
+                if not title:
+                    raise ValidationError("todo title cannot be empty")
+                todo.title = title
+                changed = True
+            if "planned_at" in explicit:
+                if update.planned_at is not None and update.planned_at < 0:
+                    raise ValidationError("todo planned_at cannot be negative")
+                todo.planned_at = update.planned_at
+                changed = True
+            if "due_at" in explicit:
+                if update.due_at is not None and update.due_at < 0:
+                    raise ValidationError("todo due_at cannot be negative")
+                todo.due_at = update.due_at
+                changed = True
+            if "description" in explicit:
+                todo.description = update.description
+                changed = True
+            if "priority" in explicit:
+                if update.priority is not None and update.priority < 0:
+                    raise ValidationError("todo priority cannot be negative")
+                todo.priority = update.priority
+                changed = True
+            if "tag" in explicit:
+                todo.tag = update.tag
+                changed = True
+        else:
+            if update.title is not None:
+                title = update.title.strip()
+                if not title:
+                    raise ValidationError("todo title cannot be empty")
+                todo.title = title
+                changed = True
+            if update.planned_at is not None:
+                if update.planned_at < 0:
+                    raise ValidationError("todo planned_at cannot be negative")
+                todo.planned_at = update.planned_at
+                changed = True
+            if update.due_at is not None:
+                if update.due_at < 0:
+                    raise ValidationError("todo due_at cannot be negative")
+                todo.due_at = update.due_at
+                changed = True
+            if update.description is not None:
+                todo.description = update.description
+                changed = True
+            if update.priority is not None:
+                if update.priority < 0:
+                    raise ValidationError("todo priority cannot be negative")
+                todo.priority = update.priority
+                changed = True
+            if update.tag is not None:
+                todo.tag = update.tag
+                changed = True
 
         if changed:
             todo.updated_at = self._clock.now_epoch()
@@ -237,16 +328,82 @@ class TodoService:
         }
 
 
-def _search_text(todo: Todo) -> str:
+def _search_text(todo: Todo, fields: list[str]) -> str:
     return "\n".join(
-        value
-        for value in (
-            todo.title,
-            todo.description or "",
-            todo.tag or "",
-        )
+        str(value)
+        for value in (getattr(todo, field) or "" for field in fields)
         if value
     )
+
+
+def _compile_search_query(query: str, *, use_regex: bool, ignore_case: bool) -> re.Pattern[str]:
+    flags = re.IGNORECASE if ignore_case else 0
+    pattern = query if use_regex else re.escape(query)
+    try:
+        return re.compile(pattern, flags=flags)
+    except re.error as exc:
+        msg = f"invalid regex pattern: {exc}"
+        raise ValidationError(msg) from exc
+
+
+def _validate_fields(
+    fields: list[str] | None,
+    allowed: frozenset[str],
+    label: str,
+) -> list[str]:
+    resolved = list(fields) if fields is not None else sorted(allowed)
+    if not resolved:
+        raise ValidationError(f"{label} cannot be empty")
+    unknown = sorted(set(resolved) - allowed)
+    if unknown:
+        raise ValidationError(f"unknown {label}: {', '.join(unknown)}")
+    return resolved
+
+
+def _validate_sort(
+    sort_by: str,
+    sort_order: str,
+    allowed: frozenset[str],
+) -> None:
+    if sort_by not in allowed:
+        raise ValidationError(f"unknown sort_by: {sort_by}")
+    if sort_order not in {"asc", "desc"}:
+        raise ValidationError("sort_order must be 'asc' or 'desc'")
+
+
+def _sort_results(
+    todos: list[Todo],
+    *,
+    sort_by: str,
+    sort_order: str,
+) -> list[Todo]:
+    descending = sort_order == "desc"
+    return sorted(
+        todos,
+        key=lambda todo: _sort_key(todo, sort_by, descending=descending),
+        reverse=descending,
+    )
+
+
+def _sort_key(todo: Todo, sort_by: str, *, descending: bool) -> tuple[bool, Any]:
+    value = _sort_value(todo, sort_by)
+    if isinstance(value, str):
+        value = value.casefold()
+    if descending:
+        return (value is not None, value if value is not None else _empty_sort_value(sort_by))
+    return (value is None, value if value is not None else _empty_sort_value(sort_by))
+
+
+def _sort_value(todo: Todo, sort_by: str) -> object:
+    if sort_by == "updated_at":
+        return todo.updated_at if todo.updated_at is not None else todo.created_at
+    return getattr(todo, sort_by)
+
+
+def _empty_sort_value(sort_by: str) -> object:
+    if sort_by == "title":
+        return ""
+    return 0
 
 
 def _validate_optional_range(

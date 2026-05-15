@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import json
+import secrets
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
+from sqlalchemy import delete, select
 
 from client.attachment_cache import AttachmentCache
-from clock import Clock
+from clock import Clock, SystemClock
 from config import AppSettings, __version__, amtodo_root, load_cli_settings
-from exceptions import AMToDoError, ValidationError
-from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict
+from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
+from models.factory import get_user_tables
+from models.user import User
+from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict, user_to_dict
 from services import (
     AttachmentDraft,
     AttachmentService,
@@ -196,7 +200,12 @@ def todo_list(
 
 @todo_app.command("search")
 def todo_search(
-    pattern: str = typer.Argument(..., help="Regular expression matched against ToDo text."),
+    query: str = typer.Argument(..., help="Text matched against ToDo text."),
+    use_regex: bool = typer.Option(
+        False,
+        "--regex",
+        help="Treat query as a regular expression.",
+    ),
     planned_start_at: int | None = typer.Option(
         None,
         "--from",
@@ -222,19 +231,20 @@ def todo_search(
         help="Optional Unix epoch created_at range end in seconds.",
     ),
     ignore_case: bool = typer.Option(
-        False,
+        True,
         "--ignore-case",
-        help="Run regex search without case sensitivity.",
+        help="Search without case sensitivity.",
     ),
     open_only: bool = typer.Option(False, "--open", help="Only search open ToDos."),
     completed_only: bool = typer.Option(False, "--completed", help="Only search completed ToDos."),
 ) -> None:
-    """Search ToDos with a regular expression."""
+    """Search ToDos."""
 
     settings = load_cli_settings()
     if settings.server_url:
         _run_http(lambda client: client.todo_search(
-            pattern=pattern,
+            query=query,
+            use_regex=use_regex,
             planned_start_at=planned_start_at,
             planned_end_at=planned_end_at,
             created_start_at=created_start_at,
@@ -251,20 +261,22 @@ def todo_search(
             service = TodoService(uow.todos, context.clock, uow.todo_model)
             completed = _completion_filter(open_only=open_only, completed_only=completed_only)
             todos = service.search(
-                pattern,
+                query,
+                use_regex=use_regex,
+                ignore_case=ignore_case,
                 planned_start_at=planned_start_at,
                 planned_end_at=planned_end_at,
                 created_start_at=created_start_at,
                 created_end_at=created_end_at,
                 completed=completed,
-                case_sensitive=not ignore_case,
             )
 
         _echo_json(
             {
                 "ok": True,
-                "pattern": pattern,
-                "case_sensitive": not ignore_case,
+                "query": query,
+                "use_regex": use_regex,
+                "ignore_case": ignore_case,
                 "range": {
                     "planned_start_at": planned_start_at,
                     "planned_end_at": planned_end_at,
@@ -805,7 +817,12 @@ def schedule_list(
 
 @schedule_app.command("search")
 def schedule_search(
-    pattern: str = typer.Argument(..., help="Regular expression matched against schedule text."),
+    query: str = typer.Argument(..., help="Text matched against schedule text."),
+    use_regex: bool = typer.Option(
+        False,
+        "--regex",
+        help="Treat query as a regular expression.",
+    ),
     start_at: int | None = typer.Option(
         None,
         "--from",
@@ -819,17 +836,21 @@ def schedule_search(
         help="Optional Unix epoch range end in seconds.",
     ),
     ignore_case: bool = typer.Option(
-        False,
+        True,
         "--ignore-case",
-        help="Run regex search without case sensitivity.",
+        help="Search without case sensitivity.",
     ),
 ) -> None:
-    """Search schedules with a regular expression."""
+    """Search schedules."""
 
     settings = load_cli_settings()
     if settings.server_url:
         _run_http(lambda client: client.schedule_search(
-            pattern=pattern, start_at=start_at, end_at=end_at, ignore_case=ignore_case,
+            query=query,
+            use_regex=use_regex,
+            start_at=start_at,
+            end_at=end_at,
+            ignore_case=ignore_case,
         ), settings)
         return
 
@@ -840,17 +861,19 @@ def schedule_search(
         with UnitOfWork(context.database) as uow:
             service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
             schedules = service.search(
-                pattern,
+                query,
+                use_regex=use_regex,
+                ignore_case=ignore_case,
                 start_at=start_at,
                 end_at=end_at,
-                case_sensitive=not ignore_case,
             )
 
         _echo_json(
             {
                 "ok": True,
-                "pattern": pattern,
-                "case_sensitive": not ignore_case,
+                "query": query,
+                "use_regex": use_regex,
+                "ignore_case": ignore_case,
                 "range": {"start_at": start_at, "end_at": end_at},
                 "count": len(schedules),
                 "schedules": [schedule_to_dict(schedule) for schedule in schedules],
@@ -1223,6 +1246,170 @@ def schedule_attachment_remove_orphaned(
 # ── user commands ──
 
 
+def _fetch_admin_config() -> tuple[str, Path]:
+    """Fetch database_url and attachment_root from the server via encrypted HTTP."""
+    from client.http import AMTodoClient
+
+    settings = load_cli_settings()
+    if not settings.server_url:
+        _exit_with_error(ValidationError("server_url is required in config/cli.toml for user management"))
+    if not settings.admin_token:
+        _exit_with_error(ValidationError("admin_token is not configured in config/cli.toml"))
+
+    client = AMTodoClient(settings)
+    try:
+        result = client.admin_config()
+        if not result.get("ok"):
+            _exit_with_error(ValidationError("failed to fetch server config"))
+        config = result["config"]
+        return config["database_url"], Path(config["attachment_root"])
+    finally:
+        client.close()
+
+
+def _admin_context():
+    """Create a database connection using server-provided config."""
+    from db.engine import create_database_from_url
+
+    database_url, attachment_root = _fetch_admin_config()
+    database = create_database_from_url(database_url)
+    return database, attachment_root
+
+
+def _user_create_direct(name: str) -> dict[str, object]:
+    """Create a new user with a generated access token (direct DB)."""
+    database, _attachment_root = _admin_context()
+    clock = SystemClock()
+
+    with database.session() as session:
+        existing = session.execute(
+            select(User).where(User.name == name)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"user with name '{name}' already exists")
+
+        token = secrets.token_urlsafe(32)
+        user_id_row = session.execute(
+            select(User.id).order_by(User.id.desc()).limit(1)
+        ).scalar_one_or_none()
+        user_id = (user_id_row + 1) if user_id_row is not None else 1
+
+        user = User(
+            id=user_id,
+            name=name,
+            token=token,
+            created_at=clock.now_epoch(),
+        )
+        session.add(user)
+        session.commit()
+
+        result = user_to_dict(user)
+
+    get_user_tables(user_id)
+    database.create_schema()
+
+    return {"ok": True, "user": result}
+
+
+def _user_list_direct() -> dict[str, object]:
+    """List all registered users (direct DB)."""
+    database, _attachment_root = _admin_context()
+
+    with database.session() as session:
+        users = list(
+            session.execute(select(User).order_by(User.id)).scalars().all()
+        )
+        return {
+            "ok": True,
+            "count": len(users),
+            "users": [user_to_dict(u) for u in users],
+        }
+
+
+def _user_delete_direct(user_id: int) -> dict[str, object]:
+    """Delete a user and all owned data (direct DB)."""
+    database, attachment_root = _admin_context()
+
+    with database.session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise NotFoundError(f"user {user_id} not found")
+
+        token = user.token
+        name = user.name
+
+        todo_model, schedule_model, setting_model, todo_att_model, sched_att_model = (
+            get_user_tables(user_id)
+        )
+
+        # Remove attachment files from disk
+        for model in (todo_att_model, sched_att_model):
+            for att in session.execute(select(model)).scalars():
+                file_path = attachment_root / att.storage_path
+                if file_path.is_file():
+                    file_path.unlink()
+
+        # Remove all rows from per-user tables
+        for model in (
+            todo_att_model,
+            sched_att_model,
+            todo_model,
+            schedule_model,
+            setting_model,
+        ):
+            session.execute(delete(model))
+
+        session.delete(user)
+        session.commit()
+
+    return {"ok": True, "deleted": {"id": user_id, "name": name}}
+
+
+def _user_update_direct(user_id: int, name: str) -> dict[str, object]:
+    """Update a user's name (direct DB)."""
+    database, _attachment_root = _admin_context()
+
+    with database.session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise NotFoundError(f"user {user_id} not found")
+
+        existing = session.execute(
+            select(User).where(User.name == name, User.id != user_id)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"user with name '{name}' already exists")
+
+        user.name = name
+        session.commit()
+        return {"ok": True, "user": user_to_dict(user)}
+
+
+def _user_regen_token_direct(user_id: int) -> dict[str, object]:
+    """Regenerate a user's access token (direct DB)."""
+    database, _attachment_root = _admin_context()
+
+    with database.session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise NotFoundError(f"user {user_id} not found")
+
+        new_token = secrets.token_urlsafe(32)
+        for _ in range(10):
+            existing = session.execute(
+                select(User).where(User.token == new_token)
+            ).scalar_one_or_none()
+            if existing is None:
+                break
+            new_token = secrets.token_urlsafe(32)
+        else:
+            raise ValidationError("failed to generate unique token")
+
+        user.token = new_token
+        session.commit()
+        return {"ok": True, "user": user_to_dict(user)}
+
+
 @user_app.command("me")
 def user_me() -> None:
     """Show the current authenticated user's information."""
@@ -1235,24 +1422,32 @@ def user_me() -> None:
 def user_create(name: str = typer.Argument(..., help="User name.")) -> None:
     """Create a new user with a generated access token."""
 
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_create(name), settings)
+    _echo_json(_user_create_direct(name))
 
 
 @user_app.command("list")
 def user_list() -> None:
     """List all registered users."""
 
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_list(), settings)
+    _echo_json(_user_list_direct())
 
 
 @user_app.command("delete")
-def user_delete(user_id: int = typer.Argument(..., help="User id.")) -> None:
-    """Delete a user by id."""
+def user_delete(
+    user_id: int = typer.Argument(..., help="User id."),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation."),
+) -> None:
+    """Delete a user and all owned data."""
 
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_delete(user_id), settings)
+    if not force:
+        typer.echo(f"Are you sure you want to delete user {user_id} and ALL their data?")
+        typer.echo("This includes todos, schedules, and attachments. This cannot be undone.")
+        confirmed = typer.confirm("Continue?")
+        if not confirmed:
+            typer.echo("Aborted.")
+            raise typer.Exit
+
+    _echo_json(_user_delete_direct(user_id))
 
 
 @user_app.command("update")
@@ -1262,16 +1457,14 @@ def user_update(
 ) -> None:
     """Update a user's name."""
 
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_update(user_id, name), settings)
+    _echo_json(_user_update_direct(user_id, name))
 
 
 @user_app.command("regen-token")
 def user_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> None:
     """Regenerate a user's access token."""
 
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_regenerate_token(user_id), settings)
+    _echo_json(_user_regen_token_direct(user_id))
 
 
 # ── cache commands ──
