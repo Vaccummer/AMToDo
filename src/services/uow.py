@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 from models.factory import STANDALONE_USER_ID, get_standalone_tables, get_user_tables
-from repositories import ScheduleRepository, SettingsRepository, TodoRepository
+from repositories import (
+    AttachmentRepository,
+    ScheduleRepository,
+    SettingsRepository,
+    TodoRepository,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -24,9 +29,19 @@ class UnitOfWork:
         self._session: Session | None = None
 
         if user_id == STANDALONE_USER_ID:
-            self._todo_model, self._schedule_model, self._setting_model = get_standalone_tables()
+            (
+                self._todo_model,
+                self._schedule_model,
+                self._setting_model,
+                self._attachment_model,
+            ) = get_standalone_tables()
         else:
-            self._todo_model, self._schedule_model, self._setting_model = get_user_tables(user_id)
+            (
+                self._todo_model,
+                self._schedule_model,
+                self._setting_model,
+                self._attachment_model,
+            ) = get_user_tables(user_id)
 
     def __enter__(self) -> Self:
         self._session = self._database.session_factory()
@@ -70,6 +85,22 @@ class UnitOfWork:
     def setting_model(self) -> type:
         """Return the setting model class for the current user."""
         return self._setting_model
+
+    @property
+    def attachment_model(self) -> type:
+        """Return the attachment model class for the current user."""
+        return self._attachment_model
+
+    @property
+    def user_id(self) -> int:
+        """Return the user id represented by this unit of work."""
+        return self._user_id
+
+    @property
+    def attachments(self) -> AttachmentRepository:
+        """Return the attachment repository for the active session."""
+
+        return AttachmentRepository(self.session, self._attachment_model)
 
     @property
     def schedules(self) -> ScheduleRepository:

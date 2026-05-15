@@ -69,6 +69,37 @@ export type TodoStatsResponse = {
   };
 };
 
+export type AttachmentMetadata = {
+  id: number;
+  user_id: number;
+  todo_id: number;
+  file_index: number;
+  filename: string;
+  mime_type: string;
+  preview_kind: "image" | "video" | "none";
+  plain_size_bytes: number;
+  cipher_size_bytes: number;
+  plain_sha256: string;
+  cipher_sha256: string;
+  file_key: string;
+  nonce: string;
+  encryption_alg: string;
+  storage_path: string;
+  created_at: number;
+  updated_at: number;
+};
+
+export type AttachmentResponse = {
+  ok: boolean;
+  attachment: AttachmentMetadata;
+};
+
+export type AttachmentListResponse = {
+  ok: boolean;
+  count: number;
+  attachments: AttachmentMetadata[];
+};
+
 export type ScheduleItem = {
   id: number;
   title: string;
@@ -265,6 +296,50 @@ export class AMToDoApi {
     return this.post("/api/v1/todos/remove", { targets: [id] });
   }
 
+  async listTodoAttachments(todoId: number): Promise<AttachmentListResponse> {
+    return this.post("/api/v1/todos/attachments/list", { todo_id: todoId });
+  }
+
+  async getTodoAttachment(
+    todoId: number,
+    attachmentId: number
+  ): Promise<AttachmentResponse> {
+    return this.post("/api/v1/todos/attachments/get", {
+      todo_id: todoId,
+      attachment_id: attachmentId
+    });
+  }
+
+  async removeTodoAttachment(
+    todoId: number,
+    attachmentId: number
+  ): Promise<AttachmentResponse> {
+    return this.post("/api/v1/todos/attachments/remove", {
+      todo_id: todoId,
+      attachment_id: attachmentId
+    });
+  }
+
+  async uploadTodoAttachment(todoId: number, file: File): Promise<AttachmentResponse> {
+    return this.post("/api/v1/todos/attachments/upload", {
+      todo_id: todoId,
+      filename: file.name,
+      mime_type: file.type || null,
+      content_base64: await fileToBase64(file)
+    });
+  }
+
+  async downloadTodoAttachment(todoId: number, attachmentId: number): Promise<ArrayBuffer> {
+    const qs = new URLSearchParams({ access_token: this.token ?? "" });
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/todos/${todoId}/attachments/${attachmentId}/download?${qs}`
+    );
+    if (!response.ok) {
+      throw new Error(response.statusText);
+    }
+    return response.arrayBuffer();
+  }
+
   async listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
     return this.post("/api/v1/schedules/list", {
       start_at: startAt,
@@ -382,4 +457,16 @@ export class AMToDoApi {
 
     return responsePayload as T;
   }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }

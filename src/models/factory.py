@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Index
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
 STANDALONE_USER_ID = 0
 
-_cache: dict[int, tuple[type, type, type]] = {}
+_cache: dict[int, tuple[type, type, type, type]] = {}
 
 
-def get_standalone_tables() -> tuple[type, type, type]:
+def get_standalone_tables() -> tuple[type, type, type, type]:
     """Return concrete model classes for standalone (non-multi-user) usage."""
     if STANDALONE_USER_ID in _cache:
         return _cache[STANDALONE_USER_ID]
 
+    from models.attachment import TodoAttachment
     from models.schedule import Schedule
     from models.setting import Setting
     from models.todo import Todo
@@ -49,23 +50,46 @@ def get_standalone_tables() -> tuple[type, type, type]:
         (Setting,),
         {"__tablename__": "settings"},
     )
-    result = (StandaloneTodo, StandaloneSchedule, StandaloneSetting)
+    StandaloneTodoAttachment = type(
+        "TodoAttachment_standalone",
+        (TodoAttachment,),
+        {
+            "__tablename__": "todo_attachments",
+            "__table_args__": (
+                UniqueConstraint(
+                    "todo_id",
+                    "file_index",
+                    name="uq_todo_attachments_todo_file_index",
+                ),
+                Index("ix_todo_attachments_todo", "todo_id"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    result = (
+        StandaloneTodo,
+        StandaloneSchedule,
+        StandaloneSetting,
+        StandaloneTodoAttachment,
+    )
     _cache[STANDALONE_USER_ID] = result
     return result
 
 
-def get_user_tables(user_id: int) -> tuple[type, type, type]:
-    """Return (TodoModel, ScheduleModel, SettingModel) with per-user table names."""
+def get_user_tables(user_id: int) -> tuple[type, type, type, type]:
+    """Return per-user table model classes."""
 
     if user_id in _cache:
         return _cache[user_id]
 
+    from models.attachment import TodoAttachment
     from models.schedule import Schedule
     from models.setting import Setting
     from models.todo import Todo
 
     todo_table = f"todos_{user_id}"
     schedule_table = f"schedules_{user_id}"
+    attachment_table = f"todo_attachments_{user_id}"
 
     TodoModel = type(
         f"Todo_{user_id}",
@@ -91,6 +115,22 @@ def get_user_tables(user_id: int) -> tuple[type, type, type]:
         (Setting,),
         {"__tablename__": f"settings_{user_id}"},
     )
-    result = (TodoModel, ScheduleModel, SettingModel)
+    TodoAttachmentModel = type(
+        f"TodoAttachment_{user_id}",
+        (TodoAttachment,),
+        {
+            "__tablename__": attachment_table,
+            "__table_args__": (
+                UniqueConstraint(
+                    "todo_id",
+                    "file_index",
+                    name=f"uq_{attachment_table}_todo_file_index",
+                ),
+                Index(f"ix_{attachment_table}_todo", "todo_id"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    result = (TodoModel, ScheduleModel, SettingModel, TodoAttachmentModel)
     _cache[user_id] = result
     return result

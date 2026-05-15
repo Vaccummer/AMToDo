@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,6 @@ class AMTodoClient:
         self._access_token = settings.access_token
         self._client = httpx.Client(
             base_url=self._base,
-            headers={"Content-Type": "application/json"},
             timeout=30.0,
         )
         self._public_key_pem: bytes | None = None
@@ -140,7 +140,7 @@ class AMTodoClient:
     def todo_get(self, todo_id: int) -> dict[str, Any]:
         return self._user_post("/api/v1/todos/get", {"todo_id": todo_id})
 
-    def todo_update(self, todo_id: int, **fields: Any) -> dict[str, Any]:
+    def todo_update(self, todo_id: int, **fields: object) -> dict[str, Any]:
         body: dict[str, Any] = {"todo_id": todo_id, **fields}
         return self._user_post("/api/v1/todos/update", body)
 
@@ -164,6 +164,40 @@ class AMTodoClient:
         if end_at is not None:
             body["end_at"] = end_at
         return self._user_post("/api/v1/todos/stats", body)
+
+    def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
+        content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return self._user_post(
+            "/api/v1/todos/attachments/upload",
+            {
+                "todo_id": todo_id,
+                "filename": file_path.name,
+                "content_base64": content_base64,
+            },
+        )
+
+    def todo_attachment_list(self, todo_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/attachments/list", {"todo_id": todo_id})
+
+    def todo_attachment_get(self, todo_id: int, attachment_id: int) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/todos/attachments/get",
+            {"todo_id": todo_id, "attachment_id": attachment_id},
+        )
+
+    def todo_attachment_remove(self, todo_id: int, attachment_id: int) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/todos/attachments/remove",
+            {"todo_id": todo_id, "attachment_id": attachment_id},
+        )
+
+    def todo_attachment_download(self, todo_id: int, attachment_id: int) -> bytes:
+        response = self._client.get(
+            f"/api/v1/todos/{todo_id}/attachments/{attachment_id}/download",
+            params={"access_token": self._access_token},
+        )
+        response.raise_for_status()
+        return response.content
 
     # ── schedules ──
 
@@ -216,7 +250,7 @@ class AMTodoClient:
     def schedule_get(self, schedule_id: int) -> dict[str, Any]:
         return self._user_post("/api/v1/schedules/get", {"schedule_id": schedule_id})
 
-    def schedule_update(self, schedule_id: int, **fields: Any) -> dict[str, Any]:
+    def schedule_update(self, schedule_id: int, **fields: object) -> dict[str, Any]:
         body: dict[str, Any] = {"schedule_id": schedule_id, **fields}
         return self._user_post("/api/v1/schedules/update", body)
 
@@ -293,7 +327,10 @@ class AMTodoClient:
             return {"ok": False, "error": {"type": "ConnectionError", "message": str(exc)}}
 
 
-def _error_from_response(exc: httpx.HTTPStatusError, data_key: bytes | None = None) -> dict[str, Any]:
+def _error_from_response(
+    exc: httpx.HTTPStatusError,
+    data_key: bytes | None = None,
+) -> dict[str, Any]:
     try:
         body = exc.response.json()
         return _decrypt_response(body, data_key)

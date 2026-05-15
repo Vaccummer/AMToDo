@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
 
-from config import __version__, amtodo_root
-from config import load_cli_settings
+from client.attachment_cache import AttachmentCache
+from clock import Clock
+from config import AppSettings, __version__, amtodo_root, load_cli_settings
 from exceptions import AMToDoError, ValidationError
-from serialization import schedule_to_dict, todo_to_dict
+from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict
 from services import (
+    AttachmentDraft,
+    AttachmentService,
     ScheduleDraft,
     ScheduleService,
     ScheduleUpdate,
@@ -31,6 +35,7 @@ app = typer.Typer(invoke_without_command=True, no_args_is_help=True)
 todo_app = typer.Typer(no_args_is_help=True)
 schedule_app = typer.Typer(no_args_is_help=True)
 user_app = typer.Typer(no_args_is_help=True)
+cache_app = typer.Typer(no_args_is_help=True)
 
 
 @app.callback()
@@ -164,8 +169,14 @@ def todo_list(
                 todos = service.list_all(completed=completed)
             else:
                 resolved_start_at = start_at if start_at is not None else 0
-                resolved_end_at = end_at if end_at is not None else context.clock.now_epoch() + 86_400
-                todos = service.list_between(resolved_start_at, resolved_end_at, completed=completed)
+                resolved_end_at = (
+                    end_at if end_at is not None else context.clock.now_epoch() + 86_400
+                )
+                todos = service.list_between(
+                    resolved_start_at,
+                    resolved_end_at,
+                    completed=completed,
+                )
 
         result: dict[str, object] = {
             "ok": True,
@@ -461,6 +472,143 @@ def todo_stats(
                 "stats": stats,
             }
         )
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@todo_app.command("attach")
+def todo_attach(
+    todo_id: Annotated[int, typer.Argument(..., help="ToDo id.")],
+    file_path: Annotated[
+        Path,
+        typer.Option(
+            "--file",
+            "-f",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Local file path to attach.",
+        ),
+    ],
+) -> None:
+    """Attach a local file to a ToDo."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_upload(todo_id, file_path), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _attachment_service(uow, context.clock)
+            attachment = service.create(
+                todo_id,
+                AttachmentDraft(filename=file_path.name, content=file_path.read_bytes()),
+            )
+            uow.session.flush()
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@todo_app.command("attachments")
+def todo_attachments(todo_id: int = typer.Argument(..., help="ToDo id.")) -> None:
+    """List attachment metadata for a ToDo."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_list(todo_id), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _attachment_service(uow, context.clock)
+            attachments = service.list_for_todo(todo_id)
+            _echo_json(
+                {
+                    "ok": True,
+                    "count": len(attachments),
+                    "attachments": [
+                        attachment_to_dict(attachment, uow.user_id)
+                        for attachment in attachments
+                    ],
+                }
+            )
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@todo_app.command("attachment-get")
+def todo_attachment_get(
+    todo_id: int = typer.Argument(..., help="ToDo id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+) -> None:
+    """Fetch an attachment into the local decrypted cache."""
+
+    settings = load_cli_settings()
+    root = amtodo_root()
+    cache = AttachmentCache(root)
+    if settings.server_url:
+        from client.http import AMTodoClient
+
+        client = AMTodoClient(settings)
+        try:
+            result = client.todo_attachment_get(todo_id, attachment_id)
+            if result.get("ok") is False:
+                _echo_json(result)
+                raise typer.Exit(1)
+            metadata = result["attachment"]
+            cache_result = cache.get_or_download(
+                metadata,
+                lambda: client.todo_attachment_download(todo_id, attachment_id),
+            )
+            _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
+            return
+        finally:
+            client.close()
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _attachment_service(uow, context.clock)
+            attachment = service.show(todo_id, attachment_id)
+            metadata = attachment_to_dict(attachment, uow.user_id)
+            cipher = service.read_cipher(todo_id, attachment_id)
+        cache_result = cache.get_or_download(metadata, lambda: cipher)
+        _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
+    except (AMToDoError, ValueError) as exc:
+        _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
+
+
+@todo_app.command("attachment-remove")
+def todo_attachment_remove(
+    todo_id: int = typer.Argument(..., help="ToDo id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+) -> None:
+    """Remove an attachment from a ToDo."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_remove(todo_id, attachment_id), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _attachment_service(uow, context.clock)
+            attachment = service.remove(todo_id, attachment_id)
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
     except AMToDoError as exc:
         _exit_with_error(exc)
 
@@ -844,10 +992,22 @@ def user_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> Non
     _run_http(lambda client: client.user_regenerate_token(user_id), settings)
 
 
+# ── cache commands ──
+
+
+@cache_app.command("attachment-clear")
+def attachment_cache_clear() -> None:
+    """Clear the local attachment cache."""
+
+    cache = AttachmentCache(amtodo_root())
+    cache.clear()
+    _echo_json({"ok": True})
+
+
 # ── helpers ──
 
 
-def _run_http(operation: Callable, settings) -> None:
+def _run_http(operation: Callable, settings: AppSettings) -> None:
     """Execute an HTTP client operation and print the JSON result."""
     from client.http import AMTodoClient
 
@@ -916,6 +1076,17 @@ def _schedule_target_result(
     return {"target": target, "ok": True, "schedule": schedule_to_dict(schedule)}
 
 
+def _attachment_service(uow: UnitOfWork, clock: Clock) -> AttachmentService:
+    return AttachmentService(
+        uow.attachments,
+        uow.todos,
+        clock,
+        uow.attachment_model,
+        amtodo_root(),
+        uow.user_id,
+    )
+
+
 def _echo_json(payload: dict[str, object]) -> None:
     typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
@@ -947,6 +1118,7 @@ def gen_keys() -> None:
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")
 app.add_typer(schedule_app, name="schedule", help="Manage schedule items.")
 app.add_typer(user_app, name="user", help="Manage users (admin).")
+app.add_typer(cache_app, name="cache", help="Manage local caches.")
 
 
 def main() -> None:

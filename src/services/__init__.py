@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from services.attachments import AttachmentDraft, AttachmentService
 from services.context import ApplicationContext, create_application_context
 from services.schedules import ScheduleDraft, ScheduleService, ScheduleUpdate
 from services.todos import TodoDraft, TodoService, TodoUpdate
 
 __all__ = [
     "ApplicationContext",
+    "AttachmentDraft",
+    "AttachmentService",
     "ScheduleDraft",
     "ScheduleService",
     "ScheduleUpdate",

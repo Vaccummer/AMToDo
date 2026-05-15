@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AMToDoApi, TodoItem } from "../api/client";
+import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../api/client";
+import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
 import { DatePicker } from "./DatePicker";
 
@@ -55,6 +56,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
 
   // fetch full todo on mount (the list item may omit fields)
   useEffect(() => {
@@ -71,6 +77,32 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setTag(t.tag ?? "");
     }).catch(() => { /* use initial data */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadAttachments = useCallback(async () => {
+    const result = await api.listTodoAttachments(todo.id);
+    setAttachments(result.attachments);
+    const nextUrls: Record<number, string> = {};
+    await Promise.all(
+      result.attachments.map(async (attachment) => {
+        if (attachment.preview_kind === "none") return;
+        const { blob } = await getAttachmentBlob(api, attachment);
+        nextUrls[attachment.id] = URL.createObjectURL(blob);
+      })
+    );
+    setAttachmentUrls(nextUrls);
+  }, [api, todo.id]);
+
+  useEffect(() => {
+    loadAttachments().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "附件加载失败");
+    });
+  }, [loadAttachments]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [attachmentUrls]);
 
   const dirty = useMemo(() => {
     return (
@@ -151,6 +183,56 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       onUpdate(updated);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "操作失败");
+    }
+  }
+
+  async function uploadFiles(files: FileList | File[]) {
+    const selected = Array.from(files);
+    if (selected.length === 0) return;
+    setAttachmentBusy(true);
+    setError(null);
+    try {
+      for (const file of selected) {
+        await api.uploadTodoAttachment(todo.id, file);
+      }
+      await loadAttachments();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "附件上传失败");
+    } finally {
+      setAttachmentBusy(false);
+      setDragActive(false);
+    }
+  }
+
+  async function openAttachment(attachment: AttachmentMetadata) {
+    setAttachmentBusy(true);
+    setError(null);
+    try {
+      const { blob } = await getAttachmentBlob(api, attachment);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "附件打开失败");
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function removeAttachment(attachment: AttachmentMetadata) {
+    if (!window.confirm("确定删除这个附件吗？")) return;
+    setAttachmentBusy(true);
+    setError(null);
+    try {
+      await api.removeTodoAttachment(todo.id, attachment.id);
+      await loadAttachments();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "附件删除失败");
+    } finally {
+      setAttachmentBusy(false);
     }
   }
 
@@ -269,6 +351,83 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           {/* Divider */}
           <div className="modal-divider" />
 
+          <div className="modal-section-label">附件</div>
+          <div
+            className={`attachment-dropzone${dragActive ? " active" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              uploadFiles(e.dataTransfer.files);
+            }}
+          >
+            <span>{attachmentBusy ? "处理中..." : "拖拽文件到这里"}</span>
+            <label className="attachment-upload-button" htmlFor="todo-attachment-input">
+              选择文件
+            </label>
+            <input
+              id="todo-attachment-input"
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files) uploadFiles(e.target.files);
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
+
+          <div className="attachment-list">
+            {attachments.map((attachment) => {
+              const url = attachmentUrls[attachment.id];
+              return (
+                <div className="attachment-row" key={attachment.id}>
+                  <button
+                    type="button"
+                    className="attachment-thumb"
+                    onClick={() => {
+                      if (attachment.preview_kind === "none") {
+                        openAttachment(attachment);
+                      } else {
+                        setPreview(attachment);
+                      }
+                    }}
+                    aria-label={`打开 ${attachment.filename}`}
+                  >
+                    {attachment.preview_kind === "image" && url ? (
+                      <img src={url} alt="" />
+                    ) : attachment.preview_kind === "video" && url ? (
+                      <video src={url} muted />
+                    ) : (
+                      <span>{attachment.filename.split(".").pop()?.slice(0, 4) || "FILE"}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="attachment-name"
+                    onClick={() => openAttachment(attachment)}
+                  >
+                    {attachment.filename}
+                  </button>
+                  <button
+                    type="button"
+                    className="attachment-remove"
+                    disabled={attachmentBusy}
+                    onClick={() => removeAttachment(attachment)}
+                    aria-label={`删除 ${attachment.filename}`}
+                  >
+                    删除
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="modal-divider" />
+
           {/* Read-only fields */}
           <div className="modal-section-label">只读信息</div>
 
@@ -337,6 +496,25 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </button>
         </div>
       </div>
+      {preview ? (
+        <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
+          <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close attachment-preview-close"
+              onClick={() => setPreview(null)}
+              aria-label="关闭预览"
+            >
+              ×
+            </button>
+            {preview.preview_kind === "image" ? (
+              <img src={attachmentUrls[preview.id]} alt={preview.filename} />
+            ) : (
+              <video src={attachmentUrls[preview.id]} controls autoPlay />
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
