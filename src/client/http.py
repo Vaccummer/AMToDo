@@ -192,9 +192,17 @@ class AMTodoClient:
         )
 
     def todo_attachment_download(self, todo_id: int, attachment_id: int) -> bytes:
-        response = self._client.get(
-            f"/api/v1/todos/{todo_id}/attachments/{attachment_id}/download",
-            params={"access_token": self._access_token},
+        data_key: bytes | None = None
+        body: dict[str, Any] = {"access_token": self._access_token, "todo_id": todo_id, "attachment_id": attachment_id}
+        if self._public_key_pem:
+            from amtodo_crypto import seal
+
+            envelope, data_key = seal(body, self._public_key_pem, "server-key-v1")
+            body = envelope
+
+        response = self._client.post(
+            "/api/v1/todos/attachments/download",
+            json=body,
         )
         response.raise_for_status()
         return response.content

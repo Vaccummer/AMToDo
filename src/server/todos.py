@@ -25,6 +25,7 @@ from serialization import attachment_to_dict, todo_to_dict
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     TodoAttachmentGetRequest,
+    TodoAttachmentDownloadRequest,
     TodoAttachmentListRequest,
     TodoAttachmentRemoveRequest,
     TodoAttachmentUploadRequest,
@@ -187,6 +188,7 @@ def remove_attachment(
 @router.post("/attachments/upload")
 def upload_attachment_json(
     body: TodoAttachmentUploadRequest,
+    request: Request,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
@@ -196,6 +198,10 @@ def upload_attachment_json(
         content = base64.b64decode(body.content_base64, validate=True)
     except ValueError as exc:
         raise ValidationError("content_base64 must be valid base64") from exc
+
+    _validate_attachment_limits(
+        request.app.state.settings, body.todo_id, len(content), None, clock, uow=uow
+    )
 
     service = _attachment_service(uow, clock)
     attachment = service.create(
@@ -226,8 +232,22 @@ async def upload_attachment(
 
     user_id = _require_form_or_query_user(request, access_token)
     content = await file.read()
+    settings_obj = request.app.state.settings
+
+    if len(content) > settings_obj.max_attachment_size_bytes:
+        raise ValidationError(
+            f"attachment size ({len(content)} bytes) exceeds limit "
+            f"({settings_obj.max_attachment_size_bytes} bytes)"
+        )
+
     with UnitOfWork(request.app.state.db, user_id) as uow:
         service = _attachment_service(uow, clock)
+        existing = service.list_for_todo(todo_id)
+        if len(existing) >= settings_obj.max_attachments_per_todo:
+            raise ValidationError(
+                f"attachment count ({len(existing)}) already at limit "
+                f"({settings_obj.max_attachments_per_todo})"
+            )
         attachment = service.create(
             todo_id,
             AttachmentDraft(
@@ -250,26 +270,30 @@ async def upload_attachment(
     }
 
 
-@router.get("/{todo_id}/attachments/{attachment_id}/download")
+@router.post("/attachments/download")
 def download_attachment(
-    todo_id: int,
-    attachment_id: int,
+    body: TodoAttachmentDownloadRequest,
     request: Request,
+    uow: UowDep,
     clock: ClockDep,
-    access_token: str,
 ) -> Response:
     """Download encrypted attachment bytes."""
 
-    user_id = _require_form_or_query_user(request, access_token)
-    with UnitOfWork(request.app.state.db, user_id) as uow:
-        service = _attachment_service(uow, clock)
-        attachment = service.show(todo_id, attachment_id)
-        cipher = service.read_cipher(todo_id, attachment_id)
-        headers = {
-            "Content-Disposition": f'attachment; filename="{attachment.filename}.enc"',
-            "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
-            "X-AMToDo-Updated-At": str(attachment.updated_at),
-        }
+    service = _attachment_service(uow, clock)
+    attachment = service.show(body.todo_id, body.attachment_id)
+    cipher = service.read_cipher(body.todo_id, body.attachment_id)
+    from urllib.parse import quote
+
+    safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
+    utf8_name = quote(attachment.filename, safe="")
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{safe_name}.enc"; '
+            f"filename*=UTF-8''{utf8_name}.enc"
+        ),
+        "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
+        "X-AMToDo-Updated-At": str(attachment.updated_at),
+    }
     return Response(content=cipher, media_type="application/octet-stream", headers=headers)
 
 
@@ -448,3 +472,28 @@ def _require_form_or_query_user(request: Request, access_token: str) -> int:
             detail="Invalid user token",
         )
     return user_id
+
+
+def _validate_attachment_limits(
+    settings: AppSettings,
+    todo_id: int,
+    content_size: int,
+    current_count: int | None,
+    clock: Clock,
+    uow: UnitOfWork | None = None,
+) -> None:
+    if content_size > settings.max_attachment_size_bytes:
+        raise ValidationError(
+            f"attachment size ({content_size} bytes) exceeds limit "
+            f"({settings.max_attachment_size_bytes} bytes)"
+        )
+
+    if current_count is None and uow is not None:
+        service = _attachment_service(uow, clock)
+        current_count = len(service.list_for_todo(todo_id))
+
+    if current_count is not None and current_count >= settings.max_attachments_per_todo:
+        raise ValidationError(
+            f"attachment count ({current_count}) already at limit "
+            f"({settings.max_attachments_per_todo})"
+        )

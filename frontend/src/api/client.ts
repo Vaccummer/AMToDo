@@ -4,6 +4,10 @@ export type HealthResponse = {
   status: string;
   version: string;
   public_key?: string;
+  limits: {
+    max_attachment_size_bytes: number;
+    max_attachments_per_todo: number;
+  };
 };
 
 export type UserResponse = {
@@ -197,15 +201,21 @@ export class AMToDoApi {
   private readonly baseUrl: string;
   private readonly token: string | null;
   private readonly p256PublicKey: CryptoKey | null;
+  maxAttachmentSize: number;
+  maxAttachmentsPerTodo: number;
 
   constructor(
     baseUrl = DEFAULT_BASE_URL,
     token: string | null = null,
-    p256PublicKey: CryptoKey | null = null
+    p256PublicKey: CryptoKey | null = null,
+    maxAttachmentSize = 20 * 1024 * 1024,
+    maxAttachmentsPerTodo = 20,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
     this.p256PublicKey = p256PublicKey;
+    this.maxAttachmentSize = maxAttachmentSize;
+    this.maxAttachmentsPerTodo = maxAttachmentsPerTodo;
   }
 
   async health(): Promise<HealthResponse> {
@@ -330,13 +340,52 @@ export class AMToDoApi {
   }
 
   async downloadTodoAttachment(todoId: number, attachmentId: number): Promise<ArrayBuffer> {
-    const qs = new URLSearchParams({ access_token: this.token ?? "" });
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/todos/${todoId}/attachments/${attachmentId}/download?${qs}`
-    );
-    if (!response.ok) {
-      throw new Error(response.statusText);
+    const path = "/api/v1/todos/attachments/download";
+    const body: Record<string, unknown> = { todo_id: todoId, attachment_id: attachmentId };
+
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+
+    if (this.token) {
+      body["access_token"] = this.token as unknown as string;
     }
+
+    let bodyStr: string;
+    let aesKey: CryptoKey | null = null;
+
+    if (this.p256PublicKey) {
+      const { seal } = await import("../crypto/envelope");
+      const result = await seal(body, this.p256PublicKey, KEY_ID);
+      bodyStr = JSON.stringify(result.envelope);
+      aesKey = result.aesKey;
+    } else {
+      bodyStr = JSON.stringify(body);
+    }
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      body: bodyStr,
+      headers
+    });
+
+    if (!response.ok) {
+      // Try to parse error from encrypted response
+      let errorPayload: unknown;
+      try {
+        errorPayload = await response.json();
+      } catch {
+        throw new Error(response.statusText);
+      }
+      if (aesKey) {
+        const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
+        if (isResponseEnvelope(errorPayload as Record<string, unknown>)) {
+          errorPayload = await openResponse(errorPayload as Record<string, unknown>, aesKey);
+        }
+      }
+      const err = errorPayload as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? response.statusText);
+    }
+
     return response.arrayBuffer();
   }
 

@@ -122,6 +122,11 @@ class TodoAttachmentUploadRequest(UserAuthMixin):
     mime_type: str | None = None
 
 
+class TodoAttachmentDownloadRequest(UserAuthMixin):
+    todo_id: int
+    attachment_id: int
+
+
 class TodoAttachmentRemoveRequest(UserAuthMixin):
     todo_id: int
     attachment_id: int

@@ -129,9 +129,13 @@ def test_attachment_http_upload_metadata_and_download(
         )
         assert list_response.json()["count"] == 1
 
-        download_response = client.get(
-            f"/api/v1/todos/{todo_id}/attachments/{attachment['id']}/download",
-            params={"access_token": token},
+        download_response = client.post(
+            "/api/v1/todos/attachments/download",
+            json={
+                "access_token": token,
+                "todo_id": todo_id,
+                "attachment_id": attachment["id"],
+            },
         )
         assert download_response.status_code == 200
         assert download_response.content != b"plaintext"

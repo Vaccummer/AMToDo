@@ -20,8 +20,15 @@ router = APIRouter()
 @router.get("/health")
 def health(request: Request) -> dict[str, object]:
     """Return server health status and P-256 public key for request encryption."""
-    result: dict[str, object] = {"status": "ok", "version": __version__}
     settings = request.app.state.settings
+    result: dict[str, object] = {
+        "status": "ok",
+        "version": __version__,
+        "limits": {
+            "max_attachment_size_bytes": settings.max_attachment_size_bytes,
+            "max_attachments_per_todo": settings.max_attachments_per_todo,
+        },
+    }
 
     if settings.server_public_key_path:
         try:

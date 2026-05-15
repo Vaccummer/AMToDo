@@ -3,6 +3,7 @@ import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../api/client";
 import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
 import { DatePicker } from "./DatePicker";
+import { useConfirm } from "./ConfirmDialog";
 
 type Props = {
   todo: TodoItem;
@@ -32,6 +33,13 @@ function timeKeyValid(key: string) {
   return /^\d{2}:\d{2}(:\d{2})?$/.test(key);
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate }: Props) {
   const [todo, setTodo] = useState<TodoItem>(initial);
   const [title, setTitle] = useState(initial.title);
@@ -58,9 +66,13 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [attachmentLoading, setAttachmentLoading] = useState<Record<number, boolean>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
+  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   // fetch full todo on mount (the list item may omit fields)
   useEffect(() => {
@@ -81,15 +93,25 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const loadAttachments = useCallback(async () => {
     const result = await api.listTodoAttachments(todo.id);
     setAttachments(result.attachments);
-    const nextUrls: Record<number, string> = {};
     await Promise.all(
       result.attachments.map(async (attachment) => {
         if (attachment.preview_kind === "none") return;
-        const { blob } = await getAttachmentBlob(api, attachment);
-        nextUrls[attachment.id] = URL.createObjectURL(blob);
+        setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
+        try {
+          const { blob } = await getAttachmentBlob(api, attachment);
+          const url = URL.createObjectURL(blob);
+          setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+        } catch {
+          // 单个文件加载失败不影响其他
+        } finally {
+          setAttachmentLoading((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+        }
       })
     );
-    setAttachmentUrls(nextUrls);
   }, [api, todo.id]);
 
   useEffect(() => {
@@ -106,6 +128,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   const dirty = useMemo(() => {
     return (
+      attachmentsChanged ||
       title !== todo.title ||
       description !== (todo.description ?? "") ||
       plannedAtKey !== (todo.planned_at ? datetimeLocalFromEpoch(todo.planned_at) : "") ||
@@ -113,7 +136,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       Number(priority) !== todo.priority ||
       tag !== (todo.tag ?? "")
     );
-  }, [title, description, plannedAtKey, dueAtKey, priority, tag, todo]);
+  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, todo]);
 
   const plannedAtError = useMemo(
     () => !plannedDate || !plannedTime || !timeKeyValid(plannedTime) || isNaN(epochFromDatetimeLocal(plannedAtKey)),
@@ -158,7 +181,13 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   }
 
   async function handleDelete() {
-    if (!window.confirm("确定删除这条待办吗？此操作不可撤销。")) return;
+    const ok = await ask({
+      title: "删除待办",
+      message: "确定删除这条待办吗？此操作不可撤销。",
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     setError(null);
     try {
@@ -189,12 +218,28 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   async function uploadFiles(files: FileList | File[]) {
     const selected = Array.from(files);
     if (selected.length === 0) return;
+
+    // Check per-file size limit
+    for (const file of selected) {
+      if (file.size > api.maxAttachmentSize) {
+        setError(`文件 "${file.name}" 大小 (${formatSize(file.size)}) 超过上限 (${formatSize(api.maxAttachmentSize)})`);
+        return;
+      }
+    }
+
+    // Check attachment count limit
+    if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
+      setError(`附件总数将超过上限 (${api.maxAttachmentsPerTodo})`);
+      return;
+    }
+
     setAttachmentBusy(true);
     setError(null);
     try {
       for (const file of selected) {
         await api.uploadTodoAttachment(todo.id, file);
       }
+      setAttachmentsChanged(true);
       await loadAttachments();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "附件上传失败");
@@ -205,7 +250,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   }
 
   async function openAttachment(attachment: AttachmentMetadata) {
-    setAttachmentBusy(true);
+    setDownloadingId(attachment.id);
     setError(null);
     try {
       const { blob } = await getAttachmentBlob(api, attachment);
@@ -218,16 +263,23 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "附件打开失败");
     } finally {
-      setAttachmentBusy(false);
+      setDownloadingId(null);
     }
   }
 
   async function removeAttachment(attachment: AttachmentMetadata) {
-    if (!window.confirm("确定删除这个附件吗？")) return;
+    const ok = await ask({
+      title: "删除附件",
+      message: `确定删除附件「${attachment.filename}」吗？`,
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     setAttachmentBusy(true);
     setError(null);
     try {
       await api.removeTodoAttachment(todo.id, attachment.id);
+      setAttachmentsChanged(true);
       await loadAttachments();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "附件删除失败");
@@ -236,9 +288,17 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  async function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
-      if (dirty && !window.confirm("有未保存的更改，确定关闭吗？")) return;
+      if (dirty) {
+        const ok = await ask({
+          title: "放弃更改",
+          message: "有未保存的更改，确定关闭吗？",
+          confirmLabel: "关闭",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       onClose();
     }
   }
@@ -401,6 +461,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       <img src={url} alt="" />
                     ) : attachment.preview_kind === "video" && url ? (
                       <video src={url} muted />
+                    ) : attachmentLoading[attachment.id] ? (
+                      <span className="attachment-spinner" />
                     ) : (
                       <span>{attachment.filename.split(".").pop()?.slice(0, 4) || "FILE"}</span>
                     )}
@@ -409,17 +471,27 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     type="button"
                     className="attachment-name"
                     onClick={() => openAttachment(attachment)}
+                    disabled={downloadingId === attachment.id}
                   >
-                    {attachment.filename}
+                    <span className="attachment-filename">{attachment.filename}</span>
+                    <span className="attachment-size">
+                      {downloadingId === attachment.id
+                        ? "下载中..."
+                        : formatSize(attachment.plain_size_bytes)}
+                    </span>
                   </button>
                   <button
                     type="button"
                     className="attachment-remove"
-                    disabled={attachmentBusy}
+                    disabled={attachmentBusy || downloadingId !== null}
                     onClick={() => removeAttachment(attachment)}
                     aria-label={`删除 ${attachment.filename}`}
                   >
-                    删除
+                    <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor">
+                      <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
+                      <path d="M701.8 870H351.9c-71 0-128.8-57.8-128.8-128.8V213.7h51.5v527.5c0 42.6 34.7 77.3 77.3 77.3h349.9c42.6 0 77.3-34.7 77.3-77.3V213.7h51.5v527.5c0 71-57.8 128.8-128.8 128.8zM647.7 186h-51.5c0-28.4-29.9-51.6-66.7-51.6-36.7 0-66.6 23.1-66.6 51.6h-51.5c0-56.9 53-103.1 118.1-103.1S647.7 129.1 647.7 186z" />
+                      <path d="M384.2 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM531 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM677.8 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-11 24.3-24.3 24.3z" />
+                    </svg>
                   </button>
                 </div>
               );
@@ -515,6 +587,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
         </div>
       ) : null}
+      {confirmDialog}
     </div>
   );
 }

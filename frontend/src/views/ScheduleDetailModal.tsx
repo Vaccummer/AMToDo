@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleItem, ScheduleUpdateRequest } from "../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
+import { useConfirm } from "./ConfirmDialog";
 
 type Props = {
   schedule: ScheduleItem;
@@ -52,6 +53,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   // Fetch full schedule on mount (the list item may lack some fields)
   useEffect(() => {
@@ -121,9 +123,17 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     if (e.target === e.currentTarget) return;
   }, []);
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  async function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
-      if (dirty && !window.confirm("有未保存的更改，确定关闭吗？")) return;
+      if (dirty) {
+        const ok = await ask({
+          title: "放弃更改",
+          message: "有未保存的更改，确定关闭吗？",
+          confirmLabel: "关闭",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       onClose();
     }
   }
@@ -168,7 +178,13 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   // ── Delete ──
 
   async function handleDelete() {
-    if (!window.confirm("确定删除这条日程吗？此操作不可撤销。")) return;
+    const ok = await ask({
+      title: "删除日程",
+      message: "确定删除这条日程吗？此操作不可撤销。",
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     setError(null);
     try {
@@ -416,6 +432,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           </button>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

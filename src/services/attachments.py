@@ -145,7 +145,9 @@ class AttachmentService:
 
 
 def _clean_filename(filename: str) -> str:
-    clean = Path(filename).name.strip()
+    # Use string split to strip directory components in a platform-agnostic
+    # way, avoiding Path() which can mishandle certain Unicode sequences.
+    clean = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
     if not clean:
         raise ValidationError("attachment filename cannot be empty")
     return clean

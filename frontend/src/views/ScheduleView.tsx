@@ -13,6 +13,7 @@ import {
 } from "../lib/time";
 import { CalendarPopup } from "./CalendarPopup";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { useConfirm } from "./ConfirmDialog";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
@@ -52,6 +53,7 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
   const [detailId, setDetailId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const weekLabelRef = useRef<HTMLDivElement>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
   const dayHeadersRef = useRef<HTMLDivElement>(null);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
 
@@ -137,6 +139,16 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
     if (detailId === id) setDetailId(null);
     if (contextMenu?.id === id) setContextMenu(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  async function askDeleteSchedule(id: number) {
+    const ok = await ask({
+      title: "删除日程",
+      message: "确定删除这条日程吗？此操作不可撤销。",
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (ok) deleteSchedule(id);
   }
 
   function toggleCalendar() {
@@ -282,12 +294,13 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
               label: "删除",
               icon: <TrashIcon />,
               danger: true,
-              action: () => deleteSchedule(contextMenu.id)
+              action: () => askDeleteSchedule(contextMenu.id)
             }
           ]}
           onClose={() => setContextMenu(null)}
         />
       ) : null}
+      {confirmDialog}
     </div>
   );
 }
