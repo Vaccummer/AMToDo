@@ -52,6 +52,32 @@ def attachment_to_dict(attachment: TodoAttachment, user_id: int) -> dict[str, ob
         "nonce": attachment.nonce,
         "encryption_alg": attachment.encryption_alg,
         "storage_path": attachment.storage_path,
+        "is_orphaned": attachment.is_orphaned,
+        "created_at": attachment.created_at,
+        "updated_at": attachment.updated_at,
+    }
+
+
+def schedule_attachment_to_dict(attachment: object, user_id: int) -> dict[str, object]:
+    """Serialize a Schedule attachment metadata row."""
+
+    return {
+        "id": attachment.id,
+        "user_id": user_id,
+        "schedule_id": attachment.schedule_id,
+        "file_index": attachment.file_index,
+        "filename": attachment.filename,
+        "mime_type": attachment.mime_type,
+        "preview_kind": attachment.preview_kind,
+        "plain_size_bytes": attachment.plain_size_bytes,
+        "cipher_size_bytes": attachment.cipher_size_bytes,
+        "plain_sha256": attachment.plain_sha256,
+        "cipher_sha256": attachment.cipher_sha256,
+        "file_key": attachment.file_key,
+        "nonce": attachment.nonce,
+        "encryption_alg": attachment.encryption_alg,
+        "storage_path": attachment.storage_path,
+        "is_orphaned": attachment.is_orphaned,
         "created_at": attachment.created_at,
         "updated_at": attachment.updated_at,
     }
