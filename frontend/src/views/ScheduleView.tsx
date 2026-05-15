@@ -14,6 +14,7 @@ import {
 import { CalendarPopup } from "./CalendarPopup";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
 import { useConfirm } from "./ConfirmDialog";
+import { ScheduleCreateModal } from "./ScheduleCreateModal";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
@@ -37,6 +38,7 @@ type ScheduleTextMode = "tiny" | "mini" | "mid" | "full";
 
 type ScheduleSlot = {
   key: string;
+  minutes: number;
   label: string;
 };
 
@@ -58,6 +60,13 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   const [fullHours, setFullHours] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [emptyContextMenu, setEmptyContextMenu] = useState<{
+    startAt: number;
+    endAt: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
   const weekLabelRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
   const dayHeadersRef = useRef<HTMLDivElement>(null);
@@ -68,8 +77,10 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     [slotMinutes]
   );
 
-  const visibleStartHour = fullHours ? 0 : startHour;
-  const visibleEndHour = fullHours ? 24 : endHour;
+  const normalizedStartHour = Math.min(23, Math.max(0, Math.trunc(startHour)));
+  const normalizedEndHour = Math.min(24, Math.max(normalizedStartHour + 1, Math.trunc(endHour)));
+  const visibleStartHour = fullHours ? 0 : normalizedStartHour;
+  const visibleEndHour = fullHours ? 24 : normalizedEndHour;
 
   const slots = useMemo(
     () => buildScheduleSlots(visibleStartHour, visibleEndHour, normalizedSlotMinutes),
@@ -169,6 +180,24 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     if (ok) deleteSchedule(id);
   }
 
+  function scheduleWindowForSlot(dayKey: string, slot: ScheduleSlot): { startAt: number; endAt: number } {
+    const startAt = startOfDateKeyEpoch(dayKey) + slot.minutes * 60;
+    return {
+      startAt,
+      endAt: startAt + normalizedSlotMinutes * 60
+    };
+  }
+
+  function beginCreate(dayKey: string, slot: ScheduleSlot) {
+    setSelectedDateKey(dayKey);
+    setEmptyContextMenu(null);
+    setCreateDraft(scheduleWindowForSlot(dayKey, slot));
+  }
+
+  function addSchedule(schedule: ScheduleItem) {
+    setItems((prev) => [...prev, schedule].sort((a, b) => a.start_at - b.start_at || a.end_at - b.end_at || a.id - b.id));
+  }
+
   function toggleCalendar() {
     if (!showCalendar && dayHeadersRef.current) {
       setCalendarAnchor(dayHeadersRef.current.getBoundingClientRect());
@@ -251,7 +280,22 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
       <div className="schedule-grid-scroll">
         <div className="schedule-grid" style={gridStyle}>
           {slots.map((slot) => (
-            <TimeRow key={slot.key} slot={slot} days={days} />
+            <TimeRow
+              key={slot.key}
+              slot={slot}
+              days={days}
+              onCreate={beginCreate}
+              onContextMenu={(dayKey, currentSlot, event) => {
+                event.preventDefault();
+                setSelectedDateKey(dayKey);
+                setContextMenu(null);
+                setEmptyContextMenu({
+                  ...scheduleWindowForSlot(dayKey, currentSlot),
+                  x: event.clientX,
+                  y: event.clientY
+                });
+              }}
+            />
           ))}
           <div className="schedule-events-layer">
             {days.map((dayKey, dayIndex) => (
@@ -268,6 +312,7 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      setEmptyContextMenu(null);
                       setContextMenu({ id: block.item.id, x: e.clientX, y: e.clientY });
                     }}
                   />
@@ -290,6 +335,16 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
               prev.map((item) => (item.id === updated.id ? updated : item))
             );
           }}
+        />
+      ) : null}
+
+      {createDraft ? (
+        <ScheduleCreateModal
+          api={api}
+          startAt={createDraft.startAt}
+          endAt={createDraft.endAt}
+          onClose={() => setCreateDraft(null)}
+          onCreate={addSchedule}
         />
       ) : null}
 
@@ -318,20 +373,46 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
           onClose={() => setContextMenu(null)}
         />
       ) : null}
+      {emptyContextMenu ? (
+        <ContextMenu
+          x={emptyContextMenu.x}
+          y={emptyContextMenu.y}
+          items={[
+            {
+              label: "新建日程",
+              icon: <PlusIcon />,
+              action: () => {
+                setCreateDraft({
+                  startAt: emptyContextMenu.startAt,
+                  endAt: emptyContextMenu.endAt
+                });
+              }
+            }
+          ]}
+          onClose={() => setEmptyContextMenu(null)}
+        />
+      ) : null}
       {confirmDialog}
     </div>
   );
 }
 
-function TimeRow({ slot, days }: {
+function TimeRow({ slot, days, onCreate, onContextMenu }: {
   slot: ScheduleSlot;
   days: string[];
+  onCreate: (dayKey: string, slot: ScheduleSlot) => void;
+  onContextMenu: (dayKey: string, slot: ScheduleSlot, event: React.MouseEvent) => void;
 }) {
   return (
     <>
       <div className="time-label">{slot.label}</div>
       {days.map((dayKey) => (
-        <div className="schedule-cell" key={`${dayKey}-${slot.key}`} />
+        <div
+          className="schedule-cell"
+          key={`${dayKey}-${slot.key}`}
+          onDoubleClick={() => onCreate(dayKey, slot)}
+          onContextMenu={(event) => onContextMenu(dayKey, slot, event)}
+        />
       ))}
     </>
   );
@@ -344,9 +425,18 @@ function buildScheduleSlots(startHour: number, endHour: number, slotMinutes: num
     const minutes = startHour * 60 + index * slotMinutes;
     return {
       key: String(minutes),
+      minutes,
       label: formatSlotLabel(minutes)
     };
   });
+}
+
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function formatSlotLabel(minutes: number): string {
