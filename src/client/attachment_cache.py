@@ -55,10 +55,13 @@ class AttachmentCache:
             shutil.rmtree(self._root)
 
     def _item_dir(self, metadata: dict[str, Any]) -> Path:
+        owner_type = "schedule" if "schedule_id" in metadata else "todo"
+        owner_id = metadata.get("schedule_id") or metadata.get("todo_id")
         return (
             self._root
             / str(metadata["user_id"])
-            / str(metadata["todo_id"])
+            / owner_type
+            / str(owner_id)
             / str(metadata["id"])
         )
 
