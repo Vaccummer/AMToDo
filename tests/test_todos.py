@@ -160,8 +160,8 @@ def test_remove_deletes_todo_and_ids_are_not_reused(tmp_path: Path) -> None:
         assert second.id > first_id
 
 
-def test_search_matches_regex_and_optional_epoch_bounds(tmp_path: Path) -> None:
-    """Search matches ToDo text with optional planned timestamp bounds."""
+def test_search_matches_text_and_optional_epoch_bounds(tmp_path: Path) -> None:
+    """Search matches plain ToDo text with optional planned timestamp bounds."""
 
     database = _create_test_database(tmp_path)
     clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
@@ -186,15 +186,35 @@ def test_search_matches_regex_and_optional_epoch_bounds(tmp_path: Path) -> None:
 
     with UnitOfWork(database) as uow:
         service = TodoService(uow.todos, clock, uow.todo_model)
-        all_matches = service.search("plan|study")
+        all_matches = service.search("plan")
         bounded_matches = service.search(
-            "plan|study",
+            "plan",
             planned_start_at=inside_at,
             planned_end_at=after_at,
         )
 
-        assert [todo.title for todo in all_matches] == ["Read paper", "Write project plan"]
+        assert [todo.title for todo in all_matches] == ["Write project plan"]
         assert [todo.id for todo in bounded_matches] == [inside_id]
+
+
+def test_search_can_enable_regex(tmp_path: Path) -> None:
+    """Regex matching is opt-in."""
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        service.create(TodoDraft(title="Read paper", tag="study"))
+        service.create(TodoDraft(title="Write project plan", tag="planning"))
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        literal_matches = service.search("plan|study")
+        regex_matches = service.search("plan|study", use_regex=True)
+
+        assert literal_matches == []
+        assert [todo.title for todo in regex_matches] == ["Read paper", "Write project plan"]
 
 
 def test_search_can_filter_by_planned_and_created_ranges(tmp_path: Path) -> None:
@@ -225,6 +245,36 @@ def test_search_can_filter_by_planned_and_created_ranges(tmp_path: Path) -> None
         )
 
         assert [todo.id for todo in matches] == [inside_id]
+
+
+def test_search_fields_filters_and_sorting(tmp_path: Path) -> None:
+    """Search can choose fields, filter scalars, and sort results."""
+
+    database = _create_test_database(tmp_path)
+    created_at = day_start_epoch(date(2026, 5, 11), TIMEZONE)
+
+    with UnitOfWork(database) as uow:
+        low_service = TodoService(uow.todos, FixedClock(created_at), uow.todo_model)
+        low_service.create(
+            TodoDraft(title="Unmatched", description="needle", priority=1, tag="work")
+        )
+        high_service = TodoService(uow.todos, FixedClock(created_at + 10), uow.todo_model)
+        high_service.create(
+            TodoDraft(title="Needle high", description="also needle", priority=5, tag="work")
+        )
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, FixedClock(created_at + 20), uow.todo_model)
+        title_matches = service.search(
+            "needle",
+            fields=["title"],
+            tag="work",
+            priority_min=2,
+            sort_by="priority",
+            sort_order="desc",
+        )
+
+        assert [todo.title for todo in title_matches] == ["Needle high"]
 
 
 def test_list_and_search_can_filter_by_completion(tmp_path: Path) -> None:
@@ -265,8 +315,8 @@ def test_search_case_sensitivity_is_configurable(tmp_path: Path) -> None:
 
     with UnitOfWork(database) as uow:
         service = TodoService(uow.todos, clock, uow.todo_model)
-        sensitive_matches = service.search("project")
-        insensitive_matches = service.search("project", case_sensitive=False)
+        sensitive_matches = service.search("project", ignore_case=False)
+        insensitive_matches = service.search("project")
 
         assert sensitive_matches == []
         assert [todo.title for todo in insensitive_matches] == ["Write Project Plan"]
@@ -282,7 +332,7 @@ def test_search_rejects_invalid_regex(tmp_path: Path) -> None:
         service = TodoService(uow.todos, clock, uow.todo_model)
 
         try:
-            service.search("[")
+            service.search("[", use_regex=True)
         except ValidationError:
             return
 

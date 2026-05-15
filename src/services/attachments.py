@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import mimetypes
 import secrets
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from exceptions import NotFoundError, ValidationError
+
+logger = logging.getLogger("amtodo")
 
 if TYPE_CHECKING:
     from clock import Clock
@@ -57,7 +60,11 @@ class AttachmentService:
         self._owner_type = owner_type
 
     def create(self, owner_id: int, draft: AttachmentDraft) -> object:
-        """Encrypt and store a file attachment."""
+        """Encrypt and store a file attachment in two phases.
+
+        Phase 1: create metadata row and flush to obtain attachment.id.
+        Phase 2: generate storage path from id, write file, update storage_path.
+        """
 
         self._require_owner(owner_id)
         filename = _clean_filename(draft.filename)
@@ -75,16 +82,8 @@ class AttachmentService:
         nonce = secrets.token_bytes(12)
         cipher = AESGCM(key).encrypt(nonce, draft.content, None)
         now = self._clock.now_epoch()
-        relative_path = (
-            Path(self._owner_type)
-            / str(self._user_id)
-            / str(owner_id)
-            / str(file_index)
-        )
-        absolute_path = self._storage_root / relative_path
-        absolute_path.parent.mkdir(parents=True, exist_ok=True)
-        absolute_path.write_bytes(cipher)
 
+        # Phase 1: insert metadata with placeholder path, flush to get id
         owner_field = f"{self._owner_type}_id"
         attachment = self._model(
             **{
@@ -100,12 +99,28 @@ class AttachmentService:
                 "file_key": _b64(key),
                 "nonce": _b64(nonce),
                 "encryption_alg": ENCRYPTION_ALG,
-                "storage_path": str(relative_path),
+                "storage_path": "",
                 "created_at": now,
                 "updated_at": now,
             }
         )
-        return self._repository.add(attachment)
+        attachment = self._repository.add(attachment)
+        self._repository.flush()
+
+        # Phase 2: generate storage path from attachment.id, write file
+        relative_path = (
+            Path(self._owner_type)
+            / str(self._user_id)
+            / str(owner_id)
+            / f"{attachment.id}.bin"
+        )
+        absolute_path = self._storage_root / relative_path
+        absolute_path.parent.mkdir(parents=True, exist_ok=True)
+        absolute_path.write_bytes(cipher)
+
+        attachment.storage_path = str(relative_path)
+        self._touch_owner(owner_id)
+        return attachment
 
     def list_for_owner(self, owner_id: int) -> list[object]:
         """Return attachment metadata for an owner."""
@@ -123,6 +138,11 @@ class AttachmentService:
         owner_field = f"{self._owner_type}_id"
         if attachment is None or getattr(attachment, owner_field) != owner_id:
             raise NotFoundError(f"attachment #{attachment_id} was not found")
+        if attachment.is_orphaned is False:
+            path = self.encrypted_path(attachment)
+            if not path.is_file():
+                attachment.is_orphaned = True
+                self._repository.update(attachment)
         return attachment
 
     def encrypted_path(self, attachment: object) -> Path:
@@ -142,13 +162,23 @@ class AttachmentService:
         return path.read_bytes()
 
     def remove(self, owner_id: int, attachment_id: int) -> object:
-        """Remove attachment metadata and encrypted file from storage."""
+        """Remove attachment metadata and encrypted file from storage.
+
+        File deletion failures are logged but do not prevent DB metadata removal.
+        """
 
         attachment = self.show(owner_id, attachment_id)
         path = self.encrypted_path(attachment)
-        if path.exists():
-            path.unlink()
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            logger.warning(
+                "Failed to delete attachment file: %s (attachment #%d)",
+                path, attachment_id,
+            )
         self._repository.remove(attachment)
+        self._touch_owner(owner_id)
         return attachment
 
     def remove_orphaned(self, owner_id: int) -> int:
@@ -165,6 +195,12 @@ class AttachmentService:
         owner = self._owner_repository.get(owner_id)
         if owner is None:
             raise NotFoundError(f"{self._owner_type} #{owner_id} was not found")
+
+    def _touch_owner(self, owner_id: int) -> None:
+        owner = self._owner_repository.get(owner_id)
+        if owner is None:
+            raise NotFoundError(f"{self._owner_type} #{owner_id} was not found")
+        owner.updated_at = self._clock.now_epoch()
 
 
 def _clean_filename(filename: str) -> str:

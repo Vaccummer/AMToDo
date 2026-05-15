@@ -38,11 +38,28 @@ async def require_user(request: Request) -> int:
     token_map: dict[str, int] = request.app.state.token_map
     user_id = token_map.get(access_token)
     if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user token",
-        )
+        user_id = _lookup_token_in_db(request, access_token)
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid user token",
+            )
+        token_map[access_token] = user_id
     return user_id
+
+
+def _lookup_token_in_db(request: Request, access_token: str) -> int | None:
+    """Fallback: look up the token in the database when not in the memory map."""
+
+    from models.user import User
+    from sqlalchemy import select
+
+    db = request.app.state.db
+    with db.session() as session:
+        user = session.execute(
+            select(User).where(User.token == access_token)
+        ).scalar_one_or_none()
+    return user.id if user is not None else None
 
 
 async def _read_body(request: Request) -> dict:

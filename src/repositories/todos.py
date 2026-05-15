@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -85,23 +85,46 @@ class TodoRepository:
         *,
         planned_start_at: int | None = None,
         planned_end_at: int | None = None,
+        due_start_at: int | None = None,
+        due_end_at: int | None = None,
         created_start_at: int | None = None,
         created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
         completed: bool | None = None,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        tag: str | None = None,
     ) -> list[object]:
-        """Return ToDos matching optional planned and created timestamp bounds."""
+        """Return ToDos matching optional timestamp and scalar filters."""
 
         statement = select(self._model)
         if planned_start_at is not None:
             statement = statement.where(self._model.planned_at >= planned_start_at)
         if planned_end_at is not None:
             statement = statement.where(self._model.planned_at < planned_end_at)
+        if due_start_at is not None:
+            statement = statement.where(self._model.due_at >= due_start_at)
+        if due_end_at is not None:
+            statement = statement.where(self._model.due_at < due_end_at)
         if created_start_at is not None:
             statement = statement.where(self._model.created_at >= created_start_at)
         if created_end_at is not None:
             statement = statement.where(self._model.created_at < created_end_at)
+        if updated_start_at is not None or updated_end_at is not None:
+            updated_expr = func.coalesce(self._model.updated_at, self._model.created_at)
+            if updated_start_at is not None:
+                statement = statement.where(updated_expr >= updated_start_at)
+            if updated_end_at is not None:
+                statement = statement.where(updated_expr < updated_end_at)
         if completed is not None:
             statement = statement.where(self._model.completed.is_(completed))
+        if priority_min is not None:
+            statement = statement.where(self._model.priority >= priority_min)
+        if priority_max is not None:
+            statement = statement.where(self._model.priority <= priority_max)
+        if tag is not None:
+            statement = statement.where(self._model.tag == tag)
 
         statement = statement.order_by(
             self._model.planned_at,

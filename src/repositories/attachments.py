@@ -44,6 +44,9 @@ class TodoAttachmentRepository:
             return 0
         return int(current) + 1
 
+    def flush(self) -> None:
+        self._session.flush()
+
     def update(self, attachment: object) -> object:
         self._session.flush()
         return attachment
@@ -82,6 +85,9 @@ class ScheduleAttachmentRepository:
         if current is None:
             return 0
         return int(current) + 1
+
+    def flush(self) -> None:
+        self._session.flush()
 
     def update(self, attachment: object) -> object:
         self._session.flush()

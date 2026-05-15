@@ -14,6 +14,7 @@ DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
 DEFAULT_MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES = int(DEFAULT_MAX_ATTACHMENT_SIZE_BYTES * 1.5)
 DEFAULT_MAX_ATTACHMENTS_PER_TODO = 20
 AMTODO_ROOT_ENV_VAR = Path()
 
@@ -34,6 +35,7 @@ class AppSettings:
     server_private_key_path: str = ""
     request_timestamp_tolerance_seconds: int = 300
     max_attachment_size_bytes: int = DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
+    max_attachment_request_body_bytes: int = DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES
     max_attachments_per_todo: int = DEFAULT_MAX_ATTACHMENTS_PER_TODO
     attachment_root: str = ""
 
@@ -46,16 +48,17 @@ def amtodo_root() -> Path:
     path is invalid.
     """
     global AMTODO_ROOT_ENV_VAR
-    
-    if AMTODO_ROOT_ENV_VAR:
-        return AMTODO_ROOT_ENV_VAR
-    
+
     raw = os.environ.get("AMTODO_ROOT")
     if not raw:
+        if AMTODO_ROOT_ENV_VAR:
+            return AMTODO_ROOT_ENV_VAR
         print("FATAL: AMTODO_ROOT environment variable is not set", file=sys.stderr)
         sys.exit(1)
 
     root = Path(raw)
+    if AMTODO_ROOT_ENV_VAR == root:
+        return AMTODO_ROOT_ENV_VAR
     if not root.is_dir():
         print(f"FATAL: AMTODO_ROOT is not a directory: {root}", file=sys.stderr)
         sys.exit(1)
@@ -92,6 +95,10 @@ def load_settings() -> AppSettings:
         access_token=os.environ.get("AMTODO_SERVER_TOKEN", ""),
         max_attachment_size_bytes=_int_env(
             "AMTODO_MAX_ATTACHMENT_SIZE_BYTES", DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
+        ),
+        max_attachment_request_body_bytes=_int_env(
+            "AMTODO_MAX_ATTACHMENT_REQUEST_BODY_BYTES",
+            DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES,
         ),
         max_attachments_per_todo=_int_env(
             "AMTODO_MAX_ATTACHMENTS_PER_TODO", DEFAULT_MAX_ATTACHMENTS_PER_TODO

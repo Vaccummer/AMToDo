@@ -84,22 +84,50 @@ def search_schedules(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    """Search schedules with a regular expression."""
+    """Search schedules with text options, filters, sorting, and pagination."""
     service = ScheduleService(uow.schedules, clock, uow.schedule_model)
     schedules = service.search(
-        body.pattern,
+        body.query,
+        fields=body.fields,
+        use_regex=body.use_regex,
+        ignore_case=body.ignore_case,
         start_at=body.start_at,
         end_at=body.end_at,
-        case_sensitive=not body.ignore_case,
+        created_start_at=body.created_start_at,
+        created_end_at=body.created_end_at,
+        updated_start_at=body.updated_start_at,
+        updated_end_at=body.updated_end_at,
+        category=body.category,
+        location=body.location,
+        sort_by=body.sort_by,
+        sort_order=body.sort_order,
     )
+    paged = schedules[body.offset:body.offset + body.limit]
 
     return {
         "ok": True,
-        "pattern": body.pattern,
-        "case_sensitive": not body.ignore_case,
-        "range": {"start_at": body.start_at, "end_at": body.end_at},
-        "count": len(schedules),
-        "schedules": [schedule_to_dict(schedule) for schedule in schedules],
+        "query": body.query,
+        "use_regex": body.use_regex,
+        "ignore_case": body.ignore_case,
+        "fields": body.fields,
+        "range": {
+            "start_at": body.start_at,
+            "end_at": body.end_at,
+            "created_start_at": body.created_start_at,
+            "created_end_at": body.created_end_at,
+            "updated_start_at": body.updated_start_at,
+            "updated_end_at": body.updated_end_at,
+        },
+        "filter": {"category": body.category, "location": body.location},
+        "sort": {"by": body.sort_by, "order": body.sort_order},
+        "pagination": {
+            "limit": body.limit,
+            "offset": body.offset,
+            "has_more": body.offset + body.limit < len(schedules),
+        },
+        "total": len(schedules),
+        "count": len(paged),
+        "schedules": [schedule_to_dict(schedule) for schedule in paged],
     }
 
 
@@ -192,6 +220,7 @@ def update_schedule(
             description=body.description,
             location=body.location,
             category=body.category,
+            _fields_set=frozenset(body.model_fields_set),
         ),
     )
     uow.session.flush()
@@ -201,13 +230,21 @@ def update_schedule(
 @router.post("/remove")
 def remove_schedules(
     body: ScheduleTargetsRequest,
+    request: Request,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
     """Remove one or more schedules by id."""
     service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    att_svc = _schedule_attachment_service(uow, clock, request)
+
+    def _remove_with_attachments(schedule_id: int):
+        for att in att_svc.list_for_owner(schedule_id):
+            att_svc.remove(schedule_id, att.id)
+        return service.remove(schedule_id)
+
     results = [
-        _target_result(target, lambda current: service.remove(current))
+        _target_result(target, lambda sid: _remove_with_attachments(sid))
         for target in _unique_targets(body.targets)
     ]
     return {"ok": all(result["ok"] for result in results), "results": results}
@@ -275,7 +312,7 @@ def remove_orphaned_attachments(
 
     service = _schedule_attachment_service(uow, clock, request)
     count = service.remove_orphaned(body.schedule_id)
-    return {"ok": True, "removed": count}
+    return {"ok": True, "count": count, "attachments": []}
 
 
 @router.post("/attachments/upload")
@@ -287,13 +324,16 @@ def upload_attachment_json(
 ) -> dict[str, object]:
     """Upload a file attachment via encrypted JSON."""
 
+    settings_obj = request.app.state.settings
+    _check_base64_size(body.content_base64, settings_obj.max_attachment_size_bytes)
+
     try:
         content = base64.b64decode(body.content_base64, validate=True)
     except ValueError as exc:
         raise ValidationError("content_base64 must be valid base64") from exc
 
     _validate_schedule_attachment_limits(
-        request.app.state.settings, body.schedule_id, len(content), None, clock, request, uow=uow
+        settings_obj, body.schedule_id, len(content), None, clock, request, uow=uow
     )
 
     service = _schedule_attachment_service(uow, clock, request)
@@ -305,7 +345,6 @@ def upload_attachment_json(
             mime_type=body.mime_type,
         ),
     )
-    uow.session.flush()
     return {"ok": True, "attachment": schedule_attachment_to_dict(attachment, uow.user_id)}
 
 
@@ -349,7 +388,6 @@ async def upload_attachment(
                 mime_type=file.content_type,
             ),
         )
-        uow.session.flush()
         attachment_id = attachment.id
         file_index = attachment.file_index
     return {
@@ -422,6 +460,17 @@ def _schedule_attachment_service(uow: UnitOfWork, clock: Clock, request: Request
         uow.user_id,
         owner_type="schedule",
     )
+
+
+def _check_base64_size(encoded: str, max_size: int) -> None:
+    """Estimate decoded size from base64 length and reject oversized payloads early."""
+    stripped = encoded.strip()
+    padding = stripped.count("=")
+    estimated = len(stripped) * 3 // 4 - padding
+    if estimated > max_size:
+        raise ValidationError(
+            f"attachment size ~{estimated} bytes exceeds limit ({max_size} bytes)"
+        )
 
 
 def _validate_schedule_attachment_limits(

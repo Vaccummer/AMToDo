@@ -47,6 +47,9 @@ class AMTodoClient:
     def init_db(self) -> dict[str, Any]:
         return self._admin_post("/api/v1/admin/init-db")
 
+    def admin_config(self) -> dict[str, Any]:
+        return self._admin_post("/api/v1/admin/config")
+
     # ── user ──
 
     def user_me(self) -> dict[str, Any]:
@@ -111,30 +114,68 @@ class AMTodoClient:
 
     def todo_search(
         self,
-        pattern: str,
+        query: str,
+        fields: list[str] | None = None,
+        use_regex: bool = False,
+        ignore_case: bool = True,
         planned_start_at: int | None = None,
         planned_end_at: int | None = None,
+        due_start_at: int | None = None,
+        due_end_at: int | None = None,
         created_start_at: int | None = None,
         created_end_at: int | None = None,
-        ignore_case: bool = False,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
         open_only: bool = False,
         completed_only: bool = False,
+        completed: bool | None = None,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        tag: str | None = None,
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"pattern": pattern}
+        body: dict[str, Any] = {
+            "query": query,
+            "use_regex": use_regex,
+            "ignore_case": ignore_case,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "limit": limit,
+            "offset": offset,
+        }
+        if fields is not None:
+            body["fields"] = fields
         if planned_start_at is not None:
             body["planned_start_at"] = planned_start_at
         if planned_end_at is not None:
             body["planned_end_at"] = planned_end_at
+        if due_start_at is not None:
+            body["due_start_at"] = due_start_at
+        if due_end_at is not None:
+            body["due_end_at"] = due_end_at
         if created_start_at is not None:
             body["created_start_at"] = created_start_at
         if created_end_at is not None:
             body["created_end_at"] = created_end_at
-        if ignore_case:
-            body["ignore_case"] = True
+        if updated_start_at is not None:
+            body["updated_start_at"] = updated_start_at
+        if updated_end_at is not None:
+            body["updated_end_at"] = updated_end_at
         if open_only:
             body["open_only"] = True
         if completed_only:
             body["completed_only"] = True
+        if completed is not None:
+            body["completed"] = completed
+        if priority_min is not None:
+            body["priority_min"] = priority_min
+        if priority_max is not None:
+            body["priority_max"] = priority_max
+        if tag is not None:
+            body["tag"] = tag
         return self._user_post("/api/v1/todos/search", body)
 
     def todo_get(self, todo_id: int) -> dict[str, Any]:
@@ -244,18 +285,50 @@ class AMTodoClient:
 
     def schedule_search(
         self,
-        pattern: str,
+        query: str,
+        fields: list[str] | None = None,
+        use_regex: bool = False,
+        ignore_case: bool = True,
         start_at: int | None = None,
         end_at: int | None = None,
-        ignore_case: bool = False,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
+        category: str | None = None,
+        location: str | None = None,
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"pattern": pattern}
+        body: dict[str, Any] = {
+            "query": query,
+            "use_regex": use_regex,
+            "ignore_case": ignore_case,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "limit": limit,
+            "offset": offset,
+        }
+        if fields is not None:
+            body["fields"] = fields
         if start_at is not None:
             body["start_at"] = start_at
         if end_at is not None:
             body["end_at"] = end_at
-        if ignore_case:
-            body["ignore_case"] = True
+        if created_start_at is not None:
+            body["created_start_at"] = created_start_at
+        if created_end_at is not None:
+            body["created_end_at"] = created_end_at
+        if updated_start_at is not None:
+            body["updated_start_at"] = updated_start_at
+        if updated_end_at is not None:
+            body["updated_end_at"] = updated_end_at
+        if category is not None:
+            body["category"] = category
+        if location is not None:
+            body["location"] = location
         return self._user_post("/api/v1/schedules/search", body)
 
     def schedule_get(self, schedule_id: int) -> dict[str, Any]:

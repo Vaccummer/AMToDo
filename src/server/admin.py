@@ -12,7 +12,7 @@ from db.base import Base
 from models.user import User
 from serialization import user_to_dict
 from server.auth import require_admin, require_user
-from server.schemas import AdminInitDbRequest, UserMeRequest
+from server.schemas import AdminConfigRequest, AdminInitDbRequest, UserMeRequest
 
 router = APIRouter()
 
@@ -26,6 +26,7 @@ def health(request: Request) -> dict[str, object]:
         "version": __version__,
         "limits": {
             "max_attachment_size_bytes": settings.max_attachment_size_bytes,
+            "max_attachment_request_body_bytes": settings.max_attachment_request_body_bytes,
             "max_attachments_per_todo": settings.max_attachments_per_todo,
         },
     }
@@ -58,31 +59,36 @@ def agent_guide() -> dict[str, object]:
                 "field": "admin_token",
                 "applies_to": [
                     "POST /admin/init-db",
-                    "POST /admin/users/list",
-                    "POST /admin/users/create",
-                    "POST /admin/users/delete",
-                    "POST /admin/users/update",
-                    "POST /admin/users/regen-token",
+                    "POST /admin/config",
                 ],
             },
             "user": {
                 "scheme": "Body",
                 "field": "access_token",
-                "note": "User tokens are created via POST /admin/users/create. Business endpoints require a valid user token.",
+                "note": "User tokens are created via CLI. Business endpoints require a valid user token.",
             },
         },
         "endpoints": [
             {"method": "GET", "path": "/health", "auth": "none"},
             {"method": "GET", "path": "/agent-guide", "auth": "none"},
             {"method": "POST", "path": "/admin/init-db", "auth": "admin", "body": {"admin_token": "<string>"}},
-            {"method": "POST", "path": "/admin/users/list", "auth": "admin", "body": {"admin_token": "<string>"}},
-            {"method": "POST", "path": "/admin/users/create", "auth": "admin", "body": {"admin_token": "<string>", "name": "<string>"}},
-            {"method": "POST", "path": "/admin/users/delete", "auth": "admin", "body": {"admin_token": "<string>", "user_id": "<int>"}},
-            {"method": "POST", "path": "/admin/users/update", "auth": "admin", "body": {"admin_token": "<string>", "user_id": "<int>", "name": "<string>"}},
-            {"method": "POST", "path": "/admin/users/regen-token", "auth": "admin", "body": {"admin_token": "<string>", "user_id": "<int>"}},
+            {"method": "POST", "path": "/admin/config", "auth": "admin", "body": {"admin_token": "<string>"}},
             {"method": "POST", "path": "/user", "auth": "user", "body": {"access_token": "<string>"}},
             {"method": "POST", "path": "/todos/list", "auth": "user"},
-            {"method": "POST", "path": "/todos/search", "auth": "user"},
+            {
+                "method": "POST",
+                "path": "/todos/search",
+                "auth": "user",
+                "body": {
+                    "query": "<string>",
+                    "use_regex": False,
+                    "fields": ["title", "description", "tag"],
+                    "sort_by": "updated_at",
+                    "sort_order": "desc",
+                    "limit": 50,
+                    "offset": 0,
+                },
+            },
             {"method": "POST", "path": "/todos/stats", "auth": "user"},
             {"method": "POST", "path": "/todos/create", "auth": "user"},
             {"method": "POST", "path": "/todos/get", "auth": "user"},
@@ -91,7 +97,20 @@ def agent_guide() -> dict[str, object]:
             {"method": "POST", "path": "/todos/reopen", "auth": "user"},
             {"method": "POST", "path": "/todos/remove", "auth": "user"},
             {"method": "POST", "path": "/schedules/list", "auth": "user"},
-            {"method": "POST", "path": "/schedules/search", "auth": "user"},
+            {
+                "method": "POST",
+                "path": "/schedules/search",
+                "auth": "user",
+                "body": {
+                    "query": "<string>",
+                    "use_regex": False,
+                    "fields": ["title", "description", "location", "category"],
+                    "sort_by": "updated_at",
+                    "sort_order": "desc",
+                    "limit": 50,
+                    "offset": 0,
+                },
+            },
             {"method": "POST", "path": "/schedules/stats", "auth": "user"},
             {"method": "POST", "path": "/schedules/conflicts", "auth": "user"},
             {"method": "POST", "path": "/schedules/create", "auth": "user"},
@@ -117,6 +136,24 @@ def init_db(
     db = request.app.state.db
     Base.metadata.create_all(db.engine)
     return {"ok": True, "database": "initialized"}
+
+
+@router.post("/admin/config")
+def server_config(
+    body: AdminConfigRequest,
+    request: Request,
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """Return sensitive server configuration. Requires admin token, fully encrypted."""
+    settings = request.app.state.settings
+    attachment_root = request.app.state.attachment_root
+    return {
+        "ok": True,
+        "config": {
+            "database_url": settings.database_url,
+            "attachment_root": str(attachment_root),
+        },
+    }
 
 
 @router.post("/user")

@@ -25,25 +25,8 @@ class AdminInitDbRequest(AdminAuthMixin):
     pass
 
 
-class AdminUserListRequest(AdminAuthMixin):
+class AdminConfigRequest(AdminAuthMixin):
     pass
-
-
-class AdminUserCreateRequest(AdminAuthMixin):
-    name: str
-
-
-class AdminUserDeleteRequest(AdminAuthMixin):
-    user_id: int
-
-
-class AdminUserUpdateRequest(AdminAuthMixin):
-    user_id: int
-    name: str | None = None
-
-
-class AdminUserRegenTokenRequest(AdminAuthMixin):
-    user_id: int
 
 
 # ── User ──
@@ -62,16 +45,30 @@ class TodoListRequest(UserAuthMixin):
 
 
 class TodoSearchRequest(UserAuthMixin):
-    pattern: str
+    query: str = ""
+    use_regex: bool = False
+    ignore_case: bool = True
+    fields: list[str] = Field(default_factory=lambda: ["title", "description", "tag"])
     start_at: int | None = None
     end_at: int | None = None
     planned_start_at: int | None = None
     planned_end_at: int | None = None
+    due_start_at: int | None = None
+    due_end_at: int | None = None
     created_start_at: int | None = None
     created_end_at: int | None = None
-    ignore_case: bool = False
     open_only: bool = False
     completed_only: bool = False
+    updated_start_at: int | None = None
+    updated_end_at: int | None = None
+    completed: bool | None = None
+    priority_min: int | None = Field(default=None, ge=0)
+    priority_max: int | None = Field(default=None, ge=0)
+    tag: str | None = None
+    sort_by: str = "updated_at"
+    sort_order: str = "desc"
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
 
 class TodoStatsRequest(UserAuthMixin):
@@ -176,10 +173,24 @@ class ScheduleListRequest(UserAuthMixin):
 
 
 class ScheduleSearchRequest(UserAuthMixin):
-    pattern: str
+    query: str = ""
+    use_regex: bool = False
+    ignore_case: bool = True
+    fields: list[str] = Field(
+        default_factory=lambda: ["title", "description", "location", "category"]
+    )
     start_at: int | None = None
     end_at: int | None = None
-    ignore_case: bool = False
+    created_start_at: int | None = None
+    created_end_at: int | None = None
+    updated_start_at: int | None = None
+    updated_end_at: int | None = None
+    category: str | None = None
+    location: str | None = None
+    sort_by: str = "updated_at"
+    sort_order: str = "desc"
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
 
 class ScheduleStatsRequest(UserAuthMixin):

@@ -103,6 +103,18 @@ class TestTodoClient:
         client.todo_create(title="Read book")
         result = client.todo_search("milk")
         assert result["count"] == 1
+        assert result["query"] == "milk"
+        assert result["use_regex"] is False
+
+        literal = client.todo_search("milk|book")
+        regex = client.todo_search("milk|book", use_regex=True)
+        assert literal["count"] == 0
+        assert regex["total"] == 2
+
+        paged = client.todo_search("", sort_by="created_at", sort_order="asc", limit=1)
+        assert paged["count"] == 1
+        assert paged["total"] == 2
+        assert paged["pagination"]["has_more"] is True
 
     def test_update(self, client):
         client.todo_create(title="Old")

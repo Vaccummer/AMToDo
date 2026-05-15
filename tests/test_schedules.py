@@ -153,7 +153,12 @@ def test_search_conflicts_and_stats(tmp_path: Path) -> None:
 
     with UnitOfWork(database) as uow:
         service = ScheduleService(uow.schedules, clock, uow.schedule_model)
-        search_matches = service.search("math|sync", start_at=0, end_at=400, case_sensitive=False)
+        search_matches = service.search(
+            "math|sync",
+            use_regex=True,
+            start_at=0,
+            end_at=400,
+        )
         conflicts = service.conflicts(150, 180)
         no_conflicts = service.conflicts(200, 300)
         stats = service.stats(start_at=0, end_at=400)
@@ -169,6 +174,48 @@ def test_search_conflicts_and_stats(tmp_path: Path) -> None:
                 "meeting": {"count": 1, "duration": 60},
             },
         }
+
+
+def test_search_fields_filters_and_sorting(tmp_path: Path) -> None:
+    """Search can choose fields, filter scalar values, and sort results."""
+
+    database = _create_test_database(tmp_path)
+
+    with UnitOfWork(database) as uow:
+        first_service = ScheduleService(uow.schedules, FixedClock(100), uow.schedule_model)
+        first_service.create(
+            ScheduleDraft(
+                title="Planning",
+                start_at=100,
+                end_at=200,
+                timezone=TIMEZONE,
+                location="Room A",
+                category="work",
+            )
+        )
+        second_service = ScheduleService(uow.schedules, FixedClock(200), uow.schedule_model)
+        second_service.create(
+            ScheduleDraft(
+                title="Review",
+                start_at=300,
+                end_at=360,
+                timezone=TIMEZONE,
+                location="Room B",
+                category="work",
+            )
+        )
+
+    with UnitOfWork(database) as uow:
+        service = ScheduleService(uow.schedules, FixedClock(300), uow.schedule_model)
+        matches = service.search(
+            "room",
+            fields=["location"],
+            category="work",
+            sort_by="duration",
+            sort_order="desc",
+        )
+
+        assert [schedule.title for schedule in matches] == ["Planning", "Review"]
 
 
 def test_show_missing_and_invalid_window_raise_domain_errors(tmp_path: Path) -> None:
