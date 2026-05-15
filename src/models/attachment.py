@@ -27,3 +27,4 @@ class TodoAttachment(EpochAuditMixin, Base):
     nonce: Mapped[str] = mapped_column(String(32), nullable=False)
     encryption_alg: Mapped[str] = mapped_column(String(32), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    is_orphaned: Mapped[bool] = mapped_column(default=False, server_default="0")
