@@ -35,6 +35,7 @@ class AppSettings:
     request_timestamp_tolerance_seconds: int = 300
     max_attachment_size_bytes: int = DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
     max_attachments_per_todo: int = DEFAULT_MAX_ATTACHMENTS_PER_TODO
+    attachment_root: str = ""
 
 
 def amtodo_root() -> Path:
