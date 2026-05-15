@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-
 # ── Auth mixins ──
 
 class AdminAuthMixin(BaseModel):
@@ -105,6 +104,27 @@ class TodoUpdateRequest(UserAuthMixin):
 
 class TodoTargetsRequest(UserAuthMixin):
     targets: list[int]
+
+
+class TodoAttachmentListRequest(UserAuthMixin):
+    todo_id: int
+
+
+class TodoAttachmentGetRequest(UserAuthMixin):
+    todo_id: int
+    attachment_id: int
+
+
+class TodoAttachmentUploadRequest(UserAuthMixin):
+    todo_id: int
+    filename: str
+    content_base64: str
+    mime_type: str | None = None
+
+
+class TodoAttachmentRemoveRequest(UserAuthMixin):
+    todo_id: int
+    attachment_id: int
 
 
 # ── Schedule ──

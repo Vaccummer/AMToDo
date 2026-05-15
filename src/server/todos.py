@@ -2,17 +2,32 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 
 from clock import Clock
-from config import AppSettings
+from config import AppSettings, amtodo_root
 from exceptions import AMToDoError, ValidationError
-from serialization import todo_to_dict
+from serialization import attachment_to_dict, todo_to_dict
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
+    TodoAttachmentGetRequest,
+    TodoAttachmentListRequest,
+    TodoAttachmentRemoveRequest,
+    TodoAttachmentUploadRequest,
     TodoCreateRequest,
     TodoGetRequest,
     TodoListRequest,
@@ -21,7 +36,7 @@ from server.schemas import (
     TodoTargetsRequest,
     TodoUpdateRequest,
 )
-from services import TodoDraft, TodoService, TodoUpdate
+from services import AttachmentDraft, AttachmentService, TodoDraft, TodoService, TodoUpdate
 from services.uow import UnitOfWork
 
 if TYPE_CHECKING:
@@ -122,6 +137,140 @@ def todo_stats(
         "range": {"start_at": body.start_at, "end_at": body.end_at},
         "stats": stats,
     }
+
+
+@router.post("/attachments/list")
+def list_attachments(
+    body: TodoAttachmentListRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """List encrypted attachment metadata for a ToDo."""
+
+    service = _attachment_service(uow, clock)
+    attachments = service.list_for_todo(body.todo_id)
+    return {
+        "ok": True,
+        "count": len(attachments),
+        "attachments": [
+            attachment_to_dict(attachment, uow.user_id) for attachment in attachments
+        ],
+    }
+
+
+@router.post("/attachments/get")
+def show_attachment(
+    body: TodoAttachmentGetRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Return encrypted attachment metadata."""
+
+    service = _attachment_service(uow, clock)
+    attachment = service.show(body.todo_id, body.attachment_id)
+    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
+
+
+@router.post("/attachments/remove")
+def remove_attachment(
+    body: TodoAttachmentRemoveRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Remove an attachment from a ToDo."""
+
+    service = _attachment_service(uow, clock)
+    attachment = service.remove(body.todo_id, body.attachment_id)
+    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
+
+
+@router.post("/attachments/upload")
+def upload_attachment_json(
+    body: TodoAttachmentUploadRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Upload a file attachment via encrypted JSON."""
+
+    try:
+        content = base64.b64decode(body.content_base64, validate=True)
+    except ValueError as exc:
+        raise ValidationError("content_base64 must be valid base64") from exc
+
+    service = _attachment_service(uow, clock)
+    attachment = service.create(
+        body.todo_id,
+        AttachmentDraft(
+            filename=body.filename,
+            content=content,
+            mime_type=body.mime_type,
+        ),
+    )
+    uow.session.flush()
+    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
+
+
+@router.post("/{todo_id}/attachments/upload")
+async def upload_attachment(
+    todo_id: int,
+    request: Request,
+    clock: ClockDep,
+    access_token: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+) -> dict[str, object]:
+    """Upload a file attachment.
+
+    This multipart endpoint is intentionally outside JSON body encryption; the
+    file is encrypted at rest immediately before it is written to disk.
+    """
+
+    user_id = _require_form_or_query_user(request, access_token)
+    content = await file.read()
+    with UnitOfWork(request.app.state.db, user_id) as uow:
+        service = _attachment_service(uow, clock)
+        attachment = service.create(
+            todo_id,
+            AttachmentDraft(
+                filename=file.filename or "attachment",
+                content=content,
+                mime_type=file.content_type,
+            ),
+        )
+        uow.session.flush()
+        attachment_id = attachment.id
+        file_index = attachment.file_index
+    return {
+        "ok": True,
+        "attachment": {
+            "id": attachment_id,
+            "todo_id": todo_id,
+            "file_index": file_index,
+            "filename": file.filename or "attachment",
+        },
+    }
+
+
+@router.get("/{todo_id}/attachments/{attachment_id}/download")
+def download_attachment(
+    todo_id: int,
+    attachment_id: int,
+    request: Request,
+    clock: ClockDep,
+    access_token: str,
+) -> Response:
+    """Download encrypted attachment bytes."""
+
+    user_id = _require_form_or_query_user(request, access_token)
+    with UnitOfWork(request.app.state.db, user_id) as uow:
+        service = _attachment_service(uow, clock)
+        attachment = service.show(todo_id, attachment_id)
+        cipher = service.read_cipher(todo_id, attachment_id)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{attachment.filename}.enc"',
+            "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
+            "X-AMToDo-Updated-At": str(attachment.updated_at),
+        }
+    return Response(content=cipher, media_type="application/octet-stream", headers=headers)
 
 
 @router.post("/create")
@@ -277,3 +426,25 @@ def _target_result(
             "error": {"type": type(exc).__name__, "message": str(exc)},
         }
     return {"target": target, "ok": True, "todo": todo_to_dict(todo, timezone)}
+
+
+def _attachment_service(uow: UnitOfWork, clock: Clock) -> AttachmentService:
+    return AttachmentService(
+        uow.attachments,
+        uow.todos,
+        clock,
+        uow.attachment_model,
+        amtodo_root(),
+        uow.user_id,
+    )
+
+
+def _require_form_or_query_user(request: Request, access_token: str) -> int:
+    token_map: dict[str, int] = request.app.state.token_map
+    user_id = token_map.get(access_token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid user token",
+        )
+    return user_id

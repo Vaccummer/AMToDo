@@ -159,6 +159,9 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
         if request.url.path.rstrip("/") == "/api/v1/health":
             return await call_next(request)
 
+        if _is_attachment_upload(request):
+            return await call_next(request)
+
         # Read-only methods pass through without body encryption
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
@@ -242,6 +245,19 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
 def _is_json_response(response) -> bool:
     content_type = response.headers.get("content-type", "")
     return "application/json" in content_type
+
+
+def _is_attachment_upload(request) -> bool:
+    # Only the multipart upload endpoint (with a numeric todo_id in the path)
+    # needs bypass; the JSON upload endpoint is encrypted like other POSTs.
+    import re
+
+    return bool(
+        request.method == "POST"
+        and re.fullmatch(
+            r"/api/v1/todos/\d+/attachments/upload", request.url.path
+        )
+    )
 
 
 def create_app(settings: AppSettings) -> FastAPI:
