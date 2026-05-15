@@ -270,10 +270,6 @@ def create_app(settings: AppSettings) -> FastAPI:
     app.state.settings = settings
     app.state.replay_protector = _build_replay_protector(settings)
 
-    if not settings.attachment_root:
-        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
-        sys.exit(1)
-
     resolved_attachment_root = amtodo_root() / settings.attachment_root
     resolved_attachment_root.mkdir(parents=True, exist_ok=True)
     app.state.attachment_root = resolved_attachment_root
@@ -362,6 +358,10 @@ def main() -> None:
         request_timestamp_tolerance_seconds=tolerance,
         attachment_root=attachment_root,
     )
+    if not attachment_root:
+        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
+        sys.exit(1)
+
     app = create_app(settings)
 
     log_config = _build_log_config(str(log_path))
