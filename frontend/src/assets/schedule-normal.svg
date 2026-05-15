@@ -1,0 +1,33 @@
+<svg
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  aria-label="普通模式"
+>
+  <defs>
+    <linearGradient id="normalSunGradient" x1="6" y1="4" x2="18" y2="20">
+      <stop offset="0%" stop-color="#FFD86B" />
+      <stop offset="100%" stop-color="#FF9F1C" />
+    </linearGradient>
+  </defs>
+
+  <!-- rays -->
+  <g stroke="#FFB703" stroke-width="1.6" stroke-linecap="round">
+    <path d="M12 2.5V4.5" />
+    <path d="M12 19.5V21.5" />
+    <path d="M4.5 12H2.5" />
+    <path d="M21.5 12H19.5" />
+    <path d="M6.7 6.7L5.3 5.3" />
+    <path d="M18.7 18.7L17.3 17.3" />
+    <path d="M17.3 6.7L18.7 5.3" />
+    <path d="M5.3 18.7L6.7 17.3" />
+  </g>
+
+  <!-- sun -->
+  <circle cx="12" cy="12" r="5.3" fill="url(#normalSunGradient)" />
+
+  <!-- highlight -->
+  <circle cx="10.2" cy="9.8" r="1.15" fill="#FFF4C2" opacity="0.75" />
+</svg>

@@ -19,6 +19,8 @@ import toTodayIcon from "../assets/ToToday.svg";
 
 type Props = {
   api: AMToDoApi;
+  calendarDays?: number;
+  weekStart?: number;
 };
 
 function EditIcon() {
@@ -39,7 +41,7 @@ function EditIcon() {
   );
 }
 
-export function TodoView({ api }: Props) {
+export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedOffset, setSelectedOffset] = useState(0);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -53,10 +55,10 @@ export function TodoView({ api }: Props) {
   const calendarStripRef = useRef<HTMLDivElement>(null);
 
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
-  const weekStart = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
+  const weekStartKey = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekStart, i)),
-    [weekStart]
+    () => Array.from({ length: calendarDays }, (_, i) => addDaysToDateKey(weekStartKey, i)),
+    [weekStartKey, calendarDays]
   );
   const selectedDayKey = days[selectedOffset];
 
@@ -192,13 +194,11 @@ export function TodoView({ api }: Props) {
             }}
           >
             {monthLabel}
-            <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
-              {showCalendar ? (
+            {showCalendar ? (
+              <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
                 <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
-              ) : (
-                <path d="M18 78 H82 Q90 78 86 70 L56 26 Q50 18 44 26 L14 70 Q10 78 18 78 Z" fill="currentColor" />
-              )}
-            </svg>
+              </svg>
+            ) : null}
           </button>
         </div>
         <div className="cal-day-row">
@@ -223,11 +223,11 @@ export function TodoView({ api }: Props) {
           </button>
           );
         })}
-        <button type="button" className="cal-nav" aria-label="下一周" onClick={nextWeek}>
-          <img src={rightIcon} alt="" />
-        </button>
         <button type="button" className="cal-today" aria-label="回到今天" onClick={goToToday} disabled={isTodaySelected}>
           <img src={toTodayIcon} alt="" />
+        </button>
+        <button type="button" className="cal-nav" aria-label="下一周" onClick={nextWeek}>
+          <img src={rightIcon} alt="" />
         </button>
         </div>
       </div>
@@ -239,6 +239,7 @@ export function TodoView({ api }: Props) {
           anchorRect={anchorRect}
           onSelect={goToDate}
           onClose={() => setShowCalendar(false)}
+          weekStart={weekStart}
         />
       ) : null}
 

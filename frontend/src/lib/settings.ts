@@ -1,0 +1,46 @@
+export interface UISettings {
+  server_url: string;
+  access_token: string;
+  admin_token: string;
+  language: string;
+  timezone: string;
+  font_family: string;
+  font_size: number;
+  calendar_days: number;
+  week_start: number;
+  scheduler_start_hour: number;
+  scheduler_end_hour: number;
+  scheduler_slot_minutes: number;
+}
+
+export const DEFAULT_SETTINGS: UISettings = {
+  server_url: "http://127.0.0.1:8000",
+  access_token: "",
+  admin_token: "",
+  language: "zh-CN",
+  timezone: "Asia/Shanghai",
+  font_family: "JetBrainsMono Nerd Font, Microsoft YaHei UI, Segoe UI, sans-serif",
+  font_size: 28,
+  calendar_days: 7,
+  week_start: 0,
+  scheduler_start_hour: 6,
+  scheduler_end_hour: 24,
+  scheduler_slot_minutes: 30,
+};
+
+export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
+  return {
+    server_url: raw.server_url ?? DEFAULT_SETTINGS.server_url,
+    access_token: raw.access_token ?? DEFAULT_SETTINGS.access_token,
+    admin_token: raw.admin_token ?? DEFAULT_SETTINGS.admin_token,
+    language: raw.language ?? DEFAULT_SETTINGS.language,
+    timezone: raw.timezone ?? DEFAULT_SETTINGS.timezone,
+    font_family: raw.font_family ?? DEFAULT_SETTINGS.font_family,
+    font_size: Number(raw.font_size) || DEFAULT_SETTINGS.font_size,
+    calendar_days: Number(raw.calendar_days) || DEFAULT_SETTINGS.calendar_days,
+    week_start: raw.week_start !== undefined ? Number(raw.week_start) : DEFAULT_SETTINGS.week_start,
+    scheduler_start_hour: Number(raw.scheduler_start_hour) || DEFAULT_SETTINGS.scheduler_start_hour,
+    scheduler_end_hour: Number(raw.scheduler_end_hour) || DEFAULT_SETTINGS.scheduler_end_hour,
+    scheduler_slot_minutes: Number(raw.scheduler_slot_minutes) || DEFAULT_SETTINGS.scheduler_slot_minutes,
+  };
+}

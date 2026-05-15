@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleItem, ScheduleUpdateRequest } from "../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
+import { DatePicker } from "./DatePicker";
 
 type Props = {
   schedule: ScheduleItem;
@@ -46,7 +47,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [endTime, setEndTime] = useState(
     splitDatetime(datetimeLocalFromEpoch(initial.end_at)).time
   );
-  const [manualDuration, setManualDuration] = useState("");
   const [location, setLocation] = useState(initial.location ?? "");
   const [category, setCategory] = useState(initial.category ?? "");
   const [saving, setSaving] = useState(false);
@@ -72,48 +72,12 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const startKey = startDate && startTime ? `${startDate}T${startTime}` : "";
   const endKey = endDate && endTime ? `${endDate}T${endTime}` : "";
 
-  // Recalculate end from start + duration (in minutes)
-  function recalcEndFromDuration(startDt: string, durMins: number) {
-    const startEpoch = epochFromDatetimeLocal(startDt);
-    if (isNaN(startEpoch)) return;
-    const newEndEpoch = startEpoch + durMins * 60;
-    const { date, time } = splitDatetime(datetimeLocalFromEpoch(newEndEpoch));
-    setEndDate(date);
-    setEndTime(time);
-  }
-
-  function handleDurationChange(value: string) {
-    setManualDuration(value);
-    const mins = parseInt(value, 10);
-    if (!isNaN(mins) && mins > 0 && startDate && startTime && timeKeyValid(startTime)) {
-      recalcEndFromDuration(`${startDate}T${startTime}`, mins);
-    }
-  }
-
-  function handleStartDateChange(value: string) {
-    setStartDate(value);
-    const mins = parseInt(manualDuration, 10);
-    if (!isNaN(mins) && mins > 0 && value && startTime && timeKeyValid(startTime)) {
-      recalcEndFromDuration(`${value}T${startTime}`, mins);
-    }
-  }
-
   function handleStartTimeChange(value: string) {
     setStartTime(value);
-    const mins = parseInt(manualDuration, 10);
-    if (!isNaN(mins) && mins > 0 && startDate && value && timeKeyValid(value)) {
-      recalcEndFromDuration(`${startDate}T${value}`, mins);
-    }
-  }
-
-  function handleEndDateChange(value: string) {
-    setEndDate(value);
-    setManualDuration("");
   }
 
   function handleEndTimeChange(value: string) {
     setEndTime(value);
-    setManualDuration("");
   }
 
   // Validation
@@ -148,10 +112,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     const durMins = Math.round((eEpoch - sEpoch) / 60);
     return { startEpoch: sEpoch, endEpoch: eEpoch, durMins };
   }, [startValid, endValid, startKey, endKey]);
-
-  const effectiveMinutes = manualDuration
-    ? parseInt(manualDuration, 10)
-    : timeline?.durMins;
 
   const saveDisabled = !dirty || !startValid || !endValid || saving;
 
@@ -290,16 +250,15 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
           {/* Start datetime */}
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="smd-start-date">
+            <label className="schedule-modal-label">
               开始时间
             </label>
             <div className="schedule-modal-datetime-row">
-              <input
-                id="smd-start-date"
-                type="date"
-                className={`schedule-modal-input schedule-modal-datetime-date${!startValid ? " invalid" : ""}`}
+              <DatePicker
                 value={startDate}
-                onChange={(e) => handleStartDateChange(e.target.value)}
+                onChange={setStartDate}
+                hasError={!startValid && startDate !== ""}
+                theme="gold"
               />
               <input
                 type="text"
@@ -310,21 +269,19 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 onChange={(e) => handleStartTimeChange(e.target.value)}
               />
             </div>
-            <span className="schedule-modal-datetime-label">开始</span>
           </div>
 
           {/* End datetime */}
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="smd-end-date">
+            <label className="schedule-modal-label">
               结束时间
             </label>
             <div className="schedule-modal-datetime-row">
-              <input
-                id="smd-end-date"
-                type="date"
-                className={`schedule-modal-input schedule-modal-datetime-date${!endValid ? " invalid" : ""}`}
+              <DatePicker
                 value={endDate}
-                onChange={(e) => handleEndDateChange(e.target.value)}
+                onChange={setEndDate}
+                hasError={!endValid && endDate !== ""}
+                theme="gold"
               />
               <input
                 type="text"
@@ -335,7 +292,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 onChange={(e) => handleEndTimeChange(e.target.value)}
               />
             </div>
-            <span className="schedule-modal-datetime-label">结束</span>
           </div>
 
           {/* Timeline bar */}
@@ -363,35 +319,13 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               <span className="schedule-modal-timeline-end">
                 {formatTime(timeline.endEpoch)}
               </span>
-              {effectiveMinutes != null && !isNaN(effectiveMinutes) ? (
+              {timeline.durMins ? (
                 <span className="schedule-modal-timeline-dur">
-                  {effectiveMinutes} 分钟
+                  {timeline.durMins} 分钟
                 </span>
               ) : null}
             </div>
           ) : null}
-
-          {/* Duration override */}
-          <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="smd-duration">
-              时长
-            </label>
-            <div className="schedule-modal-duration-row">
-              <input
-                id="smd-duration"
-                type="number"
-                className="schedule-modal-input schedule-modal-duration-input"
-                min={1}
-                placeholder="自动"
-                value={manualDuration}
-                onChange={(e) => handleDurationChange(e.target.value)}
-              />
-              <span className="schedule-modal-duration-unit">分钟</span>
-              <span className="schedule-modal-duration-hint">
-                （留空则自动计算）
-              </span>
-            </div>
-          </div>
 
           {/* Location & Category */}
           <div className="schedule-modal-field-row">

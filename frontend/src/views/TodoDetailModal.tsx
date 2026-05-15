@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, TodoItem } from "../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
+import { DatePicker } from "./DatePicker";
 
 type Props = {
   todo: TodoItem;
@@ -200,14 +201,13 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           <div className="modal-field">
-            <label className="modal-field-label" htmlFor="md-planned-date">计划日期</label>
+            <label className="modal-field-label">计划日期</label>
             <div className="modal-datetime-row">
-              <input
-                id="md-planned-date"
-                type="date"
-                className={`modal-input modal-datetime-date${plannedAtError ? " invalid" : ""}`}
+              <DatePicker
                 value={plannedDate}
-                onChange={(e) => setPlannedDate(e.target.value)}
+                onChange={setPlannedDate}
+                hasError={plannedAtError && plannedDate !== ""}
+                theme="green"
               />
               <input
                 type="text"
@@ -224,14 +224,12 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           <div className="modal-field">
-            <label className="modal-field-label" htmlFor="md-due-date">截止日期</label>
+            <label className="modal-field-label">截止日期</label>
             <div className="modal-datetime-row">
-              <input
-                id="md-due-date"
-                type="date"
-                className="modal-input modal-datetime-date"
+              <DatePicker
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={setDueDate}
+                theme="green"
               />
               <input
                 type="text"

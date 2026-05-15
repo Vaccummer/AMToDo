@@ -9,5 +9,7 @@ contextBridge.exposeInMainWorld("amtodoShell", {
     const listener = (_event, value) => callback(value);
     ipcRenderer.on("window:maximized", listener);
     return () => ipcRenderer.removeListener("window:maximized", listener);
-  }
+  },
+  readSettings: () => ipcRenderer.invoke("settings:read"),
+  writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings)
 });

@@ -1,0 +1,58 @@
+<svg
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  aria-label="完全模式"
+>
+  <defs>
+    <linearGradient id="fullSunGradient" x1="3" y1="4" x2="16" y2="17">
+      <stop offset="0%" stop-color="#FFD86B" />
+      <stop offset="100%" stop-color="#FF9F1C" />
+    </linearGradient>
+
+    <linearGradient id="fullMoonGradient" x1="13" y1="5" x2="22" y2="19">
+      <stop offset="0%" stop-color="#E7EEFF" />
+      <stop offset="100%" stop-color="#7C8DB5" />
+    </linearGradient>
+  </defs>
+
+  <!-- sun rays -->
+  <g stroke="#FFB703" stroke-width="1.35" stroke-linecap="round">
+    <path d="M8.8 2.7V4.35" />
+    <path d="M8.8 15.25V16.9" />
+    <path d="M2.55 9.8H4.2" />
+    <path d="M13.4 9.8H15.05" />
+    <path d="M4.35 5.35L5.5 6.5" />
+    <path d="M12.1 13.1L13.25 14.25" />
+    <path d="M13.25 5.35L12.1 6.5" />
+    <path d="M5.5 13.1L4.35 14.25" />
+  </g>
+
+  <!-- bigger sun -->
+  <circle cx="8.8" cy="9.8" r="4.65" fill="url(#fullSunGradient)" />
+
+  <!-- sun highlight -->
+  <circle cx="7.3" cy="8.1" r="0.95" fill="#FFF4C2" opacity="0.75" />
+
+  <!-- moon crescent -->
+  <path
+    d="M18.35 4.95C16.95 6.1 16.1 7.8 16.1 9.75C16.1 13.25 18.95 16.1 22.45 16.1C22.7 16.1 22.95 16.08 23.2 16.05C22.25 19.05 19.45 21.2 16.15 21.2C12.05 21.2 8.75 17.9 8.75 13.8C8.75 9.75 12 6.45 16.05 6.4C16.8 6.4 17.55 6.55 18.35 4.95Z"
+    fill="url(#fullMoonGradient)"
+  />
+
+  <!-- moon outline -->
+  <path
+    d="M18.35 4.95C16.95 6.1 16.1 7.8 16.1 9.75C16.1 13.25 18.95 16.1 22.45 16.1C22.7 16.1 22.95 16.08 23.2 16.05C22.25 19.05 19.45 21.2 16.15 21.2C12.05 21.2 8.75 17.9 8.75 13.8C8.75 9.75 12 6.45 16.05 6.4C16.8 6.4 17.55 6.55 18.35 4.95Z"
+    stroke="#6E7FA8"
+    stroke-width="0.75"
+    opacity="0.35"
+  />
+
+  <!-- tiny star -->
+  <path
+    d="M16.25 2.65L16.6 3.7L17.65 4.05L16.6 4.4L16.25 5.45L15.9 4.4L14.85 4.05L15.9 3.7L16.25 2.65Z"
+    fill="#AFC4FF"
+  />
+</svg>
