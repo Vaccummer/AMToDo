@@ -159,19 +159,24 @@ function dateKeyToNoonUtc(dateKey: string): Date {
 }
 
 export function mondayOfDateKey(dateKey: string): string {
+  return startOfWeekDateKey(dateKey, 1);
+}
+
+export function startOfWeekDateKey(dateKey: string, weekStart = 0): string {
   const d = dateKeyToNoonUtc(dateKey);
   const dow = d.getUTCDay();
-  const offset = dow === 0 ? -6 : 1 - dow;
+  const normalizedWeekStart = weekStart === 1 ? 1 : 0;
+  const offset = -((dow - normalizedWeekStart + 7) % 7);
   return addDaysToDateKey(dateKey, offset);
 }
 
-export function weekOfMonth(dateKey: string): number {
-  const monday = mondayOfDateKey(dateKey);
-  const [year, month] = monday.split("-").map(Number);
+export function weekOfMonth(dateKey: string, weekStart = 1): number {
+  const weekStartKey = startOfWeekDateKey(dateKey, weekStart);
+  const [year, month] = weekStartKey.split("-").map(Number);
   const firstOfMonth = `${year}-${String(month).padStart(2, "0")}-01`;
-  const firstMonday = mondayOfDateKey(firstOfMonth);
+  const firstWeekStart = startOfWeekDateKey(firstOfMonth, weekStart);
   const diffDays = Math.round(
-    (startOfDateKeyEpoch(monday) - startOfDateKeyEpoch(firstMonday)) / 86400
+    (startOfDateKeyEpoch(weekStartKey) - startOfDateKeyEpoch(firstWeekStart)) / 86400
   );
   return Math.floor(diffDays / 7) + 1;
 }

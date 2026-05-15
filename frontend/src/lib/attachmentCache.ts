@@ -1,9 +1,10 @@
-import type { AMToDoApi, AttachmentMetadata } from "../api/client";
+import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
+
+type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
 
 type CacheRecord = {
   key: string;
-  metadata: AttachmentMetadata;
-  cipher: ArrayBuffer;
+  metadata: CacheableMeta;
   plain: ArrayBuffer;
 };
 
@@ -12,12 +13,12 @@ const STORE_NAME = "attachments";
 const DB_VERSION = 1;
 
 export async function getAttachmentBlob(
-  api: AMToDoApi,
-  metadata: AttachmentMetadata
+  downloadFn: () => Promise<ArrayBuffer>,
+  metadata: CacheableMeta,
+  cacheKey: string,
 ): Promise<{ blob: Blob; cacheHit: boolean }> {
   const db = await openDb();
-  const key = cacheKey(metadata);
-  const cached = await getRecord(db, key);
+  const cached = await getRecord(db, cacheKey);
   if (cached && metadataMatches(cached.metadata, metadata)) {
     return {
       blob: new Blob([cached.plain], { type: metadata.mime_type }),
@@ -25,15 +26,36 @@ export async function getAttachmentBlob(
     };
   }
 
-  const cipher = await api.downloadTodoAttachment(metadata.todo_id, metadata.id);
-  await assertSha256(cipher, metadata.cipher_sha256);
+  const cipher = await downloadFn();
   const plain = await decryptAttachment(cipher, metadata);
-  await assertSha256(plain, metadata.plain_sha256);
-  await putRecord(db, { key, metadata, cipher, plain });
+  await putRecord(db, { key: cacheKey, metadata, plain });
   return {
     blob: new Blob([plain], { type: metadata.mime_type }),
     cacheHit: false
   };
+}
+
+export async function getCacheSize(): Promise<{ count: number; bytes: number }> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const cursorReq = store.openCursor();
+    let count = 0;
+    let bytes = 0;
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (cursor) {
+        const record = cursor.value as CacheRecord;
+        bytes += record.plain.byteLength;
+        count += 1;
+        cursor.continue();
+      } else {
+        resolve({ count, bytes });
+      }
+    };
+    cursorReq.onerror = () => reject(cursorReq.error);
+  });
 }
 
 export async function clearAttachmentCache(): Promise<void> {
@@ -43,17 +65,10 @@ export async function clearAttachmentCache(): Promise<void> {
   await txDone(tx);
 }
 
-function cacheKey(metadata: AttachmentMetadata): string {
-  return `${metadata.user_id}:${metadata.todo_id}:${metadata.id}`;
-}
-
-function metadataMatches(a: AttachmentMetadata, b: AttachmentMetadata): boolean {
+function metadataMatches(a: CacheableMeta, b: CacheableMeta): boolean {
   return (
     a.updated_at === b.updated_at &&
     a.plain_size_bytes === b.plain_size_bytes &&
-    a.plain_sha256 === b.plain_sha256 &&
-    a.cipher_size_bytes === b.cipher_size_bytes &&
-    a.cipher_sha256 === b.cipher_sha256 &&
     a.file_key === b.file_key &&
     a.nonce === b.nonce
   );
@@ -97,7 +112,7 @@ function txDone(tx: IDBTransaction): Promise<void> {
 
 async function decryptAttachment(
   cipher: ArrayBuffer,
-  metadata: AttachmentMetadata
+  metadata: CacheableMeta
 ): Promise<ArrayBuffer> {
   const keyBytes = base64ToBuffer(metadata.file_key);
   const nonce = base64ToBuffer(metadata.nonce);
@@ -105,16 +120,6 @@ async function decryptAttachment(
     "decrypt"
   ]);
   return crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, cipher);
-}
-
-async function assertSha256(content: ArrayBuffer, expected: string): Promise<void> {
-  const digest = await crypto.subtle.digest("SHA-256", content);
-  const actual = [...new Uint8Array(digest)]
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
-  if (actual !== expected) {
-    throw new Error("附件缓存校验失败");
-  }
 }
 
 function base64ToBuffer(value: string): ArrayBuffer {

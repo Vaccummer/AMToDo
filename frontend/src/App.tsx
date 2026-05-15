@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { AMToDoApi, type HealthResponse } from "./api/client";
+import { AMToDoApi, API_NETWORK_STATUS_EVENT, type HealthResponse } from "./api/client";
 import { ACCESS_TOKEN, SERVER_URL } from "./config";
 import { importP256PublicKey } from "./crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "./lib/settings";
 import { setDefaultTimezone } from "./lib/time";
 import { SettingsModal } from "./views/SettingsModal";
 import { ScheduleView } from "./views/ScheduleView";
+import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
 import closeIcon from "./assets/close.svg";
 import gearIcon from "./assets/gear.svg";
@@ -14,12 +15,24 @@ import minimumIcon from "./assets/minimum.svg";
 import userIcon from "./assets/user.svg";
 import windowlizeIcon from "./assets/windowlize.svg";
 
-type Tab = "todo" | "schedule";
+type Tab = "todo" | "schedule" | "search";
+type ConnectionStatus = "checking" | "online" | "offline";
+
+const shell = window.amtodoShell ?? {
+  minimize: async () => undefined,
+  toggleMaximize: async () => undefined,
+  close: async () => undefined,
+  isMaximized: async () => false,
+  onMaximizedChange: () => () => undefined,
+  readSettings: async () => ({}),
+  writeSettings: async () => ({ ok: true })
+};
 
 export function App() {
   const [activeTab, setActiveTab] = useState<Tab>("todo");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [username, setUsername] = useState("");
@@ -36,7 +49,7 @@ export function App() {
 
   // Load settings from disk on mount
   useEffect(() => {
-    window.amtodoShell.readSettings()
+    shell.readSettings()
       .then((raw) => {
         const parsed = parseSettings(raw as Record<string, string | undefined>);
         setSettings(parsed);
@@ -49,11 +62,13 @@ export function App() {
 
   // Bootstrap API client with health check + encryption
   useEffect(() => {
+    setConnectionStatus("checking");
     const bootstrap = async () => {
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
       setHealth(result);
       setHealthError(null);
+      setConnectionStatus("online");
 
       const limits = result.limits;
       if (result.public_key) {
@@ -69,8 +84,25 @@ export function App() {
     bootstrap().catch((error: unknown) => {
       setHealth(null);
       setHealthError(error instanceof Error ? error.message : "无法连接后端");
+      setConnectionStatus("offline");
     });
   }, [settings.server_url, settings.access_token]);
+
+  useEffect(() => {
+    function handleNetworkStatus(event: Event) {
+      const detail = (event as CustomEvent<{ online: boolean; message?: string }>).detail;
+      if (detail.online) {
+        setConnectionStatus("online");
+        setHealthError(null);
+      } else {
+        setConnectionStatus("offline");
+        setHealthError(detail.message ?? "网络错误");
+      }
+    }
+
+    window.addEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
+    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
+  }, []);
 
   // Fetch current user display name
   useEffect(() => {
@@ -81,12 +113,12 @@ export function App() {
 
   // Listen for window maximize changes
   useEffect(() => {
-    window.amtodoShell.isMaximized().then(setMaximized).catch(() => setMaximized(false));
-    return window.amtodoShell.onMaximizedChange(setMaximized);
+    shell.isMaximized().then(setMaximized).catch(() => setMaximized(false));
+    return shell.onMaximizedChange(setMaximized);
   }, []);
 
   const handleSettingsSave = useCallback((newSettings: UISettings) => {
-    window.amtodoShell.writeSettings({
+    shell.writeSettings({
       server_url: newSettings.server_url,
       access_token: newSettings.access_token,
       admin_token: newSettings.admin_token,
@@ -107,14 +139,16 @@ export function App() {
     setShowSettings(false);
   }, []);
 
+  const connectionOk = connectionStatus === "online";
+
   return (
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar-drag">
-          <div className={health ? "brand-dot ok" : "brand-dot"} />
+          <div className={connectionOk ? "brand-dot ok" : "brand-dot"} />
           <span className="brand-title">AMToDo</span>
-          <span className={health ? "server-pill ok" : "server-pill"}>
-            {health ? `API ${health.version}` : healthError ? "API 离线" : "API 检查中"}
+          <span className={connectionOk ? "server-pill ok" : "server-pill"}>
+            {connectionOk ? (health ? `API ${health.version}` : "API 在线") : healthError ? "API 离线" : "API 检查中"}
           </span>
         </div>
         {username ? (
@@ -132,13 +166,13 @@ export function App() {
           >
             <img src={gearIcon} alt="" />
           </button>
-          <button type="button" aria-label="最小化" onClick={() => window.amtodoShell.minimize()}>
+          <button type="button" aria-label="最小化" onClick={() => shell.minimize()}>
             <img src={minimumIcon} alt="" />
           </button>
           <button
             type="button"
             aria-label={maximized ? "还原" : "最大化"}
-            onClick={() => window.amtodoShell.toggleMaximize()}
+            onClick={() => shell.toggleMaximize()}
           >
             <img src={maximized ? windowlizeIcon : maximumIcon} alt="" />
           </button>
@@ -146,7 +180,7 @@ export function App() {
             type="button"
             aria-label="关闭"
             className="close"
-            onClick={() => window.amtodoShell.close()}
+            onClick={() => shell.close()}
           >
             <img src={closeIcon} alt="" />
           </button>
@@ -169,6 +203,13 @@ export function App() {
           >
             Schedule
           </button>
+          <button
+            type="button"
+            className={activeTab === "search" ? "active" : ""}
+            onClick={() => setActiveTab("search")}
+          >
+            Search
+          </button>
         </nav>
         <section className="content-panel">
           {activeTab === "todo" ? (
@@ -177,7 +218,7 @@ export function App() {
               calendarDays={settings.calendar_days}
               weekStart={settings.week_start}
             />
-          ) : (
+          ) : activeTab === "schedule" ? (
             <ScheduleView
               api={api}
               startHour={settings.scheduler_start_hour}
@@ -185,6 +226,8 @@ export function App() {
               slotMinutes={settings.scheduler_slot_minutes}
               weekStart={settings.week_start}
             />
+          ) : (
+            <SearchView api={api} onNavigate={(target) => setActiveTab(target)} />
           )}
         </section>
       </main>

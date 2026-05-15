@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AMToDoApi, ScheduleItem, ScheduleUpdateRequest } from "../api/client";
+import type { AMToDoApi, ScheduleAttachmentMetadata, ScheduleItem, ScheduleUpdateRequest } from "../api/client";
+import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
 import { useConfirm } from "./ConfirmDialog";
@@ -32,6 +33,21 @@ function fmtDatetime(epoch: number): string {
   return `${y}-${mo}-${day} ${h}:${mi}:${s}`;
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function AttachmentMissingIcon() {
+  return (
+    <svg className="attachment-missing-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+      <path d="M128 597.333333l170.666667 106.666667 128-149.333333 128 170.666666 85.333333-106.666666 128 21.333333-128-128-85.333333 106.666667-128-213.333334-149.333334 160L128 426.666667V127.658667C128 104.746667 147.072 85.333333 170.581333 85.333333H597.333333v256a42.666667 42.666667 0 0 0 42.666667 42.666667h256v511.701333A42.666667 42.666667 0 0 1 853.632 938.666667H170.368A42.368 42.368 0 0 1 128 896.341333V597.333333z m768-298.666666h-213.333333V85.461333L896 298.666667z" />
+    </svg>
+  );
+}
+
 export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete, onUpdate }: Props) {
   const [schedule, setSchedule] = useState<ScheduleItem>(initial);
   const [title, setTitle] = useState(initial.title);
@@ -53,6 +69,15 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<ScheduleAttachmentMetadata[]>([]);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [attachmentLoading, setAttachmentLoading] = useState<Record<number, boolean>>({});
+  const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [preview, setPreview] = useState<ScheduleAttachmentMetadata | null>(null);
+  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // Fetch full schedule on mount (the list item may lack some fields)
@@ -71,6 +96,61 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     }).catch(() => { /* keep initial data */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const loadAttachments = useCallback(async () => {
+    const result = await api.listScheduleAttachments(schedule.id);
+    setAttachments(result.attachments);
+    setAttachmentErrors({});
+    await Promise.all(
+      result.attachments.map(async (attachment) => {
+        if (attachment.preview_kind === "none") return;
+        if (attachment.is_orphaned) return;
+        setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
+        try {
+          const { blob } = await getAttachmentBlob(
+            () => api.downloadScheduleAttachment(schedule.id, attachment.id),
+            attachment,
+            `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
+          );
+          const url = URL.createObjectURL(blob);
+          setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+          setAttachmentErrors((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+        } catch (err: unknown) {
+          setAttachmentUrls((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+          setAttachmentErrors((prev) => ({
+            ...prev,
+            [attachment.id]: err instanceof Error ? err.message : "附件数据加载失败",
+          }));
+        } finally {
+          setAttachmentLoading((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+        }
+      })
+    );
+  }, [api, schedule.id]);
+
+  useEffect(() => {
+    loadAttachments().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "附件加载失败");
+    });
+  }, [loadAttachments]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [attachmentUrls]);
+
   const startKey = startDate && startTime ? `${startDate}T${startTime}` : "";
   const endKey = endDate && endTime ? `${endDate}T${endTime}` : "";
 
@@ -80,6 +160,91 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   function handleEndTimeChange(value: string) {
     setEndTime(value);
+  }
+
+  // ── Attachment handlers ──
+
+  async function uploadFiles(files: FileList | File[]) {
+    const selected = Array.from(files);
+    if (selected.length === 0) return;
+
+    for (const file of selected) {
+      if (file.size > api.maxAttachmentSize) {
+        setError(`文件 "${file.name}" 大小 (${formatSize(file.size)}) 超过上限 (${formatSize(api.maxAttachmentSize)})`);
+        return;
+      }
+    }
+
+    if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
+      setError(`附件总数将超过上限 (${api.maxAttachmentsPerTodo})`);
+      return;
+    }
+
+    setAttachmentBusy(true);
+    setError(null);
+    try {
+      for (const file of selected) {
+        await api.uploadScheduleAttachment(schedule.id, file);
+      }
+      setAttachmentsChanged(true);
+      await loadAttachments();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "附件上传失败");
+    } finally {
+      setAttachmentBusy(false);
+      setDragActive(false);
+    }
+  }
+
+  async function openAttachment(attachment: ScheduleAttachmentMetadata) {
+    if (attachment.is_orphaned) return;
+    setDownloadingId(attachment.id);
+    setError(null);
+    try {
+      const { blob } = await getAttachmentBlob(
+        () => api.downloadScheduleAttachment(schedule.id, attachment.id),
+        attachment,
+        `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setAttachmentErrors((prev) => {
+        const next = { ...prev };
+        delete next[attachment.id];
+        return next;
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "附件打开失败";
+      setError(message);
+      setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  async function removeAttachment(attachment: ScheduleAttachmentMetadata) {
+    const ok = await ask({
+      title: "删除附件",
+      message: `确定删除附件「${attachment.filename}」吗？`,
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (!ok) return;
+    setAttachmentBusy(true);
+    setError(null);
+    try {
+      await api.removeScheduleAttachment(schedule.id, attachment.id);
+      setAttachmentsChanged(true);
+      await loadAttachments();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "附件删除失败");
+    } finally {
+      setAttachmentBusy(false);
+    }
   }
 
   // Validation
@@ -96,6 +261,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   // Dirty tracking: compare form fields against the fetched schedule
   const dirty = useMemo(() => {
     return (
+      attachmentsChanged ||
       title !== schedule.title ||
       description !== (schedule.description ?? "") ||
       (startKey ? epochFromDatetimeLocal(startKey) : null) !== schedule.start_at ||
@@ -103,7 +269,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       location !== (schedule.location ?? "") ||
       category !== (schedule.category ?? "")
     );
-  }, [title, description, startKey, endKey, location, category, schedule]);
+  }, [attachmentsChanged, title, description, startKey, endKey, location, category, schedule]);
 
   // Timeline bar data
   const timeline = useMemo(() => {
@@ -374,6 +540,108 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           {/* Divider */}
           <div className="schedule-modal-divider" />
 
+          <div className="schedule-modal-section-label">附件</div>
+          <div
+            className={`attachment-dropzone${dragActive ? " active" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              uploadFiles(e.dataTransfer.files);
+            }}
+          >
+            <span>{attachmentBusy ? "处理中..." : "拖拽文件到这里"}</span>
+            <label className="attachment-upload-button" htmlFor="schedule-attachment-input">
+              选择文件
+            </label>
+            <input
+              id="schedule-attachment-input"
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files) uploadFiles(e.target.files);
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
+          {attachmentBusy ? <div className="attachment-progress-bar" aria-label="附件处理中" /> : null}
+
+          <div className="attachment-list">
+            {attachments.map((attachment) => {
+              const url = attachmentUrls[attachment.id];
+              const orphaned = attachment.is_orphaned;
+              const loadError = attachmentErrors[attachment.id];
+              return (
+                <div
+                  className={`attachment-row${orphaned ? " orphaned" : ""}${loadError ? " failed" : ""}`}
+                  key={attachment.id}
+                >
+                  <button
+                    type="button"
+                    className="attachment-thumb"
+                    disabled={orphaned}
+                    onClick={() => {
+                      if (attachment.preview_kind === "none" || !url) {
+                        openAttachment(attachment);
+                      } else {
+                        setPreview(attachment);
+                      }
+                    }}
+                    aria-label={`打开 ${attachment.filename}`}
+                  >
+                    {orphaned || loadError ? (
+                      <AttachmentMissingIcon />
+                    ) : attachment.preview_kind === "image" && url ? (
+                      <img src={url} alt="" />
+                    ) : attachment.preview_kind === "video" && url ? (
+                      <video src={url} muted />
+                    ) : attachmentLoading[attachment.id] ? (
+                      <span className="attachment-spinner" />
+                    ) : (
+                      <span>{attachment.filename.split(".").pop()?.slice(0, 4) || "FILE"}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="attachment-name"
+                    onClick={() => openAttachment(attachment)}
+                    disabled={orphaned || downloadingId === attachment.id}
+                  >
+                    <span className="attachment-filename">{attachment.filename}</span>
+                    <span className="attachment-size">
+                      {orphaned
+                        ? "文件丢失"
+                        : downloadingId === attachment.id
+                          ? "下载中..."
+                          : formatSize(attachment.plain_size_bytes)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="attachment-remove"
+                    disabled={attachmentBusy || downloadingId !== null}
+                    onClick={() => removeAttachment(attachment)}
+                    aria-label={`删除 ${attachment.filename}`}
+                  >
+                    <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor">
+                      <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
+                      <path d="M701.8 870H351.9c-71 0-128.8-57.8-128.8-128.8V213.7h51.5v527.5c0 42.6 34.7 77.3 77.3 77.3h349.9c42.6 0 77.3-34.7 77.3-77.3V213.7h51.5v527.5c0 71-57.8 128.8-128.8 128.8zM647.7 186h-51.5c0-28.4-29.9-51.6-66.7-51.6-36.7 0-66.6 23.1-66.6 51.6h-51.5c0-56.9 53-103.1 118.1-103.1S647.7 129.1 647.7 186z" />
+                      <path d="M384.2 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM531 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM677.8 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-11 24.3-24.3 24.3z" />
+                      </svg>
+                    </button>
+                  {loadError ? <div className="attachment-error-text">{loadError}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Divider */}
+          <div className="schedule-modal-divider" />
+
           {/* Read-only fields */}
           <div className="schedule-modal-section-label">只读信息</div>
 
@@ -431,7 +699,27 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             {deleting ? "删除中..." : "删除"}
           </button>
         </div>
+        {saving ? <div className="modal-save-progress" aria-label="保存中" /> : null}
       </div>
+      {preview ? (
+        <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
+          <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="schedule-modal-close attachment-preview-close"
+              onClick={() => setPreview(null)}
+              aria-label="关闭预览"
+            >
+              ×
+            </button>
+            {preview.preview_kind === "image" ? (
+              <img src={attachmentUrls[preview.id]} alt={preview.filename} />
+            ) : (
+              <video src={attachmentUrls[preview.id]} controls autoPlay />
+            )}
+          </div>
+        </div>
+      ) : null}
       {confirmDialog}
     </div>
   );
