@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, Self
 
 from models.factory import STANDALONE_USER_ID, get_standalone_tables, get_user_tables
 from repositories import (
-    AttachmentRepository,
+    ScheduleAttachmentRepository,
     ScheduleRepository,
     SettingsRepository,
+    TodoAttachmentRepository,
     TodoRepository,
 )
 
@@ -34,6 +35,7 @@ class UnitOfWork:
                 self._schedule_model,
                 self._setting_model,
                 self._attachment_model,
+                self._schedule_attachment_model,
             ) = get_standalone_tables()
         else:
             (
@@ -41,6 +43,7 @@ class UnitOfWork:
                 self._schedule_model,
                 self._setting_model,
                 self._attachment_model,
+                self._schedule_attachment_model,
             ) = get_user_tables(user_id)
 
     def __enter__(self) -> Self:
@@ -92,15 +95,26 @@ class UnitOfWork:
         return self._attachment_model
 
     @property
+    def schedule_attachment_model(self) -> type:
+        """Return the schedule attachment model class for the current user."""
+        return self._schedule_attachment_model
+
+    @property
     def user_id(self) -> int:
         """Return the user id represented by this unit of work."""
         return self._user_id
 
     @property
-    def attachments(self) -> AttachmentRepository:
+    def attachments(self) -> TodoAttachmentRepository:
         """Return the attachment repository for the active session."""
 
-        return AttachmentRepository(self.session, self._attachment_model)
+        return TodoAttachmentRepository(self.session, self._attachment_model)
+
+    @property
+    def schedule_attachments(self) -> ScheduleAttachmentRepository:
+        """Return the schedule attachment repository for the active session."""
+
+        return ScheduleAttachmentRepository(self.session, self._schedule_attachment_model)
 
     @property
     def schedules(self) -> ScheduleRepository:
