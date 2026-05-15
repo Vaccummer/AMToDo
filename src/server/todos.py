@@ -19,7 +19,7 @@ from fastapi import (
 )
 
 from clock import Clock
-from config import AppSettings, amtodo_root
+from config import AppSettings
 from exceptions import AMToDoError, ValidationError
 from serialization import attachment_to_dict, todo_to_dict
 from server.deps import get_clock, get_settings, get_uow
@@ -27,6 +27,7 @@ from server.schemas import (
     TodoAttachmentGetRequest,
     TodoAttachmentDownloadRequest,
     TodoAttachmentListRequest,
+    TodoAttachmentRemoveOrphanedRequest,
     TodoAttachmentRemoveRequest,
     TodoAttachmentUploadRequest,
     TodoCreateRequest,
@@ -143,13 +144,14 @@ def todo_stats(
 @router.post("/attachments/list")
 def list_attachments(
     body: TodoAttachmentListRequest,
+    request: Request,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
     """List encrypted attachment metadata for a ToDo."""
 
-    service = _attachment_service(uow, clock)
-    attachments = service.list_for_todo(body.todo_id)
+    service = _attachment_service(uow, clock, request)
+    attachments = service.list_for_owner(body.todo_id)
     return {
         "ok": True,
         "count": len(attachments),
@@ -162,12 +164,13 @@ def list_attachments(
 @router.post("/attachments/get")
 def show_attachment(
     body: TodoAttachmentGetRequest,
+    request: Request,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
     """Return encrypted attachment metadata."""
 
-    service = _attachment_service(uow, clock)
+    service = _attachment_service(uow, clock, request)
     attachment = service.show(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -175,12 +178,13 @@ def show_attachment(
 @router.post("/attachments/remove")
 def remove_attachment(
     body: TodoAttachmentRemoveRequest,
+    request: Request,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
     """Remove an attachment from a ToDo."""
 
-    service = _attachment_service(uow, clock)
+    service = _attachment_service(uow, clock, request)
     attachment = service.remove(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -200,10 +204,10 @@ def upload_attachment_json(
         raise ValidationError("content_base64 must be valid base64") from exc
 
     _validate_attachment_limits(
-        request.app.state.settings, body.todo_id, len(content), None, clock, uow=uow
+        request.app.state.settings, body.todo_id, len(content), None, clock, request, uow=uow
     )
 
-    service = _attachment_service(uow, clock)
+    service = _attachment_service(uow, clock, request)
     attachment = service.create(
         body.todo_id,
         AttachmentDraft(
@@ -241,8 +245,8 @@ async def upload_attachment(
         )
 
     with UnitOfWork(request.app.state.db, user_id) as uow:
-        service = _attachment_service(uow, clock)
-        existing = service.list_for_todo(todo_id)
+        service = _attachment_service(uow, clock, request)
+        existing = service.list_for_owner(todo_id)
         if len(existing) >= settings_obj.max_attachments_per_todo:
             raise ValidationError(
                 f"attachment count ({len(existing)}) already at limit "
@@ -279,7 +283,7 @@ def download_attachment(
 ) -> Response:
     """Download encrypted attachment bytes."""
 
-    service = _attachment_service(uow, clock)
+    service = _attachment_service(uow, clock, request)
     attachment = service.show(body.todo_id, body.attachment_id)
     cipher = service.read_cipher(body.todo_id, body.attachment_id)
     from urllib.parse import quote
@@ -419,6 +423,20 @@ def remove_todos(
     return {"ok": all(result["ok"] for result in results), "results": results}
 
 
+@router.post("/attachments/remove-orphaned")
+def remove_orphaned_attachments(
+    body: TodoAttachmentRemoveOrphanedRequest,
+    request: Request,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Remove orphaned attachment metadata for a ToDo."""
+
+    service = _attachment_service(uow, clock, request)
+    count = service.remove_orphaned(body.todo_id)
+    return {"ok": True, "removed": count}
+
+
 # ── helpers ──
 
 
@@ -452,14 +470,15 @@ def _target_result(
     return {"target": target, "ok": True, "todo": todo_to_dict(todo, timezone)}
 
 
-def _attachment_service(uow: UnitOfWork, clock: Clock) -> AttachmentService:
+def _attachment_service(uow: UnitOfWork, clock: Clock, request: Request) -> AttachmentService:
     return AttachmentService(
         uow.attachments,
         uow.todos,
         clock,
         uow.attachment_model,
-        amtodo_root(),
+        request.app.state.attachment_root,
         uow.user_id,
+        owner_type="todo",
     )
 
 
@@ -480,6 +499,7 @@ def _validate_attachment_limits(
     content_size: int,
     current_count: int | None,
     clock: Clock,
+    request: Request,
     uow: UnitOfWork | None = None,
 ) -> None:
     if content_size > settings.max_attachment_size_bytes:
@@ -489,8 +509,8 @@ def _validate_attachment_limits(
         )
 
     if current_count is None and uow is not None:
-        service = _attachment_service(uow, clock)
-        current_count = len(service.list_for_todo(todo_id))
+        service = _attachment_service(uow, clock, request)
+        current_count = len(service.list_for_owner(todo_id))
 
     if current_count is not None and current_count >= settings.max_attachments_per_todo:
         raise ValidationError(
