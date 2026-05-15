@@ -270,6 +270,14 @@ def create_app(settings: AppSettings) -> FastAPI:
     app.state.settings = settings
     app.state.replay_protector = _build_replay_protector(settings)
 
+    if not settings.attachment_root:
+        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
+        sys.exit(1)
+
+    resolved_attachment_root = amtodo_root() / settings.attachment_root
+    resolved_attachment_root.mkdir(parents=True, exist_ok=True)
+    app.state.attachment_root = resolved_attachment_root
+
     if settings.server_private_key_path:
         _setup_encryption_middleware(app, settings)
 
@@ -318,6 +326,7 @@ def main() -> None:
     database_cfg = raw.get("database", {})
     auth = raw.get("auth", {})
     log_cfg = raw.get("log", {})
+    storage_cfg = raw.get("storage", {})
     encryption_cfg = raw.get("encryption", {})
 
     log_file = log_cfg.get("file", "log/server.log")
@@ -341,6 +350,8 @@ def main() -> None:
     print(f"  Listen:    http://{host}:{port}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
 
+    attachment_root = storage_cfg.get("attachment_root", "")
+
     settings = AppSettings(
         database_url=database_url,
         admin_token=admin_token,
@@ -349,6 +360,7 @@ def main() -> None:
         server_private_key_path=private_key_path,
         server_public_key_path=public_key_path,
         request_timestamp_tolerance_seconds=tolerance,
+        attachment_root=attachment_root,
     )
     app = create_app(settings)
 
