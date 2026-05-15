@@ -207,6 +207,9 @@ class AMTodoClient:
         response.raise_for_status()
         return response.content
 
+    def todo_attachment_remove_orphaned(self, todo_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/attachments/remove-orphaned", {"todo_id": todo_id})
+
     # ── schedules ──
 
     def schedule_create(
@@ -287,6 +290,53 @@ class AMTodoClient:
         if end_at is not None:
             body["end_at"] = end_at
         return self._user_post("/api/v1/schedules/stats", body)
+
+    # ── schedule attachments ──
+
+    def schedule_attachment_list(self, schedule_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/attachments/list", {"schedule_id": schedule_id})
+
+    def schedule_attachment_get(self, schedule_id: int, attachment_id: int) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/schedules/attachments/get",
+            {"schedule_id": schedule_id, "attachment_id": attachment_id},
+        )
+
+    def schedule_attachment_upload(self, schedule_id: int, file_path: Path) -> dict[str, Any]:
+        content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return self._user_post(
+            "/api/v1/schedules/attachments/upload",
+            {
+                "schedule_id": schedule_id,
+                "filename": file_path.name,
+                "content_base64": content_base64,
+            },
+        )
+
+    def schedule_attachment_download(self, schedule_id: int, attachment_id: int) -> bytes:
+        data_key: bytes | None = None
+        body: dict[str, Any] = {"access_token": self._access_token, "schedule_id": schedule_id, "attachment_id": attachment_id}
+        if self._public_key_pem:
+            from amtodo_crypto import seal
+
+            envelope, data_key = seal(body, self._public_key_pem, "server-key-v1")
+            body = envelope
+
+        response = self._client.post(
+            "/api/v1/schedules/attachments/download",
+            json=body,
+        )
+        response.raise_for_status()
+        return response.content
+
+    def schedule_attachment_remove(self, schedule_id: int, attachment_id: int) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/schedules/attachments/remove",
+            {"schedule_id": schedule_id, "attachment_id": attachment_id},
+        )
+
+    def schedule_attachment_remove_orphaned(self, schedule_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/attachments/remove-orphaned", {"schedule_id": schedule_id})
 
     # ── internal helpers ──
 
