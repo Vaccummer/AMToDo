@@ -82,10 +82,13 @@ def test_attachment_http_upload_metadata_and_download(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(config, "AMTODO_ROOT_ENV_VAR", tmp_path)
+    att_root = tmp_path / "attachments"
+    att_root.mkdir(parents=True, exist_ok=True)
     app = create_app(
         AppSettings(
             database_url=f"sqlite:///{tmp_path / 'server.sqlite3'}",
             admin_token="admin-secret",
+            attachment_root=str(att_root),
         )
     )
     token = secrets.token_urlsafe(32)
@@ -145,6 +148,7 @@ def _attachment_service(
     uow: UnitOfWork,
     clock: FixedClock,
     root: Path,
+    owner_type: str = "todo",
 ) -> AttachmentService:
     return AttachmentService(
         uow.attachments,
@@ -153,6 +157,7 @@ def _attachment_service(
         uow.attachment_model,
         root,
         uow.user_id,
+        owner_type=owner_type,
     )
 
 
