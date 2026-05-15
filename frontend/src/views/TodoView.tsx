@@ -12,6 +12,7 @@ import {
 } from "../lib/time";
 import { CalendarPopup } from "./CalendarPopup";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { useConfirm } from "./ConfirmDialog";
 import { TodoDetailModal } from "./TodoDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
@@ -53,6 +54,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const calendarStripRef = useRef<HTMLDivElement>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const weekStartKey = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
@@ -171,6 +173,16 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
       // remove locally even if API fails to keep UI responsive
     }
     setTodos((items) => items.filter((t) => t.id !== id));
+  }
+
+  async function askDeleteTodo(id: number) {
+    const ok = await ask({
+      title: "删除待办",
+      message: "确定删除这条待办吗？此操作不可撤销。",
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (ok) deleteTodo(id);
   }
 
   function handleContextMenu(e: React.MouseEvent, id: number) {
@@ -317,12 +329,13 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
               label: "删除",
               icon: <TrashIcon />,
               danger: true,
-              action: () => deleteTodo(contextMenu.id)
+              action: () => askDeleteTodo(contextMenu.id)
             }
           ]}
           onClose={() => setContextMenu(null)}
         />
       ) : null}
+      {confirmDialog}
     </div>
   );
 }

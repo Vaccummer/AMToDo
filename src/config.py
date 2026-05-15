@@ -13,6 +13,8 @@ __version__ = "0.1.0"
 DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
+DEFAULT_MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+DEFAULT_MAX_ATTACHMENTS_PER_TODO = 20
 AMTODO_ROOT_ENV_VAR = Path()
 
 
@@ -31,6 +33,8 @@ class AppSettings:
     server_public_key_path: str = ""
     server_private_key_path: str = ""
     request_timestamp_tolerance_seconds: int = 300
+    max_attachment_size_bytes: int = DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
+    max_attachments_per_todo: int = DEFAULT_MAX_ATTACHMENTS_PER_TODO
 
 
 def amtodo_root() -> Path:
@@ -65,6 +69,16 @@ def _default_database_url(root: Path) -> str:
     return f"sqlite:///{root / 'db' / 'amtodo.sqlite3'}"
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def load_settings() -> AppSettings:
     """Load settings from environment variables (used by server / UI)."""
 
@@ -75,6 +89,12 @@ def load_settings() -> AppSettings:
         timezone=os.environ.get("AMTODO_TIMEZONE", DEFAULT_TIMEZONE),
         server_url=os.environ.get("AMTODO_SERVER_URL", ""),
         access_token=os.environ.get("AMTODO_SERVER_TOKEN", ""),
+        max_attachment_size_bytes=_int_env(
+            "AMTODO_MAX_ATTACHMENT_SIZE_BYTES", DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
+        ),
+        max_attachments_per_todo=_int_env(
+            "AMTODO_MAX_ATTACHMENTS_PER_TODO", DEFAULT_MAX_ATTACHMENTS_PER_TODO
+        ),
     )
 
 

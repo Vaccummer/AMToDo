@@ -3,6 +3,7 @@ import { AMToDoApi } from "../api/client";
 import { importP256PublicKey } from "../crypto/envelope";
 import type { UISettings } from "../lib/settings";
 import { Dropdown } from "./Dropdown";
+import { useConfirm } from "./ConfirmDialog";
 
 const TIMEZONE_OPTIONS = [
   { value: "Asia/Shanghai", label: "Asia/Shanghai" },
@@ -47,6 +48,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   // URL connection test
   const [testingUrl, setTestingUrl] = useState(false);
   const [urlTestResult, setUrlTestResult] = useState<{ ok: boolean; version?: string; message: string } | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   // Token verification
   const [verifyingToken, setVerifyingToken] = useState(false);
@@ -76,9 +78,17 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
 
   const canSave = dirty;
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  async function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
-      if (dirty && !window.confirm("有未保存的更改，确定关闭吗？")) return;
+      if (dirty) {
+        const ok = await ask({
+          title: "放弃更改",
+          message: "有未保存的更改，确定关闭吗？",
+          confirmLabel: "关闭",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       onClose();
     }
   }
@@ -312,6 +322,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
           </button>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

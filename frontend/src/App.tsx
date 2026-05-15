@@ -55,10 +55,13 @@ export function App() {
       setHealth(result);
       setHealthError(null);
 
+      const limits = result.limits;
       if (result.public_key) {
         const p256Key = await importP256PublicKey(result.public_key);
-        setApi(new AMToDoApi(settings.server_url, settings.access_token, p256Key));
+        setApi(new AMToDoApi(settings.server_url, settings.access_token, p256Key, limits.max_attachment_size_bytes, limits.max_attachments_per_todo));
       } else {
+        baseApi.maxAttachmentSize = limits.max_attachment_size_bytes;
+        baseApi.maxAttachmentsPerTodo = limits.max_attachments_per_todo;
         setApi(baseApi);
       }
     };
