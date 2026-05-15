@@ -248,14 +248,19 @@ def _is_json_response(response) -> bool:
 
 
 def _is_attachment_upload(request) -> bool:
-    # Only the multipart upload endpoint (with a numeric todo_id in the path)
-    # needs bypass; the JSON upload endpoint is encrypted like other POSTs.
+    # Multipart upload endpoints (with a numeric owner_id in the path)
+    # need bypass; JSON upload endpoints are encrypted like other POSTs.
     import re
 
     return bool(
         request.method == "POST"
-        and re.fullmatch(
-            r"/api/v1/todos/\d+/attachments/upload", request.url.path
+        and (
+            re.fullmatch(
+                r"/api/v1/todos/\d+/attachments/upload", request.url.path
+            )
+            or re.fullmatch(
+                r"/api/v1/schedules/\d+/attachments/upload", request.url.path
+            )
         )
     )
 
