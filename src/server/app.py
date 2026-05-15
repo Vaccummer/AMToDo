@@ -330,12 +330,17 @@ def main() -> None:
     host = server.get("host", "0.0.0.0")
     port = server.get("port", 8000)
     admin_token = auth.get("admin_token", "")
+    attachment_root = storage_cfg.get("attachment_root", "")
     private_key_path = encryption_cfg.get("private_key_path", "")
     public_key_path = encryption_cfg.get("public_key_path", "")
     tolerance = encryption_cfg.get("request_timestamp_tolerance_seconds", 300)
 
     if not admin_token:
         print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
+        sys.exit(1)
+
+    if not attachment_root:
+        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
         sys.exit(1)
 
     log_path = (root / log_file).resolve()
@@ -345,8 +350,6 @@ def main() -> None:
     print(f"  Database:  {database_url}")
     print(f"  Listen:    http://{host}:{port}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
-
-    attachment_root = storage_cfg.get("attachment_root", "")
 
     settings = AppSettings(
         database_url=database_url,
@@ -358,10 +361,6 @@ def main() -> None:
         request_timestamp_tolerance_seconds=tolerance,
         attachment_root=attachment_root,
     )
-    if not attachment_root:
-        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
-        sys.exit(1)
-
     app = create_app(settings)
 
     log_config = _build_log_config(str(log_path))
