@@ -132,6 +132,42 @@ class TodoAttachmentRemoveRequest(UserAuthMixin):
     attachment_id: int
 
 
+class TodoAttachmentRemoveOrphanedRequest(UserAuthMixin):
+    todo_id: int
+
+
+# ── Schedule Attachments ──
+
+class ScheduleAttachmentListRequest(UserAuthMixin):
+    schedule_id: int
+
+
+class ScheduleAttachmentGetRequest(UserAuthMixin):
+    schedule_id: int
+    attachment_id: int
+
+
+class ScheduleAttachmentUploadRequest(UserAuthMixin):
+    schedule_id: int
+    filename: str
+    content_base64: str
+    mime_type: str | None = None
+
+
+class ScheduleAttachmentDownloadRequest(UserAuthMixin):
+    schedule_id: int
+    attachment_id: int
+
+
+class ScheduleAttachmentRemoveRequest(UserAuthMixin):
+    schedule_id: int
+    attachment_id: int
+
+
+class ScheduleAttachmentRemoveOrphanedRequest(UserAuthMixin):
+    schedule_id: int
+
+
 # ── Schedule ──
 
 class ScheduleListRequest(UserAuthMixin):
