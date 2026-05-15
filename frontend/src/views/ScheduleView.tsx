@@ -7,7 +7,7 @@ import {
   formatDateKeyDay,
   formatDateKeyWeekday,
   formatTime,
-  mondayOfDateKey,
+  startOfWeekDateKey,
   startOfDateKeyEpoch,
   weekOfMonth
 } from "../lib/time";
@@ -31,8 +31,14 @@ type Props = {
 
 const HOUR_HEIGHT = 64;
 const EVENT_COLOR_COUNT = 5;
+const SLOT_MINUTE_OPTIONS = [15, 30, 45, 60];
 
 type ScheduleTextMode = "tiny" | "mini" | "mid" | "full";
+
+type ScheduleSlot = {
+  key: string;
+  label: string;
+};
 
 type RenderedScheduleBlock = {
   item: ScheduleItem;
@@ -43,7 +49,7 @@ type RenderedScheduleBlock = {
   titleLines: number;
 };
 
-export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _slotMinutes = 30, weekStart = 0 }: Props) {
+export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0 }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDateKey, setSelectedDateKey] = useState<string>(dateKeyFromDate(new Date()));
   const [showCalendar, setShowCalendar] = useState(false);
@@ -57,39 +63,51 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
   const dayHeadersRef = useRef<HTMLDivElement>(null);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
 
-  const hours = useMemo(
-    () => Array.from({ length: fullHours ? 24 : endHour - startHour }, (_, i) => i + (fullHours ? 0 : startHour)),
-    [fullHours, startHour, endHour]
+  const normalizedSlotMinutes = useMemo(
+    () => (SLOT_MINUTE_OPTIONS.includes(slotMinutes) ? slotMinutes : 30),
+    [slotMinutes]
+  );
+
+  const visibleStartHour = fullHours ? 0 : startHour;
+  const visibleEndHour = fullHours ? 24 : endHour;
+
+  const slots = useMemo(
+    () => buildScheduleSlots(visibleStartHour, visibleEndHour, normalizedSlotMinutes),
+    [visibleStartHour, visibleEndHour, normalizedSlotMinutes]
   );
 
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
 
-  const naturalMonday = useMemo(() => mondayOfDateKey(todayKey), [todayKey]);
+  const normalizedWeekStart = weekStart === 1 ? 1 : 0;
 
-  const weekMondayKey = useMemo(
-    () => addDaysToDateKey(naturalMonday, weekOffset * 7),
-    [naturalMonday, weekOffset]
+  const naturalWeekStartKey = useMemo(
+    () => startOfWeekDateKey(todayKey, normalizedWeekStart),
+    [todayKey, normalizedWeekStart]
+  );
+
+  const weekStartKey = useMemo(
+    () => addDaysToDateKey(naturalWeekStartKey, weekOffset * 7),
+    [naturalWeekStartKey, weekOffset]
   );
 
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekMondayKey, i)),
-    [weekMondayKey]
+    () => Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekStartKey, i)),
+    [weekStartKey]
   );
 
   const weekLabel = useMemo(() => {
-    const [year, month] = weekMondayKey.split("-").map(Number);
-    const wn = weekOfMonth(weekMondayKey);
+    const [year, month] = weekStartKey.split("-").map(Number);
+    const wn = weekOfMonth(weekStartKey, normalizedWeekStart);
     const labels = ["一", "二", "三", "四", "五", "六"];
     return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
-  }, [weekMondayKey]);
+  }, [normalizedWeekStart, weekStartKey]);
 
-  const visibleStartHour = fullHours ? 0 : startHour;
   const blocksByDay = useMemo(
-    () => buildScheduleBlocks(items, days, visibleStartHour, endHour),
-    [items, days, visibleStartHour, endHour]
+    () => buildScheduleBlocks(items, days, visibleStartHour, visibleEndHour),
+    [items, days, visibleStartHour, visibleEndHour]
   );
   const gridStyle = {
-    "--schedule-hour-height": `${HOUR_HEIGHT}px`
+    "--schedule-slot-height": `${(HOUR_HEIGHT * normalizedSlotMinutes) / 60}px`
   } as CSSProperties;
 
   // Fetch schedules for the displayed week
@@ -122,9 +140,9 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
   }
 
   function goToDate(dateKey: string) {
-    const targetMonday = mondayOfDateKey(dateKey);
+    const targetWeekStartKey = startOfWeekDateKey(dateKey, normalizedWeekStart);
     const diffDays = Math.round(
-      (startOfDateKeyEpoch(targetMonday) - startOfDateKeyEpoch(naturalMonday)) / 86400
+      (startOfDateKeyEpoch(targetWeekStartKey) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400
     );
     setWeekOffset(Math.round(diffDays / 7));
     setSelectedDateKey(dateKey);
@@ -232,8 +250,8 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
 
       <div className="schedule-grid-scroll">
         <div className="schedule-grid" style={gridStyle}>
-          {hours.map((hour) => (
-            <TimeRow key={hour} hour={hour} days={days} />
+          {slots.map((slot) => (
+            <TimeRow key={slot.key} slot={slot} days={days} />
           ))}
           <div className="schedule-events-layer">
             {days.map((dayKey, dayIndex) => (
@@ -305,18 +323,36 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _s
   );
 }
 
-function TimeRow({ hour, days }: {
-  hour: number;
+function TimeRow({ slot, days }: {
+  slot: ScheduleSlot;
   days: string[];
 }) {
   return (
     <>
-      <div className="time-label">{hour.toString().padStart(2, "0")}:00</div>
+      <div className="time-label">{slot.label}</div>
       {days.map((dayKey) => (
-        <div className="schedule-cell" key={`${dayKey}-${hour}`} />
+        <div className="schedule-cell" key={`${dayKey}-${slot.key}`} />
       ))}
     </>
   );
+}
+
+function buildScheduleSlots(startHour: number, endHour: number, slotMinutes: number): ScheduleSlot[] {
+  const totalMinutes = Math.max(0, (endHour - startHour) * 60);
+  const count = Math.ceil(totalMinutes / slotMinutes);
+  return Array.from({ length: count }, (_, index) => {
+    const minutes = startHour * 60 + index * slotMinutes;
+    return {
+      key: String(minutes),
+      label: formatSlotLabel(minutes)
+    };
+  });
+}
+
+function formatSlotLabel(minutes: number): string {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function ScheduleEventBlock({ block, onClick, onContextMenu }: {

@@ -32,6 +32,7 @@ export type TodoItem = {
   created_at: number;
   updated_at: number;
   completed_at: number | null;
+  attachment_count?: number;
 };
 
 export type TodoListResponse = {
@@ -49,15 +50,29 @@ export type TodoResponse = {
 
 export type TodoSearchResponse = {
   ok: boolean;
-  pattern: string;
-  case_sensitive: boolean;
+  query: string;
+  use_regex: boolean;
+  ignore_case: boolean;
+  fields: string[];
   range: {
     planned_start_at: number | null;
     planned_end_at: number | null;
+    due_start_at: number | null;
+    due_end_at: number | null;
     created_start_at: number | null;
     created_end_at: number | null;
+    updated_start_at: number | null;
+    updated_end_at: number | null;
   };
-  filter: { completed: boolean | null };
+  filter: {
+    completed: boolean | null;
+    priority_min: number | null;
+    priority_max: number | null;
+    tag: string | null;
+  };
+  sort: { by: string; order: string };
+  pagination: { limit: number; offset: number; has_more: boolean };
+  total: number;
   count: number;
   todos: TodoItem[];
 };
@@ -89,6 +104,7 @@ export type AttachmentMetadata = {
   nonce: string;
   encryption_alg: string;
   storage_path: string;
+  is_orphaned: boolean;
   created_at: number;
   updated_at: number;
 };
@@ -102,6 +118,38 @@ export type AttachmentListResponse = {
   ok: boolean;
   count: number;
   attachments: AttachmentMetadata[];
+};
+
+export type ScheduleAttachmentMetadata = {
+  id: number;
+  user_id: number;
+  schedule_id: number;
+  file_index: number;
+  filename: string;
+  mime_type: string;
+  preview_kind: "image" | "video" | "none";
+  plain_size_bytes: number;
+  cipher_size_bytes: number;
+  plain_sha256: string;
+  cipher_sha256: string;
+  file_key: string;
+  nonce: string;
+  encryption_alg: string;
+  storage_path: string;
+  is_orphaned: boolean;
+  created_at: number;
+  updated_at: number;
+};
+
+export type ScheduleAttachmentResponse = {
+  ok: boolean;
+  attachment: ScheduleAttachmentMetadata;
+};
+
+export type ScheduleAttachmentListResponse = {
+  ok: boolean;
+  count: number;
+  attachments: ScheduleAttachmentMetadata[];
 };
 
 export type ScheduleItem = {
@@ -132,9 +180,22 @@ export type ScheduleResponse = {
 
 export type ScheduleSearchResponse = {
   ok: boolean;
-  pattern: string;
-  case_sensitive: boolean;
-  range: { start_at: number | null; end_at: number | null };
+  query: string;
+  use_regex: boolean;
+  ignore_case: boolean;
+  fields: string[];
+  range: {
+    start_at: number | null;
+    end_at: number | null;
+    created_start_at: number | null;
+    created_end_at: number | null;
+    updated_start_at: number | null;
+    updated_end_at: number | null;
+  };
+  filter: { category: string | null; location: string | null };
+  sort: { by: string; order: string };
+  pagination: { limit: number; offset: number; has_more: boolean };
+  total: number;
   count: number;
   schedules: ScheduleItem[];
 };
@@ -196,6 +257,30 @@ export type ScheduleUpdateRequest = {
 
 const DEFAULT_BASE_URL = SERVER_URL;
 const KEY_ID = "server-key-v1";
+export const API_NETWORK_STATUS_EVENT = "amtodo:api-network-status";
+
+function notifyNetworkStatus(online: boolean, message?: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(API_NETWORK_STATUS_EVENT, {
+      detail: { online, message }
+    })
+  );
+}
+
+async function fetchWithNetworkStatus(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  try {
+    const response = await fetch(input, init);
+    notifyNetworkStatus(true);
+    return response;
+  } catch (error: unknown) {
+    notifyNetworkStatus(false, error instanceof Error ? error.message : "网络错误");
+    throw error;
+  }
+}
 
 export class AMToDoApi {
   private readonly baseUrl: string;
@@ -219,7 +304,7 @@ export class AMToDoApi {
   }
 
   async health(): Promise<HealthResponse> {
-    const response = await fetch(`${this.baseUrl}/api/v1/health`);
+    const response = await fetchWithNetworkStatus(`${this.baseUrl}/api/v1/health`);
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload?.error?.message ?? response.statusText);
@@ -241,26 +326,54 @@ export class AMToDoApi {
   }
 
   async searchTodos(
-    pattern: string,
+    query: string,
     params?: {
+      fields?: string[];
+      use_regex?: boolean;
       planned_start_at?: number | null;
       planned_end_at?: number | null;
+      due_start_at?: number | null;
+      due_end_at?: number | null;
       created_start_at?: number | null;
       created_end_at?: number | null;
+      updated_start_at?: number | null;
+      updated_end_at?: number | null;
       ignore_case?: boolean;
       open_only?: boolean;
       completed_only?: boolean;
+      completed?: boolean | null;
+      priority_min?: number | null;
+      priority_max?: number | null;
+      tag?: string | null;
+      sort_by?: string;
+      sort_order?: string;
+      limit?: number;
+      offset?: number;
     }
   ): Promise<TodoSearchResponse> {
     return this.post("/api/v1/todos/search", {
-      pattern,
+      query,
+      fields: ["title", "description", "tag"],
+      use_regex: false,
       planned_start_at: null,
       planned_end_at: null,
+      due_start_at: null,
+      due_end_at: null,
       created_start_at: null,
       created_end_at: null,
-      ignore_case: false,
+      updated_start_at: null,
+      updated_end_at: null,
+      ignore_case: true,
       open_only: false,
       completed_only: false,
+      completed: null,
+      priority_min: null,
+      priority_max: null,
+      tag: null,
+      sort_by: "updated_at",
+      sort_order: "desc",
+      limit: 50,
+      offset: 0,
       ...params
     });
   }
@@ -340,53 +453,60 @@ export class AMToDoApi {
   }
 
   async downloadTodoAttachment(todoId: number, attachmentId: number): Promise<ArrayBuffer> {
-    const path = "/api/v1/todos/attachments/download";
-    const body: Record<string, unknown> = { todo_id: todoId, attachment_id: attachmentId };
-
-    const headers = new Headers();
-    headers.set("Content-Type", "application/json");
-
-    if (this.token) {
-      body["access_token"] = this.token as unknown as string;
-    }
-
-    let bodyStr: string;
-    let aesKey: CryptoKey | null = null;
-
-    if (this.p256PublicKey) {
-      const { seal } = await import("../crypto/envelope");
-      const result = await seal(body, this.p256PublicKey, KEY_ID);
-      bodyStr = JSON.stringify(result.envelope);
-      aesKey = result.aesKey;
-    } else {
-      bodyStr = JSON.stringify(body);
-    }
-
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: "POST",
-      body: bodyStr,
-      headers
+    return this.downloadAttachment("/api/v1/todos/attachments/download", {
+      todo_id: todoId,
+      attachment_id: attachmentId
     });
+  }
 
-    if (!response.ok) {
-      // Try to parse error from encrypted response
-      let errorPayload: unknown;
-      try {
-        errorPayload = await response.json();
-      } catch {
-        throw new Error(response.statusText);
-      }
-      if (aesKey) {
-        const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
-        if (isResponseEnvelope(errorPayload as Record<string, unknown>)) {
-          errorPayload = await openResponse(errorPayload as Record<string, unknown>, aesKey);
-        }
-      }
-      const err = errorPayload as { error?: { message?: string } };
-      throw new Error(err?.error?.message ?? response.statusText);
-    }
+  async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
+    return this.post("/api/v1/todos/attachments/remove-orphaned", { todo_id: todoId });
+  }
 
-    return response.arrayBuffer();
+  // --- Schedule attachments ---
+
+  async listScheduleAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
+    return this.post("/api/v1/schedules/attachments/list", { schedule_id: scheduleId });
+  }
+
+  async getScheduleAttachment(
+    scheduleId: number,
+    attachmentId: number
+  ): Promise<ScheduleAttachmentResponse> {
+    return this.post("/api/v1/schedules/attachments/get", {
+      schedule_id: scheduleId,
+      attachment_id: attachmentId
+    });
+  }
+
+  async removeScheduleAttachment(
+    scheduleId: number,
+    attachmentId: number
+  ): Promise<ScheduleAttachmentResponse> {
+    return this.post("/api/v1/schedules/attachments/remove", {
+      schedule_id: scheduleId,
+      attachment_id: attachmentId
+    });
+  }
+
+  async uploadScheduleAttachment(scheduleId: number, file: File): Promise<ScheduleAttachmentResponse> {
+    return this.post("/api/v1/schedules/attachments/upload", {
+      schedule_id: scheduleId,
+      filename: file.name,
+      mime_type: file.type || null,
+      content_base64: await fileToBase64(file)
+    });
+  }
+
+  async downloadScheduleAttachment(scheduleId: number, attachmentId: number): Promise<ArrayBuffer> {
+    return this.downloadAttachment("/api/v1/schedules/attachments/download", {
+      schedule_id: scheduleId,
+      attachment_id: attachmentId
+    });
+  }
+
+  async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
+    return this.post("/api/v1/schedules/attachments/remove-orphaned", { schedule_id: scheduleId });
   }
 
   async listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
@@ -397,18 +517,42 @@ export class AMToDoApi {
   }
 
   async searchSchedules(
-    pattern: string,
+    query: string,
     params?: {
+      fields?: string[];
+      use_regex?: boolean;
       start_at?: number | null;
       end_at?: number | null;
+      created_start_at?: number | null;
+      created_end_at?: number | null;
+      updated_start_at?: number | null;
+      updated_end_at?: number | null;
+      category?: string | null;
+      location?: string | null;
       ignore_case?: boolean;
+      sort_by?: string;
+      sort_order?: string;
+      limit?: number;
+      offset?: number;
     }
   ): Promise<ScheduleSearchResponse> {
     return this.post("/api/v1/schedules/search", {
-      pattern,
+      query,
+      fields: ["title", "description", "location", "category"],
+      use_regex: false,
       start_at: null,
       end_at: null,
-      ignore_case: false,
+      created_start_at: null,
+      created_end_at: null,
+      updated_start_at: null,
+      updated_end_at: null,
+      category: null,
+      location: null,
+      ignore_case: true,
+      sort_by: "updated_at",
+      sort_order: "desc",
+      limit: 50,
+      offset: 0,
       ...params
     });
   }
@@ -465,6 +609,52 @@ export class AMToDoApi {
 
   // --- Private helpers ---
 
+  private async downloadAttachment(path: string, body: Record<string, unknown>): Promise<ArrayBuffer> {
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+
+    if (this.token) {
+      body["access_token"] = this.token as unknown as string;
+    }
+
+    let bodyStr: string;
+    let aesKey: CryptoKey | null = null;
+
+    if (this.p256PublicKey) {
+      const { seal } = await import("../crypto/envelope");
+      const result = await seal(body, this.p256PublicKey, KEY_ID);
+      bodyStr = JSON.stringify(result.envelope);
+      aesKey = result.aesKey;
+    } else {
+      bodyStr = JSON.stringify(body);
+    }
+
+    const response = await fetchWithNetworkStatus(`${this.baseUrl}${path}`, {
+      method: "POST",
+      body: bodyStr,
+      headers
+    });
+
+    if (!response.ok) {
+      let errorPayload: unknown;
+      try {
+        errorPayload = await response.json();
+      } catch {
+        throw new Error(response.statusText);
+      }
+      if (aesKey) {
+        const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
+        if (isResponseEnvelope(errorPayload as Record<string, unknown>)) {
+          errorPayload = await openResponse(errorPayload as Record<string, unknown>, aesKey);
+        }
+      }
+      const err = errorPayload as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? response.statusText);
+    }
+
+    return response.arrayBuffer();
+  }
+
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const headers = new Headers();
     headers.set("Content-Type", "application/json");
@@ -485,7 +675,7 @@ export class AMToDoApi {
       bodyStr = JSON.stringify(body);
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetchWithNetworkStatus(`${this.baseUrl}${path}`, {
       method: "POST",
       body: bodyStr,
       headers

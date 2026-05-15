@@ -16,7 +16,7 @@ interface SettingsData {
 }
 
 interface Window {
-  amtodoShell: {
+  amtodoShell?: {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;

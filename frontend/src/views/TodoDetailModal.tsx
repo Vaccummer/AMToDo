@@ -40,6 +40,14 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function AttachmentMissingIcon() {
+  return (
+    <svg className="attachment-missing-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+      <path d="M128 597.333333l170.666667 106.666667 128-149.333333 128 170.666666 85.333333-106.666666 128 21.333333-128-128-85.333333 106.666667-128-213.333334-149.333334 160L128 426.666667V127.658667C128 104.746667 147.072 85.333333 170.581333 85.333333H597.333333v256a42.666667 42.666667 0 0 0 42.666667 42.666667h256v511.701333A42.666667 42.666667 0 0 1 853.632 938.666667H170.368A42.368 42.368 0 0 1 128 896.341333V597.333333z m768-298.666666h-213.333333V85.461333L896 298.666667z" />
+    </svg>
+  );
+}
+
 export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate }: Props) {
   const [todo, setTodo] = useState<TodoItem>(initial);
   const [title, setTitle] = useState(initial.title);
@@ -67,6 +75,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
   const [attachmentLoading, setAttachmentLoading] = useState<Record<number, boolean>>({});
+  const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -77,7 +86,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   // fetch full todo on mount (the list item may omit fields)
   useEffect(() => {
     api.getTodo(todo.id).then((r) => {
-      const t = r.todo;
+      const t = {
+        ...r.todo,
+        attachment_count: r.todo.attachment_count ?? initial.attachment_count
+      };
       setTodo(t);
       setTitle(t.title);
       setDescription(t.description ?? "");
@@ -93,16 +105,35 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const loadAttachments = useCallback(async () => {
     const result = await api.listTodoAttachments(todo.id);
     setAttachments(result.attachments);
+    setAttachmentErrors({});
     await Promise.all(
       result.attachments.map(async (attachment) => {
         if (attachment.preview_kind === "none") return;
+        if (attachment.is_orphaned) return;
         setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
         try {
-          const { blob } = await getAttachmentBlob(api, attachment);
+          const { blob } = await getAttachmentBlob(
+            () => api.downloadTodoAttachment(todo.id, attachment.id),
+            attachment,
+            `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
+          );
           const url = URL.createObjectURL(blob);
           setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
-        } catch {
-          // 单个文件加载失败不影响其他
+          setAttachmentErrors((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+        } catch (err: unknown) {
+          setAttachmentUrls((prev) => {
+            const next = { ...prev };
+            delete next[attachment.id];
+            return next;
+          });
+          setAttachmentErrors((prev) => ({
+            ...prev,
+            [attachment.id]: err instanceof Error ? err.message : "附件数据加载失败",
+          }));
         } finally {
           setAttachmentLoading((prev) => {
             const next = { ...prev };
@@ -112,6 +143,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         }
       })
     );
+    return result.attachments;
   }, [api, todo.id]);
 
   useEffect(() => {
@@ -138,10 +170,61 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     );
   }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, todo]);
 
-  const plannedAtError = useMemo(
-    () => !plannedDate || !plannedTime || !timeKeyValid(plannedTime) || isNaN(epochFromDatetimeLocal(plannedAtKey)),
-    [plannedDate, plannedTime, plannedAtKey]
-  );
+  const datetimeValidation = useMemo(() => {
+    let plannedDateError = !plannedDate;
+    let plannedTimeError = !plannedTime || (plannedTime ? !timeKeyValid(plannedTime) : false);
+    let dueDateError = false;
+    let dueTimeError = false;
+    let message = "";
+
+    const plannedEpoch =
+      plannedDate && plannedTime && timeKeyValid(plannedTime)
+        ? epochFromDatetimeLocal(plannedAtKey)
+        : NaN;
+    if (plannedDate && plannedTime && timeKeyValid(plannedTime) && !Number.isFinite(plannedEpoch)) {
+      plannedDateError = true;
+      plannedTimeError = true;
+    }
+    if (plannedDateError || plannedTimeError) {
+      message = "请填写有效的计划日期和时间 (如 14:30:00)";
+    }
+
+    const dueHasDate = dueDate !== "";
+    const dueHasTime = dueTime !== "";
+    if (dueHasDate !== dueHasTime) {
+      dueDateError = !dueHasDate;
+      dueTimeError = !dueHasTime;
+      if (!message) message = "截止日期和时间需要同时为空或同时填写";
+    } else if (dueHasDate && dueHasTime) {
+      if (!timeKeyValid(dueTime)) {
+        dueTimeError = true;
+        if (!message) message = "请填写有效的截止日期和时间 (如 18:30:00)";
+      } else {
+        const dueEpoch = epochFromDatetimeLocal(dueAtKey);
+        if (!Number.isFinite(dueEpoch)) {
+          dueDateError = true;
+          dueTimeError = true;
+          if (!message) message = "请填写有效的截止日期和时间 (如 18:30:00)";
+        } else if (Number.isFinite(plannedEpoch) && dueEpoch <= plannedEpoch) {
+          if (dueDate < plannedDate) {
+            dueDateError = true;
+          } else {
+            dueTimeError = true;
+          }
+          if (!message) message = "截止日期必须晚于计划日期";
+        }
+      }
+    }
+
+    return {
+      plannedDateError,
+      plannedTimeError,
+      dueDateError,
+      dueTimeError,
+      hasError: plannedDateError || plannedTimeError || dueDateError || dueTimeError,
+      message
+    };
+  }, [plannedDate, plannedTime, plannedAtKey, dueDate, dueTime, dueAtKey]);
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
@@ -151,6 +234,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   );
 
   async function handleSave() {
+    if (datetimeValidation.hasError) {
+      setError(datetimeValidation.message || "请修正日期时间后再保存");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -240,7 +327,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         await api.uploadTodoAttachment(todo.id, file);
       }
       setAttachmentsChanged(true);
-      await loadAttachments();
+      const updatedAttachments = await loadAttachments();
+      const updatedTodo = { ...todo, attachment_count: updatedAttachments.length };
+      setTodo(updatedTodo);
+      onUpdate(updatedTodo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "附件上传失败");
     } finally {
@@ -250,18 +340,30 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   }
 
   async function openAttachment(attachment: AttachmentMetadata) {
+    if (attachment.is_orphaned) return;
     setDownloadingId(attachment.id);
     setError(null);
     try {
-      const { blob } = await getAttachmentBlob(api, attachment);
+      const { blob } = await getAttachmentBlob(
+        () => api.downloadTodoAttachment(todo.id, attachment.id),
+        attachment,
+        `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
+      );
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = attachment.filename;
       link.click();
       URL.revokeObjectURL(url);
+      setAttachmentErrors((prev) => {
+        const next = { ...prev };
+        delete next[attachment.id];
+        return next;
+      });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "附件打开失败");
+      const message = err instanceof Error ? err.message : "附件打开失败";
+      setError(message);
+      setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
       setDownloadingId(null);
     }
@@ -280,7 +382,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     try {
       await api.removeTodoAttachment(todo.id, attachment.id);
       setAttachmentsChanged(true);
-      await loadAttachments();
+      const updatedAttachments = await loadAttachments();
+      const updatedTodo = { ...todo, attachment_count: updatedAttachments.length };
+      setTodo(updatedTodo);
+      onUpdate(updatedTodo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "附件删除失败");
     } finally {
@@ -348,21 +453,18 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               <DatePicker
                 value={plannedDate}
                 onChange={setPlannedDate}
-                hasError={plannedAtError && plannedDate !== ""}
+                hasError={datetimeValidation.plannedDateError}
                 theme="green"
               />
               <input
                 type="text"
-                className={`modal-input modal-datetime-time${plannedAtError && plannedDate ? " invalid" : ""}`}
+                className={`modal-input modal-datetime-time${datetimeValidation.plannedTimeError ? " invalid" : ""}`}
                 value={plannedTime}
                 placeholder="HH:MM:SS"
                 maxLength={8}
                 onChange={(e) => setPlannedTime(e.target.value)}
               />
             </div>
-            {plannedAtError ? (
-              <span className="modal-field-hint">请填写有效的计划日期和时间 (如 14:30:00)</span>
-            ) : null}
           </div>
 
           <div className="modal-field">
@@ -371,17 +473,21 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               <DatePicker
                 value={dueDate}
                 onChange={setDueDate}
+                hasError={datetimeValidation.dueDateError}
                 theme="green"
               />
               <input
                 type="text"
-                className="modal-input modal-datetime-time"
+                className={`modal-input modal-datetime-time${datetimeValidation.dueTimeError ? " invalid" : ""}`}
                 value={dueTime}
                 placeholder="HH:MM:SS"
                 maxLength={8}
                 onChange={(e) => setDueTime(e.target.value)}
               />
             </div>
+            {datetimeValidation.message ? (
+              <span className="modal-field-hint">{datetimeValidation.message}</span>
+            ) : null}
           </div>
 
           <div className="modal-field-row">
@@ -439,17 +545,24 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               }}
             />
           </div>
+          {attachmentBusy ? <div className="attachment-progress-bar" aria-label="附件处理中" /> : null}
 
           <div className="attachment-list">
             {attachments.map((attachment) => {
               const url = attachmentUrls[attachment.id];
+              const orphaned = attachment.is_orphaned;
+              const loadError = attachmentErrors[attachment.id];
               return (
-                <div className="attachment-row" key={attachment.id}>
+                <div
+                  className={`attachment-row${orphaned ? " orphaned" : ""}${loadError ? " failed" : ""}`}
+                  key={attachment.id}
+                >
                   <button
                     type="button"
                     className="attachment-thumb"
+                    disabled={orphaned}
                     onClick={() => {
-                      if (attachment.preview_kind === "none") {
+                      if (attachment.preview_kind === "none" || !url) {
                         openAttachment(attachment);
                       } else {
                         setPreview(attachment);
@@ -457,7 +570,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     }}
                     aria-label={`打开 ${attachment.filename}`}
                   >
-                    {attachment.preview_kind === "image" && url ? (
+                    {orphaned || loadError ? (
+                      <AttachmentMissingIcon />
+                    ) : attachment.preview_kind === "image" && url ? (
                       <img src={url} alt="" />
                     ) : attachment.preview_kind === "video" && url ? (
                       <video src={url} muted />
@@ -471,13 +586,15 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     type="button"
                     className="attachment-name"
                     onClick={() => openAttachment(attachment)}
-                    disabled={downloadingId === attachment.id}
+                    disabled={orphaned || downloadingId === attachment.id}
                   >
                     <span className="attachment-filename">{attachment.filename}</span>
                     <span className="attachment-size">
-                      {downloadingId === attachment.id
-                        ? "下载中..."
-                        : formatSize(attachment.plain_size_bytes)}
+                      {orphaned
+                        ? "文件丢失"
+                        : downloadingId === attachment.id
+                          ? "下载中..."
+                          : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
                   <button
@@ -491,8 +608,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
                       <path d="M701.8 870H351.9c-71 0-128.8-57.8-128.8-128.8V213.7h51.5v527.5c0 42.6 34.7 77.3 77.3 77.3h349.9c42.6 0 77.3-34.7 77.3-77.3V213.7h51.5v527.5c0 71-57.8 128.8-128.8 128.8zM647.7 186h-51.5c0-28.4-29.9-51.6-66.7-51.6-36.7 0-66.6 23.1-66.6 51.6h-51.5c0-56.9 53-103.1 118.1-103.1S647.7 129.1 647.7 186z" />
                       <path d="M384.2 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM531 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM677.8 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-11 24.3-24.3 24.3z" />
-                    </svg>
-                  </button>
+                      </svg>
+                    </button>
+                  {loadError ? <div className="attachment-error-text">{loadError}</div> : null}
                 </div>
               );
             })}
@@ -546,7 +664,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           <button
             type="button"
             className="modal-btn modal-btn-save"
-            disabled={!dirty || saving || plannedAtError}
+            disabled={!dirty || saving || datetimeValidation.hasError}
             onClick={handleSave}
           >
             {saving ? "保存中..." : "保存更改"}
@@ -567,6 +685,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             {deleting ? "删除中..." : "删除"}
           </button>
         </div>
+        {saving ? <div className="modal-save-progress" aria-label="保存中" /> : null}
       </div>
       {preview ? (
         <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>

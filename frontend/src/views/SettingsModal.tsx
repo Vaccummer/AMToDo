@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AMToDoApi } from "../api/client";
 import { importP256PublicKey } from "../crypto/envelope";
+import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
 import type { UISettings } from "../lib/settings";
 import { Dropdown } from "./Dropdown";
 import { useConfirm } from "./ConfirmDialog";
@@ -54,6 +55,26 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [verifyingToken, setVerifyingToken] = useState(false);
   const [tokenResult, setTokenResult] = useState<{ ok: boolean; userName?: string; message: string } | null>(null);
 
+  // Cache
+  const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
+  const [clearingCache, setClearingCache] = useState(false);
+
+  const formatSize = useCallback((bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }, []);
+
+  const loadCacheSize = useCallback(async () => {
+    try {
+      const size = await getCacheSize();
+      setCacheSize(size);
+    } catch {
+      setCacheSize(null);
+    }
+  }, []);
+
   useEffect(() => {
     setServerUrl(initial.server_url);
     setAccessToken(initial.access_token);
@@ -64,6 +85,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     setUrlTestResult(null);
     setTokenResult(null);
   }, [initial]);
+
+  useEffect(() => {
+    loadCacheSize().catch(() => setCacheSize(null));
+  }, [loadCacheSize]);
 
   const dirty = useMemo(() => {
     return (
@@ -77,6 +102,14 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   }, [serverUrl, accessToken, language, timezone, weekStart, slotMinutes, initial]);
 
   const canSave = dirty;
+  const urlInputClass = [
+    "settings-modal-input",
+    urlTestResult ? (urlTestResult.ok ? "valid" : "invalid") : ""
+  ].filter(Boolean).join(" ");
+  const tokenInputClass = [
+    "settings-modal-input",
+    tokenResult ? (tokenResult.ok ? "valid" : "invalid") : ""
+  ].filter(Boolean).join(" ");
 
   async function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
@@ -133,6 +166,25 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     }
   }
 
+  async function handleClearCache() {
+    const ok = await ask({
+      title: "清除缓存",
+      message: "确定清除所有附件缓存吗？下次查看附件时需要重新下载。",
+      confirmLabel: "清除",
+      danger: true,
+    });
+    if (!ok) return;
+    setClearingCache(true);
+    try {
+      await clearAttachmentCache();
+      await loadCacheSize();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "缓存清除失败");
+    } finally {
+      setClearingCache(false);
+    }
+  }
+
   function handleSave() {
     if (!canSave) return;
     setError(null);
@@ -174,7 +226,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
               <input
                 id="srv-url"
                 type="text"
-                className="settings-modal-input"
+                className={urlInputClass}
                 value={serverUrl}
                 onChange={(e) => { setServerUrl(e.target.value); setUrlTestResult(null); }}
               />
@@ -201,7 +253,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 <input
                   id="srv-token"
                   type={showToken ? "text" : "password"}
-                  className="settings-modal-input"
+                  className={tokenInputClass}
                   value={accessToken}
                   onChange={(e) => { setAccessToken(e.target.value); setTokenResult(null); }}
                 />
@@ -282,6 +334,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 options={[
                   { value: "15", label: "15 分钟" },
                   { value: "30", label: "30 分钟" },
+                  { value: "45", label: "45 分钟" },
                   { value: "60", label: "60 分钟" },
                 ]}
                 onChange={setSlotMinutes}
@@ -298,6 +351,30 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 ]}
                 onChange={setWeekStart}
               />
+            </div>
+          </div>
+
+          <div className="settings-modal-divider" />
+
+          {/* Cache */}
+          <div className="settings-modal-section-label">缓存</div>
+
+          <div className="settings-modal-field">
+            <span className="settings-modal-label">附件缓存</span>
+            <div className="settings-modal-input-row">
+              <span className="settings-modal-cache-info">
+                {cacheSize
+                  ? `${cacheSize.count} 个文件，共 ${formatSize(cacheSize.bytes)}`
+                  : "加载中..."}
+              </span>
+              <button
+                type="button"
+                className="settings-modal-inline-btn settings-modal-cache-clear"
+                disabled={clearingCache || !cacheSize || cacheSize.count === 0}
+                onClick={handleClearCache}
+              >
+                {clearingCache ? "清除中..." : "清除"}
+              </button>
             </div>
           </div>
         </div>
