@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -176,7 +177,58 @@ function createWindow() {
   }
 }
 
+function resolveConfigPath() {
+  return path.resolve(__dirname, "..", "..", "config", "ui.toml");
+}
+
+function readUiToml() {
+  const configPath = resolveConfigPath();
+  const raw = fs.readFileSync(configPath, "utf-8");
+  const entries = {};
+  for (const line of raw.split("\n")) {
+    const m = line.match(/^\s*(\w+)\s*=\s*"([^"]*)"\s*(?:#.*)?$/);
+    if (m) entries[m[1]] = m[2];
+  }
+  return entries;
+}
+
+function writeUiToml(settings) {
+  const configPath = resolveConfigPath();
+  const lines = [];
+  const keys = [
+    "server_url", "access_token", "admin_token",
+    "language", "timezone", "font_family", "font_size",
+    "calendar_days", "week_start",
+    "scheduler_start_hour", "scheduler_end_hour", "scheduler_slot_minutes"
+  ];
+  lines.push("# AMToDo UI configuration (non-visual parameters).");
+  for (const key of keys) {
+    if (settings[key] !== undefined) {
+      lines.push(`${key} = "${settings[key]}"`);
+    }
+  }
+  lines.push("");
+  fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
+}
+
 app.whenReady().then(() => {
+  ipcMain.handle("settings:read", () => {
+    try {
+      return readUiToml();
+    } catch {
+      return {};
+    }
+  });
+
+  ipcMain.handle("settings:write", (_event, settings) => {
+    try {
+      writeUiToml(settings);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

@@ -12,6 +12,12 @@ function base64urlEncode(data: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+function base64urlDecode(b64url: string): Uint8Array {
+  let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4 !== 0) b64 += "=";
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
 function splitTag(ciphertext: ArrayBuffer): { data: Uint8Array; tag: Uint8Array } {
   const full = new Uint8Array(ciphertext);
   const tag = full.slice(full.length - TAG_BYTES);
@@ -30,11 +36,17 @@ export async function importP256PublicKey(base64Key: string): Promise<CryptoKey>
   );
 }
 
+export interface SealedEnvelope {
+  envelope: object;
+  aesKey: CryptoKey;
+  requestId: string;
+}
+
 export async function seal(
   payload: object,
   serverPublicKey: CryptoKey,
   keyId: string
-): Promise<object> {
+): Promise<SealedEnvelope> {
   const ephemeralKey = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,
@@ -67,7 +79,7 @@ export async function seal(
     hkdfKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt"]
+    ["encrypt", "decrypt"]
   );
 
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
@@ -86,7 +98,7 @@ export async function seal(
 
   const { data, tag } = splitTag(ciphertext);
 
-  return {
+  const envelope = {
     version: ENVELOPE_VERSION,
     keyId,
     alg: ALGORITHM,
@@ -95,4 +107,38 @@ export async function seal(
     data: base64urlEncode(data),
     tag: base64urlEncode(tag),
   };
+
+  return { envelope, aesKey, requestId };
+}
+
+export function isResponseEnvelope(body: unknown): boolean {
+  if (typeof body !== "object" || body === null) return false;
+  const obj = body as Record<string, unknown>;
+  return (
+    typeof obj.nonce === "string" &&
+    typeof obj.data === "string" &&
+    typeof obj.tag === "string" &&
+    obj.ek === undefined
+  );
+}
+
+export async function openResponse(
+  envelope: Record<string, unknown>,
+  aesKey: CryptoKey
+): Promise<object> {
+  const nonce = base64urlDecode(envelope.nonce as string);
+  const encData = base64urlDecode(envelope.data as string);
+  const tag = base64urlDecode(envelope.tag as string);
+
+  const ciphertext = new Uint8Array(encData.length + tag.length);
+  ciphertext.set(encData);
+  ciphertext.set(tag, encData.length);
+
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: nonce.buffer as ArrayBuffer, tagLength: 128 },
+    aesKey,
+    ciphertext.buffer as ArrayBuffer
+  );
+
+  return JSON.parse(new TextDecoder().decode(plaintext));
 }

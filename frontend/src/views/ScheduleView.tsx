@@ -17,13 +17,18 @@ import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
 import toTodayIcon from "../assets/ToToday.svg";
+import scheduleNormalIcon from "../assets/schedule-normal.svg";
+import scheduleFullIcon from "../assets/schedule-full.svg";
 
 type Props = {
   api: AMToDoApi;
+  startHour?: number;
+  endHour?: number;
+  slotMinutes?: number;
+  weekStart?: number;
 };
 
 const HOUR_HEIGHT = 64;
-const VISIBLE_END_HOUR = 24;
 const EVENT_COLOR_COUNT = 5;
 
 type ScheduleTextMode = "tiny" | "mini" | "mid" | "full";
@@ -37,7 +42,7 @@ type RenderedScheduleBlock = {
   titleLines: number;
 };
 
-export function ScheduleView({ api }: Props) {
+export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes: _slotMinutes = 30, weekStart = 0 }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDateKey, setSelectedDateKey] = useState<string>(dateKeyFromDate(new Date()));
   const [showCalendar, setShowCalendar] = useState(false);
@@ -47,11 +52,12 @@ export function ScheduleView({ api }: Props) {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const weekLabelRef = useRef<HTMLDivElement>(null);
+  const dayHeadersRef = useRef<HTMLDivElement>(null);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
 
   const hours = useMemo(
-    () => Array.from({ length: fullHours ? 24 : 18 }, (_, i) => i + (fullHours ? 0 : 6)),
-    [fullHours]
+    () => Array.from({ length: fullHours ? 24 : endHour - startHour }, (_, i) => i + (fullHours ? 0 : startHour)),
+    [fullHours, startHour, endHour]
   );
 
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
@@ -75,10 +81,10 @@ export function ScheduleView({ api }: Props) {
     return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
   }, [weekMondayKey]);
 
-  const visibleStartHour = fullHours ? 0 : 6;
+  const visibleStartHour = fullHours ? 0 : startHour;
   const blocksByDay = useMemo(
-    () => buildScheduleBlocks(items, days, visibleStartHour, VISIBLE_END_HOUR),
-    [items, days, visibleStartHour]
+    () => buildScheduleBlocks(items, days, visibleStartHour, endHour),
+    [items, days, visibleStartHour, endHour]
   );
   const gridStyle = {
     "--schedule-hour-height": `${HOUR_HEIGHT}px`
@@ -134,8 +140,8 @@ export function ScheduleView({ api }: Props) {
   }
 
   function toggleCalendar() {
-    if (!showCalendar && weekLabelRef.current) {
-      setCalendarAnchor(weekLabelRef.current.getBoundingClientRect());
+    if (!showCalendar && dayHeadersRef.current) {
+      setCalendarAnchor(dayHeadersRef.current.getBoundingClientRect());
     }
     setShowCalendar((v) => !v);
   }
@@ -146,27 +152,27 @@ export function ScheduleView({ api }: Props) {
         <button type="button" className="cal-nav" aria-label="上一周" onClick={prevWeek}>
           <img src={leftIcon} alt="" />
         </button>
-        <button type="button" className="cal-month-label" onClick={toggleCalendar}>
-          {weekLabel}
-          <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
+        <div className="schedule-week-center">
+          <button type="button" className="cal-month-label" onClick={toggleCalendar}>
+            {weekLabel}
             {showCalendar ? (
-              <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
-            ) : (
-              <path d="M18 78 H82 Q90 78 86 70 L56 26 Q50 18 44 26 L14 70 Q10 78 18 78 Z" fill="currentColor" />
-            )}
-          </svg>
-        </button>
+              <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
+                <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
+              </svg>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="cal-today"
+            aria-label="回到今天"
+            onClick={goToToday}
+            disabled={weekOffset === 0 && selectedDateKey === todayKey}
+          >
+            <img src={toTodayIcon} alt="" />
+          </button>
+        </div>
         <button type="button" className="cal-nav" aria-label="下一周" onClick={nextWeek}>
           <img src={rightIcon} alt="" />
-        </button>
-        <button
-          type="button"
-          className="cal-today"
-          aria-label="回到今天"
-          onClick={goToToday}
-          disabled={weekOffset === 0 && selectedDateKey === todayKey}
-        >
-          <img src={toTodayIcon} alt="" />
         </button>
       </div>
 
@@ -177,17 +183,18 @@ export function ScheduleView({ api }: Props) {
           anchorRect={calendarAnchor}
           onSelect={goToDate}
           onClose={() => setShowCalendar(false)}
+          weekStart={weekStart}
         />
       ) : null}
 
-      <div className="schedule-day-headers">
+      <div className="schedule-day-headers" ref={dayHeadersRef}>
         <button
           type="button"
           className="schedule-corner-btn"
           onClick={() => setFullHours((v) => !v)}
           title="切换时间范围"
         >
-          {fullHours ? "00-24" : "06-24"}
+          <img src={fullHours ? scheduleFullIcon : scheduleNormalIcon} alt="" />
         </button>
         {days.map((dayKey) => {
           const isToday = dayKey === todayKey;

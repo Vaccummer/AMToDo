@@ -1,4 +1,12 @@
-const DEFAULT_TIMEZONE = "Asia/Shanghai";
+let DEFAULT_TIMEZONE = "Asia/Shanghai";
+
+export function getDefaultTimezone(): string {
+  return DEFAULT_TIMEZONE;
+}
+
+export function setDefaultTimezone(tz: string): void {
+  DEFAULT_TIMEZONE = tz;
+}
 
 export function startOfLocalDayEpoch(value: Date, timezone = DEFAULT_TIMEZONE): number {
   const parts = dateParts(value, timezone);

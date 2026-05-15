@@ -8,6 +8,4 @@ font_family = "JetBrainsMono Nerd Font, Microsoft YaHei UI, Segoe UI, sans-serif
 font_size = "28"
 calendar_days = "7"
 week_start = "0"
-scheduler_start_hour = "6"
-scheduler_end_hour = "24"
 scheduler_slot_minutes = "30"
