@@ -13,5 +13,12 @@ contextBridge.exposeInMainWorld("amtodoShell", {
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   registerHotkey: (accelerator) => ipcRenderer.invoke("hotkey:register", accelerator),
-  unregisterHotkey: () => ipcRenderer.invoke("hotkey:unregister")
+  unregisterHotkey: () => ipcRenderer.invoke("hotkey:unregister"),
+  startNotificationPolling: (settings) => ipcRenderer.invoke("notification:start-polling", settings),
+  stopNotificationPolling: () => ipcRenderer.invoke("notification:stop-polling"),
+  onNotificationClicked: (callback) => {
+    const listener = (_event, notificationId) => callback(notificationId);
+    ipcRenderer.on("notification:clicked", listener);
+    return () => ipcRenderer.removeListener("notification:clicked", listener);
+  }
 });
