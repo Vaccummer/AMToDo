@@ -171,7 +171,7 @@ export function TrashView({ api }: Props) {
         <span>{status || `${filteredItems.length}/${items.length} 项`}</span>
         <div className="trash-date-filters">
           <DatePicker value={startDate} onChange={setStartDate} placeholder="删除开始" />
-          <DatePicker value={endDate} onChange={setEndDate} placeholder="删除结束" />
+          <DatePicker value={endDate} onChange={setEndDate} placeholder="删除结束" panelAlign="right" />
         </div>
       </div>
 
@@ -245,9 +245,15 @@ function formatDeletedAt(epoch?: number | null): string {
 
 function formatShortDateTime(epoch: number): string {
   const d = new Date(epoch * 1000);
+  const nowYear = new Date().getFullYear();
+  const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${month}-${day} ${formatTime(epoch)}`;
+  const hm = formatTime(epoch);
+  if (year === nowYear) {
+    return `${month}-${day} ${hm}`;
+  }
+  return `${year}-${month}-${day} ${hm}`;
 }
 
 function formatDateTime(epoch: number): string {

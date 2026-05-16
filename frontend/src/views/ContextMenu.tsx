@@ -5,6 +5,7 @@ export type MenuItem = {
   icon: React.ReactNode;
   action: () => void;
   danger?: boolean;
+  disabled?: boolean;
 };
 
 type Props = {
@@ -61,13 +62,14 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
         <button
           key={i}
           type="button"
-          className={`context-menu-item${item.danger ? " danger" : ""}`}
+          className={`context-menu-item${item.danger ? " danger" : ""}${item.disabled ? " disabled" : ""}`}
           onClick={() => {
+            if (item.disabled) return;
             item.action();
             onClose();
           }}
         >
-          <span className="context-menu-icon">{item.icon}</span>
+          {item.icon ? <span className="context-menu-icon">{item.icon}</span> : null}
           <span className="context-menu-label">{item.label}</span>
         </button>
       ))}
