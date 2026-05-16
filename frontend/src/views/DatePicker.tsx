@@ -17,6 +17,7 @@ type Props = {
   placeholder?: string;
   hasError?: boolean;
   theme?: "green" | "gold";
+  panelAlign?: "left" | "right";
   id?: string;
 };
 
@@ -27,7 +28,7 @@ function fmtDisplay(dateKey: string): string {
   return `${y}年${m}月${d}日 ${weekday}`;
 }
 
-export function DatePicker({ value, onChange, placeholder, hasError, theme = "green", id }: Props) {
+export function DatePicker({ value, onChange, placeholder, hasError, theme = "green", panelAlign = "left", id }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -201,7 +202,7 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
       </div>
 
       {open ? (
-        <div className={`date-picker-panel theme-${theme}`}>
+        <div className={`date-picker-panel theme-${theme} align-${panelAlign}`}>
           <div className="dp-panel-header">
             <button type="button" className="dp-nav" aria-label="上一月" onClick={prevMonth}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
