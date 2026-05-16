@@ -19,28 +19,37 @@ class TodoRepository:
 
     def add(self, todo: object) -> object:
         """Persist a ToDo row."""
-
         self._session.add(todo)
         return todo
 
     def remove(self, todo: object) -> None:
         """Delete a ToDo row."""
-
         self._session.delete(todo)
 
     def get(self, todo_id: int) -> object | None:
-        """Return a ToDo by id if it exists."""
+        """Return a non-deleted ToDo by id."""
+        return self._session.scalars(
+            select(self._model).where(
+                self._model.id == todo_id,
+                self._model.deleted_at.is_(None),
+            )
+        ).first()
 
+    def get_including_deleted(self, todo_id: int) -> object | None:
+        """Return a ToDo by id regardless of deletion state."""
         return self._session.get(self._model, todo_id)
 
     def list_all(self) -> list[object]:
-        """Return all ToDos ordered for stable display."""
-
-        statement = select(self._model).order_by(
-            self._model.planned_at,
-            self._model.completed,
-            self._model.priority.desc(),
-            self._model.id,
+        """Return all non-deleted ToDos ordered for stable display."""
+        statement = (
+            select(self._model)
+            .where(self._model.deleted_at.is_(None))
+            .order_by(
+                self._model.planned_at,
+                self._model.completed,
+                self._model.priority.desc(),
+                self._model.id,
+            )
         )
         return list(self._session.scalars(statement))
 
@@ -50,14 +59,14 @@ class TodoRepository:
         end_at: int,
         completed: bool | None = None,
     ) -> list[object]:
-        """Return ToDos planned in the requested range."""
-
+        """Return non-deleted ToDos planned in the requested range."""
         statement = select(self._model).where(
-            self._model.planned_at >= start_at, self._model.planned_at < end_at
+            self._model.planned_at >= start_at,
+            self._model.planned_at < end_at,
+            self._model.deleted_at.is_(None),
         )
         if completed is not None:
             statement = statement.where(self._model.completed.is_(completed))
-
         statement = statement.order_by(
             self._model.planned_at,
             self._model.completed,
@@ -72,8 +81,7 @@ class TodoRepository:
         end_at: int,
         completed: bool | None = None,
     ) -> list[object]:
-        """Return ToDos created in the requested range."""
-
+        """Return non-deleted ToDos created in the requested range."""
         return self.list_filtered(
             created_start_at=start_at,
             created_end_at=end_at,
@@ -95,10 +103,15 @@ class TodoRepository:
         priority_min: int | None = None,
         priority_max: int | None = None,
         tag: str | None = None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
     ) -> list[object]:
         """Return ToDos matching optional timestamp and scalar filters."""
-
         statement = select(self._model)
+        if deleted_only:
+            statement = statement.where(self._model.deleted_at.isnot(None))
+        elif not include_deleted:
+            statement = statement.where(self._model.deleted_at.is_(None))
         if planned_start_at is not None:
             statement = statement.where(self._model.planned_at >= planned_start_at)
         if planned_end_at is not None:
@@ -125,7 +138,6 @@ class TodoRepository:
             statement = statement.where(self._model.priority <= priority_max)
         if tag is not None:
             statement = statement.where(self._model.tag == tag)
-
         statement = statement.order_by(
             self._model.planned_at,
             self._model.created_at,
@@ -141,16 +153,14 @@ class TodoRepository:
         end_at: int | None = None,
         completed: bool | None = None,
     ) -> list[object]:
-        """Return ToDos with optional due timestamp bounds."""
-
-        statement = select(self._model)
+        """Return non-deleted ToDos with optional due timestamp bounds."""
+        statement = select(self._model).where(self._model.deleted_at.is_(None))
         if start_at is not None:
             statement = statement.where(self._model.due_at >= start_at)
         if end_at is not None:
             statement = statement.where(self._model.due_at < end_at)
         if completed is not None:
             statement = statement.where(self._model.completed.is_(completed))
-
         statement = statement.order_by(
             self._model.due_at,
             self._model.completed,
@@ -158,3 +168,36 @@ class TodoRepository:
             self._model.id,
         )
         return list(self._session.scalars(statement))
+
+    def list_deleted(
+        self,
+        *,
+        planned_start_at: int | None = None,
+        planned_end_at: int | None = None,
+        due_start_at: int | None = None,
+        due_end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
+        completed: bool | None = None,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        tag: str | None = None,
+    ) -> list[object]:
+        """Return deleted ToDos matching optional filters."""
+        return self.list_filtered(
+            planned_start_at=planned_start_at,
+            planned_end_at=planned_end_at,
+            due_start_at=due_start_at,
+            due_end_at=due_end_at,
+            created_start_at=created_start_at,
+            created_end_at=created_end_at,
+            updated_start_at=updated_start_at,
+            updated_end_at=updated_end_at,
+            completed=completed,
+            priority_min=priority_min,
+            priority_max=priority_max,
+            tag=tag,
+            deleted_only=True,
+        )
