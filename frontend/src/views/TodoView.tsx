@@ -3,25 +3,24 @@ import type { AMToDoApi, TodoItem } from "../api/client";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
-  formatDateKeyDay,
-  formatDateKeyWeekday,
   formatTime,
   isOverdueTodo,
-  monthLabelFromDateKey,
-  startOfDateKeyEpoch
+  startOfDateKeyEpoch,
+  startOfWeekDateKey,
+  weekOfMonth
 } from "../lib/time";
 import { CalendarPopup } from "./CalendarPopup";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { TodoDetailModal } from "./TodoDetailModal";
-import leftIcon from "../assets/left.svg";
-import rightIcon from "../assets/right.svg";
-import toTodayIcon from "../assets/ToToday.svg";
 
 type Props = {
   api: AMToDoApi;
   calendarDays?: number;
   weekStart?: number;
+  cachedDateKey?: string;
+  onDateChange?: (dateKey: string) => void;
 };
 
 function EditIcon() {
@@ -50,9 +49,10 @@ function AttachmentCountIcon() {
   );
 }
 
-export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedOffset, setSelectedOffset] = useState(0);
+export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange }: Props) {
+  const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
+  const normalizedWeekStart = weekStart === 1 ? 1 : 0;
+  const [selectedDayKey, setSelectedDayKey] = useState(cachedDateKey ?? todayKey);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [status, setStatus] = useState<string>("加载中");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -64,16 +64,23 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
 
-  const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
-  const weekStartKey = useMemo(() => addDaysToDateKey(todayKey, weekOffset * 7), [todayKey, weekOffset]);
+  const weekStartKey = useMemo(
+    () => startOfWeekDateKey(selectedDayKey, normalizedWeekStart),
+    [normalizedWeekStart, selectedDayKey]
+  );
   const days = useMemo(
     () => Array.from({ length: calendarDays }, (_, i) => addDaysToDateKey(weekStartKey, i)),
     [weekStartKey, calendarDays]
   );
-  const selectedDayKey = days[selectedOffset];
 
-  const isTodaySelected = selectedDayKey === todayKey;
-  const monthLabel = monthLabelFromDateKey(selectedDayKey);
+  useEffect(() => { onDateChange?.(selectedDayKey); }, [selectedDayKey, onDateChange]);
+
+  const weekLabel = useMemo(() => {
+    const [year, month] = weekStartKey.split("-").map(Number);
+    const wn = weekOfMonth(weekStartKey, normalizedWeekStart);
+    const labels = ["一", "二", "三", "四", "五", "六"];
+    return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
+  }, [normalizedWeekStart, weekStartKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,26 +188,19 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
   }
 
   function prevWeek() {
-    setWeekOffset((w) => w - 1);
-    setSelectedOffset(0);
+    setSelectedDayKey(addDaysToDateKey(weekStartKey, -1));
   }
 
   function nextWeek() {
-    setWeekOffset((w) => w + 1);
-    setSelectedOffset(0);
+    setSelectedDayKey(addDaysToDateKey(weekStartKey, calendarDays));
   }
 
   function goToToday() {
-    setWeekOffset(0);
-    setSelectedOffset(0);
+    setSelectedDayKey(todayKey);
   }
 
   function goToDate(dateKey: string) {
-    const todayEpoch = startOfDateKeyEpoch(todayKey);
-    const targetEpoch = startOfDateKeyEpoch(dateKey);
-    const diff = Math.round((targetEpoch - todayEpoch) / 86400);
-    setWeekOffset(Math.floor(diff / 7));
-    setSelectedOffset(((diff % 7) + 7) % 7);
+    setSelectedDayKey(dateKey);
   }
 
   async function deleteTodo(id: number) {
@@ -215,8 +215,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
   async function askDeleteTodo(id: number) {
     const ok = await ask({
       title: "删除待办",
-      message: "确定删除这条待办吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      message: "确定将这条待办移入回收站吗？之后可以在 Trash 中恢复。",
+      confirmLabel: "移入回收站",
       danger: true,
     });
     if (ok) deleteTodo(id);
@@ -230,56 +230,24 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0 }: Props) {
 
   return (
     <div className="todo-view">
-      <div className="calendar-strip" ref={calendarStripRef}>
-        <div className="cal-month-row">
-          <button
-            type="button"
-            className="cal-month-label"
-            onClick={() => {
-              if (!showCalendar && calendarStripRef.current) {
-                setAnchorRect(calendarStripRef.current.getBoundingClientRect());
-              }
-              setShowCalendar((v) => !v);
-            }}
-          >
-            {monthLabel}
-            {showCalendar ? (
-              <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
-                <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
-              </svg>
-            ) : null}
-          </button>
-        </div>
-        <div className="cal-day-row">
-        <button type="button" className="cal-nav" aria-label="上一周" onClick={prevWeek}>
-          <img src={leftIcon} alt="" />
-        </button>
-        {days.map((dayKey, index) => {
-          const isToday = dayKey === todayKey;
-          const isSelected = index === selectedOffset;
-          const className = ["day-cell", isSelected ? "selected" : "", isToday ? "today" : ""]
-            .filter(Boolean)
-            .join(" ");
-          return (
-          <button
-            type="button"
-            key={dayKey}
-            className={className}
-            onClick={() => setSelectedOffset(index)}
-          >
-            <span>{formatDateKeyWeekday(dayKey)}</span>
-            <strong>{formatDateKeyDay(dayKey)}</strong>
-          </button>
-          );
-        })}
-        <button type="button" className="cal-today" aria-label="回到今天" onClick={goToToday} disabled={isTodaySelected}>
-          <img src={toTodayIcon} alt="" />
-        </button>
-        <button type="button" className="cal-nav" aria-label="下一周" onClick={nextWeek}>
-          <img src={rightIcon} alt="" />
-        </button>
-        </div>
-      </div>
+      <DateBar
+        ref={calendarStripRef}
+        title={weekLabel}
+        days={days}
+        selectedDateKey={selectedDayKey}
+        todayKey={todayKey}
+        open={showCalendar}
+        onPrevious={prevWeek}
+        onNext={nextWeek}
+        onTitleClick={() => {
+          if (!showCalendar && calendarStripRef.current) {
+            setAnchorRect(calendarStripRef.current.getBoundingClientRect());
+          }
+          setShowCalendar((v) => !v);
+        }}
+        onToday={goToToday}
+        onSelectDate={setSelectedDayKey}
+      />
 
       {showCalendar && anchorRect ? (
         <CalendarPopup

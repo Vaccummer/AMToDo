@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleItem, TodoItem } from "../api/client";
 import { addDaysToDateKey, formatTime, startOfDateKeyEpoch } from "../lib/time";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
@@ -16,6 +16,29 @@ type Props = {
 type SearchMode = "todo" | "schedule";
 type TodoTimeField = "planned" | "due" | "created" | "updated";
 type ScheduleTimeField = "overlap" | "created" | "updated";
+type SortOrder = "asc" | "desc";
+
+type SearchConfig = {
+  mode: SearchMode;
+  query: string;
+  useRegex: boolean;
+  ignoreCase: boolean;
+  startDate: string;
+  endDate: string;
+  todoTimeField: TodoTimeField;
+  scheduleTimeField: ScheduleTimeField;
+  todoFields: string[];
+  scheduleFields: string[];
+  todoStatus: string;
+  priorityMin: string;
+  priorityMax: string;
+  tag: string;
+  category: string;
+  location: string;
+  todoSortBy: string;
+  scheduleSortBy: string;
+  sortOrder: SortOrder;
+};
 
 type ResultItem =
   | { type: "todo"; item: TodoItem }
@@ -65,6 +88,30 @@ const SCHEDULE_SORT_OPTIONS = [
   { value: "title", label: "标题" }
 ];
 
+const DEFAULT_SEARCH_CONFIG: SearchConfig = {
+  mode: "todo",
+  query: "",
+  useRegex: false,
+  ignoreCase: true,
+  startDate: "",
+  endDate: "",
+  todoTimeField: "planned",
+  scheduleTimeField: "overlap",
+  todoFields: ["title", "description", "tag"],
+  scheduleFields: ["title", "description", "location", "category"],
+  todoStatus: "all",
+  priorityMin: "",
+  priorityMax: "",
+  tag: "",
+  category: "",
+  location: "",
+  todoSortBy: "updated_at",
+  scheduleSortBy: "updated_at",
+  sortOrder: "desc"
+};
+
+let searchSessionConfig: SearchConfig = cloneSearchConfig(DEFAULT_SEARCH_CONFIG);
+
 function SearchIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -97,16 +144,29 @@ function EditIcon() {
 
 function JumpIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7 17L17 7M9 7h8v8"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg
+      className="icon"
+      viewBox="0 0 1024 1024"
+      version="1.1"
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      aria-hidden="true"
+    >
+      <path d="M937.280742 9.50348L401.759629 737.47007l-73.176798-122.594896L937.280742 9.50348" fill="#515151" />
+      <path d="M937.280742 9.50348L369.92297 632.456613l34.212529 103.112761L937.280742 9.50348" fill="#515151" />
+      <path d="M937.280742 9.50348L329.058005 613.924826 77.215777 426.706265 937.280742 9.50348" fill="#515151" />
+      <path d="M931.10348 12.829698L369.92297 632.456613l252.317401 194.346171 308.863109-813.973086" fill="#515151" />
     </svg>
   );
+}
+
+function cloneSearchConfig(config: SearchConfig): SearchConfig {
+  return {
+    ...config,
+    todoFields: [...config.todoFields],
+    scheduleFields: [...config.scheduleFields]
+  };
 }
 
 function dateRangeParams(startDate: string, endDate: string): [number | null, number | null] {
@@ -130,25 +190,26 @@ function updateFields(fields: string[], value: string, checked: boolean): string
 }
 
 export function SearchView({ api, onNavigate }: Props) {
-  const [mode, setMode] = useState<SearchMode>("todo");
-  const [query, setQuery] = useState("");
-  const [useRegex, setUseRegex] = useState(false);
-  const [ignoreCase, setIgnoreCase] = useState(true);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [todoTimeField, setTodoTimeField] = useState<TodoTimeField>("planned");
-  const [scheduleTimeField, setScheduleTimeField] = useState<ScheduleTimeField>("overlap");
-  const [todoFields, setTodoFields] = useState(["title", "description", "tag"]);
-  const [scheduleFields, setScheduleFields] = useState(["title", "description", "location", "category"]);
-  const [todoStatus, setTodoStatus] = useState("all");
-  const [priorityMin, setPriorityMin] = useState("");
-  const [priorityMax, setPriorityMax] = useState("");
-  const [tag, setTag] = useState("");
-  const [category, setCategory] = useState("");
-  const [location, setLocation] = useState("");
-  const [todoSortBy, setTodoSortBy] = useState("updated_at");
-  const [scheduleSortBy, setScheduleSortBy] = useState("updated_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const initialConfig = useMemo(() => cloneSearchConfig(searchSessionConfig), []);
+  const [mode, setMode] = useState<SearchMode>(initialConfig.mode);
+  const [query, setQuery] = useState(initialConfig.query);
+  const [useRegex, setUseRegex] = useState(initialConfig.useRegex);
+  const [ignoreCase, setIgnoreCase] = useState(initialConfig.ignoreCase);
+  const [startDate, setStartDate] = useState(initialConfig.startDate);
+  const [endDate, setEndDate] = useState(initialConfig.endDate);
+  const [todoTimeField, setTodoTimeField] = useState<TodoTimeField>(initialConfig.todoTimeField);
+  const [scheduleTimeField, setScheduleTimeField] = useState<ScheduleTimeField>(initialConfig.scheduleTimeField);
+  const [todoFields, setTodoFields] = useState(initialConfig.todoFields);
+  const [scheduleFields, setScheduleFields] = useState(initialConfig.scheduleFields);
+  const [todoStatus, setTodoStatus] = useState(initialConfig.todoStatus);
+  const [priorityMin, setPriorityMin] = useState(initialConfig.priorityMin);
+  const [priorityMax, setPriorityMax] = useState(initialConfig.priorityMax);
+  const [tag, setTag] = useState(initialConfig.tag);
+  const [category, setCategory] = useState(initialConfig.category);
+  const [location, setLocation] = useState(initialConfig.location);
+  const [todoSortBy, setTodoSortBy] = useState(initialConfig.todoSortBy);
+  const [scheduleSortBy, setScheduleSortBy] = useState(initialConfig.scheduleSortBy);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(initialConfig.sortOrder);
   const [results, setResults] = useState<ResultItem[]>([]);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState("尚未搜索");
@@ -167,6 +228,50 @@ export function SearchView({ api, onNavigate }: Props) {
     () => (contextMenu ? results.find((result) => resultKey(result) === contextMenu.key) ?? null : null),
     [contextMenu, results]
   );
+
+  useEffect(() => {
+    searchSessionConfig = {
+      mode,
+      query,
+      useRegex,
+      ignoreCase,
+      startDate,
+      endDate,
+      todoTimeField,
+      scheduleTimeField,
+      todoFields: [...todoFields],
+      scheduleFields: [...scheduleFields],
+      todoStatus,
+      priorityMin,
+      priorityMax,
+      tag,
+      category,
+      location,
+      todoSortBy,
+      scheduleSortBy,
+      sortOrder
+    };
+  }, [
+    mode,
+    query,
+    useRegex,
+    ignoreCase,
+    startDate,
+    endDate,
+    todoTimeField,
+    scheduleTimeField,
+    todoFields,
+    scheduleFields,
+    todoStatus,
+    priorityMin,
+    priorityMax,
+    tag,
+    category,
+    location,
+    todoSortBy,
+    scheduleSortBy,
+    sortOrder
+  ]);
 
   async function runSearch() {
     setBusy(true);
@@ -284,8 +389,8 @@ export function SearchView({ api, onNavigate }: Props) {
   async function deleteResult(result: ResultItem) {
     const ok = await ask({
       title: result.type === "todo" ? "删除待办" : "删除日程",
-      message: "确定删除这个项目吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      message: "确定将这个项目移入回收站吗？之后可以在 Trash 中恢复。",
+      confirmLabel: "移入回收站",
       danger: true
     });
     if (!ok) return;
