@@ -11,6 +11,15 @@ def user_to_dict(user: User) -> dict[str, object]:
     return {
         "id": user.id,
         "name": user.name,
+        "created_at": user.created_at,
+    }
+
+
+def user_to_dict_with_token(user: User) -> dict[str, object]:
+    """Serialize a User ORM instance including the access token (CLI only)."""
+    return {
+        "id": user.id,
+        "name": user.name,
         "token": user.token,
         "created_at": user.created_at,
     }
@@ -30,6 +39,7 @@ def todo_to_dict(todo: Todo, timezone: str) -> dict[str, object]:
         "created_at": todo.created_at,
         "updated_at": todo.updated_at,
         "completed_at": todo.completed_at,
+        "deleted_at": todo.deleted_at,
     }
 
 
@@ -97,6 +107,7 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, object]:
         "category": schedule.category,
         "created_at": schedule.created_at,
         "updated_at": schedule.updated_at,
+        "deleted_at": schedule.deleted_at,
     }
 
 
