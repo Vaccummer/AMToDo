@@ -152,6 +152,50 @@ class TestTodoClient:
         assert result["ok"] is False
         assert result["error"]["type"] == "NotFoundError"
 
+    def test_batch_create(self, client):
+        result = client.todo_batch_create([
+            {"title": "Batch 1", "priority": 1},
+            {"title": "Batch 2", "tag": "work"},
+        ])
+        assert result["ok"] is True
+        assert len(result["results"]) == 2
+        assert result["results"][0]["ok"] is True
+        assert result["results"][0]["todo"]["title"] == "Batch 1"
+        assert result["results"][1]["ok"] is True
+        assert result["results"][1]["todo"]["tag"] == "work"
+
+    def test_batch_create_partial_failure(self, client):
+        result = client.todo_batch_create([
+            {"title": "Valid"},
+            {"title": "   "},  # empty title -> ValidationError
+        ])
+        assert result["ok"] is False
+        assert result["results"][0]["ok"] is True
+        assert result["results"][1]["ok"] is False
+        assert result["results"][1]["error"]["type"] == "ValidationError"
+
+    def test_batch_update(self, client):
+        client.todo_create(title="Original 1")
+        client.todo_create(title="Original 2")
+        result = client.todo_batch_update([
+            {"id": 1, "title": "Updated 1"},
+            {"id": 2, "priority": 5},
+        ])
+        assert result["ok"] is True
+        assert result["results"][0]["todo"]["title"] == "Updated 1"
+        assert result["results"][1]["todo"]["priority"] == 5
+
+    def test_batch_update_partial_failure(self, client):
+        client.todo_create(title="Exists")
+        result = client.todo_batch_update([
+            {"id": 1, "title": "Updated"},
+            {"id": 999, "title": "Missing"},  # NotFoundError
+        ])
+        assert result["ok"] is False
+        assert result["results"][0]["ok"] is True
+        assert result["results"][1]["ok"] is False
+        assert result["results"][1]["error"]["type"] == "NotFoundError"
+
 
 class TestScheduleClient:
     def test_add_and_list(self, client):
@@ -181,6 +225,38 @@ class TestScheduleClient:
         client.schedule_create(title="B", start_at=3000, end_at=5000, category="personal")
         result = client.schedule_stats()
         assert result["stats"]["total"] == 2
+
+    def test_batch_create(self, client):
+        result = client.schedule_batch_create([
+            {"title": "Batch A", "start_at": 1000, "end_at": 2000},
+            {"title": "Batch B", "start_at": 3000, "end_at": 4000, "category": "work"},
+        ])
+        assert result["ok"] is True
+        assert len(result["results"]) == 2
+        assert result["results"][0]["ok"] is True
+        assert result["results"][1]["schedule"]["category"] == "work"
+
+    def test_batch_create_partial_failure(self, client):
+        client.schedule_create(title="Existing", start_at=1000, end_at=2000)
+        result = client.schedule_batch_create([
+            {"title": "Valid", "start_at": 5000, "end_at": 6000},
+            {"title": "Conflict", "start_at": 1500, "end_at": 1800},  # ConflictError
+        ])
+        assert result["ok"] is False
+        assert result["results"][0]["ok"] is True
+        assert result["results"][1]["ok"] is False
+        assert result["results"][1]["error"]["type"] == "ConflictError"
+
+    def test_batch_update(self, client):
+        client.schedule_create(title="A", start_at=1000, end_at=2000)
+        client.schedule_create(title="B", start_at=3000, end_at=4000)
+        result = client.schedule_batch_update([
+            {"id": 1, "title": "A updated"},
+            {"id": 2, "location": "Room 101"},
+        ])
+        assert result["ok"] is True
+        assert result["results"][0]["schedule"]["title"] == "A updated"
+        assert result["results"][1]["schedule"]["location"] == "Room 101"
 
 
 class TestAdminClient:
