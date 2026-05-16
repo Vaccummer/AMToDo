@@ -14,7 +14,7 @@ from fastapi import (
 
 from clock import Clock
 from config import AppSettings
-from exceptions import AMToDoError, ValidationError
+from exceptions import AMToDoError, NotFoundError, ValidationError
 from serialization import attachment_to_dict, todo_to_dict
 from server.attachment_helpers import (
     build_download_response,
@@ -418,8 +418,10 @@ def list_deleted_todos(
         priority_max=body.priority_max,
         tag=body.tag,
     )
+    from services.search_common import sort_results
+
     if body.query:
-        from services.search_common import compile_search_query, search_text, sort_results
+        from services.search_common import compile_search_query, search_text
 
         regex = compile_search_query(body.query, use_regex=body.use_regex, ignore_case=body.ignore_case)
         resolved_fields = set(body.fields) & {"title", "description", "tag"}
@@ -468,8 +470,11 @@ def purge_todos(
     att_svc = make_attachment_service(uow, clock, request, "todo")
 
     def _purge_with_attachments(todo_id: int) -> Todo:
-        for att in att_svc.list_for_owner(todo_id):
-            att_svc.remove(todo_id, att.id)
+        try:
+            for att in att_svc.list_for_owner(todo_id):
+                att_svc.remove(todo_id, att.id)
+        except NotFoundError:
+            pass  # owner already soft-deleted; skip attachment cleanup
         return service.purge(todo_id)
 
     results = [
