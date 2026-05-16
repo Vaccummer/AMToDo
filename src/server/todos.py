@@ -40,6 +40,9 @@ from server.schemas import (
     TodoSearchRequest,
     TodoStatsRequest,
     TodoTargetsRequest,
+    TodoTrashDeleteRequest,
+    TodoTrashListRequest,
+    TodoTrashRestoreRequest,
     TodoUpdateRequest,
 )
 from services import AttachmentDraft, TodoDraft, TodoService, TodoUpdate
@@ -374,28 +377,110 @@ def reopen_todos(
 @router.post("/remove")
 def remove_todos(
     body: TodoTargetsRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Soft-delete one or more ToDos by id (move to trash)."""
+    service = TodoService(uow.todos, clock, uow.todo_model)
+    results = [
+        _target_result(
+            target,
+            lambda tid: service.remove(tid),
+            settings.timezone,
+        )
+        for target in unique_targets(body.targets)
+    ]
+    uow.session.flush()
+    return {"ok": all(result["ok"] for result in results), "results": results}
+
+
+@router.post("/trash/list")
+def list_deleted_todos(
+    body: TodoTrashListRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """List deleted (trashed) ToDos with search filters."""
+    service = TodoService(uow.todos, clock, uow.todo_model)
+    todos = service.list_deleted(
+        planned_start_at=body.planned_start_at,
+        planned_end_at=body.planned_end_at,
+        due_start_at=body.due_start_at,
+        due_end_at=body.due_end_at,
+        created_start_at=body.created_start_at,
+        created_end_at=body.created_end_at,
+        updated_start_at=body.updated_start_at,
+        updated_end_at=body.updated_end_at,
+        completed=body.completed,
+        priority_min=body.priority_min,
+        priority_max=body.priority_max,
+        tag=body.tag,
+    )
+    if body.query:
+        from services.search_common import compile_search_query, search_text, sort_results
+
+        regex = compile_search_query(body.query, use_regex=body.use_regex, ignore_case=body.ignore_case)
+        resolved_fields = set(body.fields) & {"title", "description", "tag"}
+        todos = [t for t in todos if regex.search(search_text(t, resolved_fields))]
+    todos = sort_results(todos, sort_by=body.sort_by, sort_order=body.sort_order, value_fn=_todo_sort_value)
+    paged = todos[body.offset:body.offset + body.limit]
+    return {
+        "ok": True,
+        "total": len(todos),
+        "count": len(paged),
+        "todos": [todo_to_dict(todo, settings.timezone) for todo in paged],
+    }
+
+
+@router.post("/trash/restore")
+def restore_todos(
+    body: TodoTrashRestoreRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Restore one or more soft-deleted ToDos."""
+    service = TodoService(uow.todos, clock, uow.todo_model)
+    results = [
+        _target_result(
+            target,
+            lambda tid: service.restore(tid),
+            settings.timezone,
+        )
+        for target in unique_targets(body.targets)
+    ]
+    uow.session.flush()
+    return {"ok": all(result["ok"] for result in results), "results": results}
+
+
+@router.post("/trash/delete")
+def purge_todos(
+    body: TodoTrashDeleteRequest,
     request: Request,
     settings: SettingsDep,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    """Remove one or more ToDos by id."""
+    """Permanently delete one or more soft-deleted ToDos (with attachments)."""
     service = TodoService(uow.todos, clock, uow.todo_model)
     att_svc = make_attachment_service(uow, clock, request, "todo")
 
-    def _remove_with_attachments(todo_id: int) -> Todo:
+    def _purge_with_attachments(todo_id: int) -> Todo:
         for att in att_svc.list_for_owner(todo_id):
             att_svc.remove(todo_id, att.id)
-        return service.remove(todo_id)
+        return service.purge(todo_id)
 
     results = [
         _target_result(
             target,
-            lambda tid: _remove_with_attachments(tid),
+            lambda tid: _purge_with_attachments(tid),
             settings.timezone,
         )
         for target in unique_targets(body.targets)
     ]
+    uow.session.flush()
     return {"ok": all(result["ok"] for result in results), "results": results}
 
 
@@ -492,6 +577,13 @@ def _completion_filter(open_only: bool, completed_only: bool) -> bool | None:
     if completed_only:
         return True
     return None
+
+
+def _todo_sort_value(todo: Todo, sort_by: str) -> object:
+    """Extract sort value from a Todo entity."""
+    if sort_by == "updated_at":
+        return todo.updated_at if todo.updated_at is not None else todo.created_at
+    return getattr(todo, sort_by, None)
 
 
 def _target_result(
