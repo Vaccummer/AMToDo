@@ -111,6 +111,25 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, object]:
     }
 
 
+def notification_to_dict(notification: object, mentions: list[object] | None = None) -> dict[str, object]:
+    """Serialize a Notification ORM instance."""
+    result: dict[str, object] = {
+        "id": notification.id,
+        "title": notification.title,
+        "description": notification.description,
+        "trigger_at": notification.trigger_at,
+        "created_at": notification.created_at,
+        "updated_at": notification.updated_at,
+        "deleted_at": notification.deleted_at,
+    }
+    if mentions is not None:
+        result["mentions"] = [
+            {"id": m.id, "target_type": m.target_type, "target_id": m.target_id}
+            for m in mentions
+        ]
+    return result
+
+
 def error_to_dict(exc_type: type[BaseException], message: str) -> dict[str, object]:
     """Serialize an error to the standard error payload."""
     return {"ok": False, "error": {"type": exc_type.__name__, "message": message}}

@@ -23,6 +23,7 @@ from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationErro
 from models.user import User
 from serialization import error_to_dict
 from server.admin import router as admin_router
+from server.notifications import router as notification_router
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
 
@@ -354,6 +355,7 @@ def create_app(settings: AppSettings) -> FastAPI:
 
     app.include_router(todo_router, prefix="/api/v1/todos", tags=["todos"])
     app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
+    app.include_router(notification_router, prefix="/api/v1/notifications", tags=["notifications"])
 
     return app
 

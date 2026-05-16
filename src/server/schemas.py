@@ -349,3 +349,70 @@ class ScheduleTrashRestoreRequest(UserAuthMixin):
 
 class ScheduleTrashDeleteRequest(UserAuthMixin):
     targets: list[int]
+
+
+# ── Changelog ──
+
+class TodoChangelogQueryRequest(UserAuthMixin):
+    entity_id: int | None = None
+    action: str | None = None
+    start_at: int | None = None
+    end_at: int | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class ScheduleChangelogQueryRequest(UserAuthMixin):
+    entity_id: int | None = None
+    action: str | None = None
+    start_at: int | None = None
+    end_at: int | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+# -- Notification --
+
+class NotificationMentionInput(BaseModel):
+    target_type: str
+    target_id: int
+
+
+class NotificationCreateRequest(UserAuthMixin):
+    title: str
+    trigger_at: int
+    description: str | None = None
+    mentions: list[NotificationMentionInput] = Field(default_factory=list)
+
+
+class NotificationGetRequest(UserAuthMixin):
+    notification_id: int
+
+
+class NotificationUpdateRequest(UserAuthMixin):
+    notification_id: int
+    title: str | None = None
+    description: str | None = None
+    trigger_at: int | None = None
+    mentions: list[NotificationMentionInput] | None = None
+
+
+class NotificationRemoveRequest(UserAuthMixin):
+    notification_id: int
+
+
+class NotificationListRequest(UserAuthMixin):
+    start_at: int | None = None
+    end_at: int | None = None
+
+
+class NotificationListTriggeredRequest(UserAuthMixin):
+    after: int
+
+
+class NotificationTrashRestoreRequest(UserAuthMixin):
+    notification_id: int
+
+
+class NotificationTrashDeleteRequest(UserAuthMixin):
+    notification_id: int
