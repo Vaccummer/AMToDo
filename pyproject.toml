@@ -13,6 +13,7 @@ authors = [
   { name = "AMToDo contributors" },
 ]
 dependencies = [
+  "alembic>=1.14",
   "cryptography>=42.0",
   "fastapi>=0.115",
   "httpx>=0.28",
@@ -39,7 +40,7 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 only-include = []
-force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/amtodo_crypto" = "amtodo_crypto", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui" }
+force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/amtodo_crypto" = "amtodo_crypto", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui", "alembic" = "alembic", "alembic.ini" = "alembic.ini" }
 
 [tool.ruff]
 line-length = 100
@@ -52,3 +53,7 @@ select = ["E", "F", "I", "UP", "B", "ANN", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[[tool.uv.index]]
+url = "https://repo.huaweicloud.com/repository/pypi/simple"
+default = true

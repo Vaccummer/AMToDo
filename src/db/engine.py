@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
 
     from config import AppSettings
 
+logger = logging.getLogger("amtodo")
+
 
 @dataclass(frozen=True, slots=True)
 class Database:
@@ -35,25 +38,51 @@ class Database:
 
         register_models()
         Base.metadata.create_all(self.engine)
-        self._upgrade_sqlite_todo_tables()
 
-    def _upgrade_sqlite_todo_tables(self) -> None:
-        """Apply tiny additive SQLite upgrades for existing local databases."""
+    def run_migrations(self) -> None:
+        """Run Alembic migrations against this database."""
+
+        try:
+            from alembic import command
+            from alembic.config import Config
+        except ImportError:
+            logger.debug("Alembic not installed, skipping migrations")
+            return
+
+        alembic_cfg = Config(str(_find_alembic_ini()))
+        alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
+        command.upgrade(alembic_cfg, "head")
+
+    def stamp_head(self) -> None:
+        """Mark the current schema as up-to-date (for migrating from inline schema management)."""
+
+        try:
+            from alembic import command
+            from alembic.config import Config
+        except ImportError:
+            logger.debug("Alembic not installed, skipping stamp")
+            return
+
+        alembic_cfg = Config(str(_find_alembic_ini()))
+        alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
+        command.stamp(alembic_cfg, "head")
+
+    def ensure_per_user_todo_indexes(self) -> None:
+        """Ensure per-user todo tables have the planned_at column and indexes.
+
+        This handles the case where per-user tables were created by the factory
+        before Alembic managed them. For new databases, Alembic handles everything.
+        """
 
         if self.engine.dialect.name != "sqlite":
             return
 
         inspector = inspect(self.engine)
         todo_tables = {
-            table.name
-            for table in Base.metadata.sorted_tables
-            if table.name == "todos" or table.name.startswith("todos_")
-        }
-        todo_tables.update(
             table_name
             for table_name in inspector.get_table_names()
             if table_name == "todos" or table_name.startswith("todos_")
-        )
+        }
         with self.engine.begin() as connection:
             for table_name in sorted(todo_tables):
                 columns = {column["name"] for column in inspector.get_columns(table_name)}
@@ -62,12 +91,12 @@ class Database:
                     connection.execute(
                         text(f"ALTER TABLE {quoted_table} ADD COLUMN planned_at INTEGER")
                     )
-                connection.execute(
-                    text(
-                        f"UPDATE {quoted_table} "
-                        "SET planned_at = created_at WHERE planned_at IS NULL"
+                    connection.execute(
+                        text(
+                            f"UPDATE {quoted_table} "
+                            "SET planned_at = created_at WHERE planned_at IS NULL"
+                        )
                     )
-                )
                 quoted_index = _quote_identifier(f"ix_{table_name}_planned_completed")
                 connection.execute(
                     text(
@@ -127,3 +156,14 @@ def _quote_identifier(value: str) -> str:
     """Quote an SQLite identifier from SQLAlchemy metadata."""
 
     return '"' + value.replace('"', '""') + '"'
+
+
+def _find_alembic_ini() -> Path:
+    """Locate alembic.ini relative to AMTODO_ROOT."""
+    from config import amtodo_root
+
+    root = amtodo_root()
+    ini_path = root / "alembic.ini"
+    if ini_path.is_file():
+        return ini_path
+    raise FileNotFoundError(f"alembic.ini not found at {ini_path}")
