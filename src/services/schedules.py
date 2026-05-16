@@ -68,10 +68,11 @@ class ScheduleUpdate:
 class ScheduleService:
     """Coordinates schedule use cases without depending on UI or CLI."""
 
-    def __init__(self, repository: ScheduleRepository, clock: Clock, model_class: type) -> None:
+    def __init__(self, repository: ScheduleRepository, clock: Clock, model_class: type, changelog_service=None) -> None:
         self._repository = repository
         self._clock = clock
         self._model = model_class
+        self._changelog = changelog_service
 
     def create(self, draft: ScheduleDraft) -> Schedule:
         """Create a schedule item after validating the time window."""
@@ -97,7 +98,12 @@ class ScheduleService:
             created_at=now,
             updated_at=None,
         )
-        return self._repository.add(schedule)
+        schedule = self._repository.add(schedule)
+        if self._changelog:
+            self._repository.flush()
+            from serialization import schedule_to_dict
+            self._changelog.record_create(schedule.id, schedule_to_dict(schedule))
+        return schedule
 
     def show(self, schedule_id: int) -> Schedule:
         """Return a schedule by id."""
@@ -179,6 +185,10 @@ class ScheduleService:
         """Update mutable schedule fields while preserving conflict checks."""
 
         schedule = self.show(schedule_id)
+        before = None
+        if self._changelog:
+            from serialization import schedule_to_dict
+            before = schedule_to_dict(schedule)
         next_start_at = schedule.start_at if update.start_at is None else update.start_at
         next_end_at = schedule.end_at if update.end_at is None else update.end_at
         self._validate_window(next_start_at, next_end_at)
@@ -241,14 +251,23 @@ class ScheduleService:
 
         if changed:
             schedule.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            after = schedule_to_dict(schedule)
+            self._changelog.record_update(schedule.id, before, after, list(update._fields_set))
         return schedule
 
     def remove(self, schedule_id: int) -> Schedule:
         """Soft-delete a schedule by id (move to trash)."""
         schedule = self.show(schedule_id)
+        before = None
+        if self._changelog:
+            from serialization import schedule_to_dict
+            before = schedule_to_dict(schedule)
         now = self._clock.now_epoch()
         schedule.deleted_at = now
         schedule.updated_at = now
+        if self._changelog and before is not None:
+            self._changelog.record_delete(schedule_id, before)
         return schedule
 
     def restore(self, schedule_id: int) -> Schedule:
@@ -258,9 +277,16 @@ class ScheduleService:
             raise NotFoundError(f"schedule #{schedule_id} was not found")
         if schedule.deleted_at is None:
             raise ValidationError(f"schedule #{schedule_id} is not deleted")
+        before = None
+        if self._changelog:
+            from serialization import schedule_to_dict
+            before = schedule_to_dict(schedule)
         now = self._clock.now_epoch()
         schedule.deleted_at = None
         schedule.updated_at = now
+        if self._changelog and before is not None:
+            after = schedule_to_dict(schedule)
+            self._changelog.record_restore(schedule_id, before, after)
         return schedule
 
     def purge(self, schedule_id: int) -> Schedule:
@@ -270,8 +296,14 @@ class ScheduleService:
             raise NotFoundError(f"schedule #{schedule_id} was not found")
         if schedule.deleted_at is None:
             raise ValidationError(f"schedule #{schedule_id} is not deleted; use remove first")
+        before = None
+        if self._changelog:
+            from serialization import schedule_to_dict
+            before = schedule_to_dict(schedule)
         self._repository.remove(schedule)
         self._repository.flush()
+        if self._changelog and before is not None:
+            self._changelog.record_purge(schedule_id, before)
         return schedule
 
     def list_deleted(

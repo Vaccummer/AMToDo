@@ -23,6 +23,7 @@ def make_attachment_service(
     clock: Clock,
     request: Request,
     owner_type: str,
+    changelog_service=None,
 ) -> AttachmentService:
     """Create an AttachmentService for the given owner type ('todo' or 'schedule')."""
     if owner_type == "todo":
@@ -34,6 +35,7 @@ def make_attachment_service(
             request.app.state.attachment_root,
             uow.user_id,
             owner_type="todo",
+            changelog_service=changelog_service,
         )
     return AttachmentService(
         uow.schedule_attachments,
@@ -43,6 +45,7 @@ def make_attachment_service(
         request.app.state.attachment_root,
         uow.user_id,
         owner_type="schedule",
+        changelog_service=changelog_service,
     )
 
 

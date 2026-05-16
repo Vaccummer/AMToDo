@@ -34,6 +34,7 @@ from server.schemas import (
     TodoAttachmentUploadRequest,
     TodoBatchCreateRequest,
     TodoBatchUpdateRequest,
+    TodoChangelogQueryRequest,
     TodoCreateRequest,
     TodoGetRequest,
     TodoListRequest,
@@ -57,6 +58,19 @@ UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 
 
+def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
+    import json
+    return {
+        "id": entry.id,
+        "entity_id": entry.entity_id,
+        "action": entry.action,
+        "changed_fields": json.loads(entry.changed_fields),
+        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
+        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
+        "created_at": entry.created_at,
+    }
+
+
 @router.post("/list")
 def list_todos(
     body: TodoListRequest,
@@ -69,7 +83,7 @@ def list_todos(
         open_only=body.open_only, completed_only=body.completed_only
     )
 
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     if body.start_at is None and body.end_at is None:
         todos = service.list_all(completed=completed)
     else:
@@ -109,7 +123,7 @@ def search_todos(
     resolved_planned_end = (
         body.planned_end_at if body.planned_end_at is not None else body.end_at
     )
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     todos = service.search(
         body.query,
         fields=body.fields,
@@ -173,7 +187,7 @@ def todo_stats(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Return ToDo statistics."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     stats = service.stats(start_at=body.start_at, end_at=body.end_at)
     return {
         "ok": True,
@@ -191,7 +205,7 @@ def list_attachments(
 ) -> dict[str, object]:
     """List encrypted attachment metadata for a ToDo."""
 
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     attachments = service.list_for_owner(body.todo_id)
     return {
         "ok": True,
@@ -211,7 +225,7 @@ def show_attachment(
 ) -> dict[str, object]:
     """Return encrypted attachment metadata."""
 
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     attachment = service.show(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -225,7 +239,7 @@ def remove_attachment(
 ) -> dict[str, object]:
     """Remove an attachment from a ToDo."""
 
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     attachment = service.remove(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -247,7 +261,7 @@ def upload_attachment_json(
         settings_obj, body.todo_id, len(content), None, clock, request, "todo", uow=uow
     )
 
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     attachment = service.create(
         body.todo_id,
         AttachmentDraft(
@@ -267,7 +281,7 @@ def download_attachment(
     clock: ClockDep,
 ) -> Response:
     """Download encrypted attachment bytes."""
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     return build_download_response(service, body.todo_id, body.attachment_id)
 
 
@@ -279,7 +293,7 @@ def create_todo(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Create a ToDo item."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     todo = service.create(
         TodoDraft(
             title=body.title,
@@ -302,7 +316,7 @@ def show_todo(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Show a ToDo by id."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     todo = service.show(body.todo_id)
     return {"ok": True, "todo": todo_to_dict(todo, settings.timezone)}
 
@@ -315,7 +329,7 @@ def update_todo(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Update mutable ToDo fields."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     todo = service.update(
         body.todo_id,
         TodoUpdate(
@@ -325,7 +339,7 @@ def update_todo(
             description=body.description,
             priority=body.priority,
             tag=body.tag,
-            _fields_set=frozenset(body.model_fields_set),
+            _fields_set=frozenset(body.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag"},
         ),
     )
     uow.session.flush()
@@ -340,7 +354,7 @@ def done_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Mark one or more ToDos as completed."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = [
         _target_result(
             target,
@@ -361,7 +375,7 @@ def reopen_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Mark one or more ToDos as open."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = [
         _target_result(
             target,
@@ -382,7 +396,7 @@ def remove_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Soft-delete one or more ToDos by id (move to trash)."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = [
         _target_result(
             target,
@@ -403,7 +417,7 @@ def list_deleted_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """List deleted (trashed) ToDos with search filters."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     todos = service.list_deleted(
         planned_start_at=body.planned_start_at,
         planned_end_at=body.planned_end_at,
@@ -444,7 +458,7 @@ def restore_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Restore one or more soft-deleted ToDos."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = [
         _target_result(
             target,
@@ -466,8 +480,8 @@ def purge_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Permanently delete one or more soft-deleted ToDos (with attachments)."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
-    att_svc = make_attachment_service(uow, clock, request, "todo")
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+    att_svc = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
 
     def _purge_with_attachments(todo_id: int) -> Todo:
         try:
@@ -497,7 +511,7 @@ def batch_create_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Create multiple ToDo items. Per-item error handling."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = []
     for idx, item in enumerate(body.items):
         try:
@@ -530,7 +544,7 @@ def batch_update_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Update multiple ToDo items. Per-item error handling."""
-    service = TodoService(uow.todos, clock, uow.todo_model)
+    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
     results = []
     for idx, item in enumerate(body.items):
         try:
@@ -543,7 +557,7 @@ def batch_update_todos(
                     description=item.description,
                     priority=item.priority,
                     tag=item.tag,
-                    _fields_set=frozenset(item.model_fields_set),
+                    _fields_set=frozenset(item.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag"},
                 ),
             )
             results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, settings.timezone)})
@@ -566,9 +580,32 @@ def remove_orphaned_attachments(
 ) -> dict[str, object]:
     """Remove orphaned attachment metadata for a ToDo."""
 
-    service = make_attachment_service(uow, clock, request, "todo")
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     count = service.remove_orphaned(body.todo_id)
     return {"ok": True, "count": count, "attachments": []}
+
+
+@router.post("/changelog")
+def todo_changelog(
+    body: TodoChangelogQueryRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Query todo changelog entries."""
+    service = uow.todo_changelog_service
+    entries, total = service.query(
+        entity_id=body.entity_id,
+        action=body.action,
+        start_at=body.start_at,
+        end_at=body.end_at,
+        limit=body.limit,
+        offset=body.offset,
+    )
+    return {
+        "ok": True,
+        "total": total,
+        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+    }
 
 
 # ── helpers ──
