@@ -29,6 +29,15 @@ export const DEFAULT_SETTINGS: UISettings = {
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
+  const schedulerStartHour = parseNumberSetting(
+    raw.scheduler_start_hour,
+    DEFAULT_SETTINGS.scheduler_start_hour
+  );
+  const schedulerEndHour = parseNumberSetting(
+    raw.scheduler_end_hour,
+    DEFAULT_SETTINGS.scheduler_end_hour
+  );
+
   return {
     server_url: raw.server_url ?? DEFAULT_SETTINGS.server_url,
     access_token: raw.access_token ?? DEFAULT_SETTINGS.access_token,
@@ -39,8 +48,21 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     font_size: Number(raw.font_size) || DEFAULT_SETTINGS.font_size,
     calendar_days: Number(raw.calendar_days) || DEFAULT_SETTINGS.calendar_days,
     week_start: raw.week_start !== undefined ? Number(raw.week_start) : DEFAULT_SETTINGS.week_start,
-    scheduler_start_hour: Number(raw.scheduler_start_hour) || DEFAULT_SETTINGS.scheduler_start_hour,
-    scheduler_end_hour: Number(raw.scheduler_end_hour) || DEFAULT_SETTINGS.scheduler_end_hour,
-    scheduler_slot_minutes: Number(raw.scheduler_slot_minutes) || DEFAULT_SETTINGS.scheduler_slot_minutes,
+    scheduler_start_hour: clampHour(schedulerStartHour, 0, 23),
+    scheduler_end_hour: clampHour(schedulerEndHour, 1, 24),
+    scheduler_slot_minutes: parseNumberSetting(
+      raw.scheduler_slot_minutes,
+      DEFAULT_SETTINGS.scheduler_slot_minutes
+    ),
   };
+}
+
+function parseNumberSetting(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampHour(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.trunc(value)));
 }

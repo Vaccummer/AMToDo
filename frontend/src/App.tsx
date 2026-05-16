@@ -8,6 +8,7 @@ import { SettingsModal } from "./views/SettingsModal";
 import { ScheduleView } from "./views/ScheduleView";
 import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
+import { TrashView } from "./views/TrashView";
 import closeIcon from "./assets/close.svg";
 import gearIcon from "./assets/gear.svg";
 import maximumIcon from "./assets/maximum.svg";
@@ -15,8 +16,10 @@ import minimumIcon from "./assets/minimum.svg";
 import userIcon from "./assets/user.svg";
 import windowlizeIcon from "./assets/windowlize.svg";
 
-type Tab = "todo" | "schedule" | "search";
+type Tab = "todo" | "schedule" | "search" | "trash";
 type ConnectionStatus = "checking" | "online" | "offline";
+
+const selectedDateCache: Record<string, string> = {};
 
 const shell = window.amtodoShell ?? {
   minimize: async () => undefined,
@@ -62,30 +65,63 @@ export function App() {
 
   // Bootstrap API client with health check + encryption
   useEffect(() => {
-    setConnectionStatus("checking");
+    let cancelled = false;
+    let retryTimer: number | undefined;
+
     const bootstrap = async () => {
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
-      setHealth(result);
-      setHealthError(null);
-      setConnectionStatus("online");
 
       const limits = result.limits;
+      let readyApi = baseApi;
       if (result.public_key) {
         const p256Key = await importP256PublicKey(result.public_key);
-        setApi(new AMToDoApi(settings.server_url, settings.access_token, p256Key, limits.max_attachment_size_bytes, limits.max_attachments_per_todo));
+        readyApi = new AMToDoApi(
+          settings.server_url,
+          settings.access_token,
+          p256Key,
+          limits.max_attachment_size_bytes,
+          limits.max_attachments_per_todo
+        );
       } else {
         baseApi.maxAttachmentSize = limits.max_attachment_size_bytes;
         baseApi.maxAttachmentsPerTodo = limits.max_attachments_per_todo;
-        setApi(baseApi);
+      }
+
+      if (cancelled) return;
+      setHealth(result);
+      setHealthError(null);
+      setApi(readyApi);
+      setConnectionStatus("online");
+    };
+
+    const scheduleRetry = () => {
+      retryTimer = window.setTimeout(() => {
+        void runBootstrap();
+      }, 2000);
+    };
+
+    const runBootstrap = async () => {
+      if (cancelled) return;
+      setConnectionStatus("checking");
+      try {
+        await bootstrap();
+      } catch (error: unknown) {
+        if (cancelled) return;
+        setHealth(null);
+        setHealthError(error instanceof Error ? error.message : "无法连接后端");
+        setConnectionStatus("offline");
+        scheduleRetry();
       }
     };
 
-    bootstrap().catch((error: unknown) => {
-      setHealth(null);
-      setHealthError(error instanceof Error ? error.message : "无法连接后端");
-      setConnectionStatus("offline");
-    });
+    void runBootstrap();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+    };
   }, [settings.server_url, settings.access_token]);
 
   useEffect(() => {
@@ -210,6 +246,13 @@ export function App() {
           >
             Search
           </button>
+          <button
+            type="button"
+            className={activeTab === "trash" ? "active" : ""}
+            onClick={() => setActiveTab("trash")}
+          >
+            Trash
+          </button>
         </nav>
         <section className="content-panel">
           {activeTab === "todo" ? (
@@ -217,6 +260,8 @@ export function App() {
               api={api}
               calendarDays={settings.calendar_days}
               weekStart={settings.week_start}
+              cachedDateKey={selectedDateCache.todo}
+              onDateChange={(key) => { selectedDateCache.todo = key; }}
             />
           ) : activeTab === "schedule" ? (
             <ScheduleView
@@ -225,9 +270,13 @@ export function App() {
               endHour={settings.scheduler_end_hour}
               slotMinutes={settings.scheduler_slot_minutes}
               weekStart={settings.week_start}
+              cachedDateKey={selectedDateCache.schedule}
+              onDateChange={(key) => { selectedDateCache.schedule = key; }}
             />
-          ) : (
+          ) : activeTab === "search" ? (
             <SearchView api={api} onNavigate={(target) => setActiveTab(target)} />
+          ) : (
+            <TrashView api={api} />
           )}
         </section>
       </main>

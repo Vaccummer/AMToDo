@@ -30,6 +30,19 @@ const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "UTC" },
 ];
 
+const SCHEDULE_START_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+  value: String(hour),
+  label: `${String(hour).padStart(2, "0")}:00`,
+}));
+
+const SCHEDULE_END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
+  const hour = index + 1;
+  return {
+    value: String(hour),
+    label: `${String(hour).padStart(2, "0")}:00`,
+  };
+});
+
 type Props = {
   settings: UISettings;
   onSave: (settings: UISettings) => void;
@@ -42,6 +55,8 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [language, setLanguage] = useState(initial.language);
   const [timezone, setTimezone] = useState(initial.timezone);
   const [weekStart, setWeekStart] = useState(String(initial.week_start));
+  const [scheduleStartHour, setScheduleStartHour] = useState(String(initial.scheduler_start_hour));
+  const [scheduleEndHour, setScheduleEndHour] = useState(String(initial.scheduler_end_hour));
   const [slotMinutes, setSlotMinutes] = useState(String(initial.scheduler_slot_minutes));
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +96,8 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     setLanguage(initial.language);
     setTimezone(initial.timezone);
     setWeekStart(String(initial.week_start));
+    setScheduleStartHour(String(initial.scheduler_start_hour));
+    setScheduleEndHour(String(initial.scheduler_end_hour));
     setSlotMinutes(String(initial.scheduler_slot_minutes));
     setUrlTestResult(null);
     setTokenResult(null);
@@ -97,11 +114,24 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       language !== initial.language ||
       timezone !== initial.timezone ||
       Number(weekStart) !== initial.week_start ||
+      Number(scheduleStartHour) !== initial.scheduler_start_hour ||
+      Number(scheduleEndHour) !== initial.scheduler_end_hour ||
       Number(slotMinutes) !== initial.scheduler_slot_minutes
     );
-  }, [serverUrl, accessToken, language, timezone, weekStart, slotMinutes, initial]);
+  }, [
+    serverUrl,
+    accessToken,
+    language,
+    timezone,
+    weekStart,
+    scheduleStartHour,
+    scheduleEndHour,
+    slotMinutes,
+    initial
+  ]);
 
-  const canSave = dirty;
+  const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
+  const canSave = dirty && validScheduleHours;
   const urlInputClass = [
     "settings-modal-input",
     urlTestResult ? (urlTestResult.ok ? "valid" : "invalid") : ""
@@ -186,8 +216,12 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   }
 
   function handleSave() {
-    if (!canSave) return;
     setError(null);
+    if (!validScheduleHours) {
+      setError("Schedule 默认起始时间必须早于终止时间");
+      return;
+    }
+    if (!canSave) return;
     const updated: UISettings = {
       ...initial,
       server_url: serverUrl,
@@ -195,6 +229,8 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       language,
       timezone,
       week_start: Number(weekStart),
+      scheduler_start_hour: Number(scheduleStartHour),
+      scheduler_end_hour: Number(scheduleEndHour),
       scheduler_slot_minutes: Number(slotMinutes),
     };
     onSave(updated);
@@ -320,10 +356,49 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
             </div>
           </div>
 
+          <div className="settings-modal-field-row">
+            <div className="settings-modal-field settings-modal-field-half">
+              <label className="settings-modal-label" htmlFor="sui-wkstart">每周起始</label>
+              <Dropdown
+                id="sui-wkstart"
+                value={weekStart}
+                options={[
+                  { value: "0", label: "周日" },
+                  { value: "1", label: "周一" },
+                ]}
+                onChange={setWeekStart}
+              />
+            </div>
+          </div>
+
           <div className="settings-modal-divider" />
 
           {/* Schedule */}
           <div className="settings-modal-section-label">Schedule设置</div>
+
+          <div className="settings-modal-field-row">
+            <div className="settings-modal-field settings-modal-field-half">
+              <label className="settings-modal-label" htmlFor="sui-schedule-start">默认起始</label>
+              <Dropdown
+                id="sui-schedule-start"
+                value={scheduleStartHour}
+                options={SCHEDULE_START_HOUR_OPTIONS}
+                onChange={setScheduleStartHour}
+              />
+            </div>
+            <div className="settings-modal-field settings-modal-field-half">
+              <label className="settings-modal-label" htmlFor="sui-schedule-end">默认终止</label>
+              <Dropdown
+                id="sui-schedule-end"
+                value={scheduleEndHour}
+                options={SCHEDULE_END_HOUR_OPTIONS}
+                onChange={setScheduleEndHour}
+              />
+            </div>
+          </div>
+          {!validScheduleHours ? (
+            <span className="settings-modal-field-msg err">默认起始时间必须早于终止时间</span>
+          ) : null}
 
           <div className="settings-modal-field-row">
             <div className="settings-modal-field settings-modal-field-half">
@@ -338,18 +413,6 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                   { value: "60", label: "60 分钟" },
                 ]}
                 onChange={setSlotMinutes}
-              />
-            </div>
-            <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-wkstart">每周起始</label>
-              <Dropdown
-                id="sui-wkstart"
-                value={weekStart}
-                options={[
-                  { value: "0", label: "周日" },
-                  { value: "1", label: "周一" },
-                ]}
-                onChange={setWeekStart}
               />
             </div>
           </div>

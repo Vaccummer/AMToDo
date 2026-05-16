@@ -4,6 +4,7 @@ import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
 import { DatePicker } from "./DatePicker";
 import { useConfirm } from "./ConfirmDialog";
+import { ChangelogPanel } from "./ChangelogPanel";
 
 type Props = {
   todo: TodoItem;
@@ -270,8 +271,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   async function handleDelete() {
     const ok = await ask({
       title: "删除待办",
-      message: "确定删除这条待办吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      message: "确定将这条待办移入回收站吗？之后可以在 Trash 中恢复。",
+      confirmLabel: "移入回收站",
       danger: true,
     });
     if (!ok) return;
@@ -656,6 +657,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               <span className="modal-field-value">{fmtDatetime(todo.completed_at)}</span>
             </div>
           ) : null}
+
+          <div className="modal-divider" />
+
+          <div className="modal-section-label">历史记录</div>
+          <ChangelogPanel api={api} entityId={todo.id} kind="todo" />
         </div>
 
         {error ? <div className="modal-error">{error}</div> : null}
