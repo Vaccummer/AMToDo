@@ -235,7 +235,8 @@ function writeUiToml(settings) {
     "server_url", "access_token", "admin_token",
     "language", "timezone", "font_family", "font_size",
     "calendar_days", "week_start",
-    "scheduler_start_hour", "scheduler_end_hour", "scheduler_slot_minutes"
+    "scheduler_start_hour", "scheduler_end_hour", "scheduler_slot_minutes",
+    "global_hotkey_enabled", "global_hotkey"
   ];
   lines.push("# AMToDo UI configuration (non-visual parameters).");
   for (const key of keys) {
