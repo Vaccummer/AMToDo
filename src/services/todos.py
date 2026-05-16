@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from exceptions import NotFoundError, ValidationError
 from models import Todo
+from services.search_common import (
+    compile_search_query,
+    search_text,
+    sort_results,
+    validate_fields,
+    validate_optional_range,
+    validate_sort,
+)
 
 if TYPE_CHECKING:
     from clock import Clock
@@ -142,27 +149,27 @@ class TodoService:
     ) -> list[Todo]:
         """Search ToDos with field selection, filters, and deterministic sorting."""
 
-        resolved_fields = _validate_fields(fields, TODO_SEARCH_FIELDS, "todo search fields")
-        _validate_sort(sort_by, sort_order, TODO_SORT_FIELDS)
-        _validate_optional_range(
+        resolved_fields = validate_fields(fields, TODO_SEARCH_FIELDS, "todo search fields")
+        validate_sort(sort_by, sort_order, TODO_SORT_FIELDS)
+        validate_optional_range(
             planned_start_at,
             planned_end_at,
             start_name="planned_start_at",
             end_name="planned_end_at",
         )
-        _validate_optional_range(
+        validate_optional_range(
             due_start_at,
             due_end_at,
             start_name="due_start_at",
             end_name="due_end_at",
         )
-        _validate_optional_range(
+        validate_optional_range(
             created_start_at,
             created_end_at,
             start_name="created_start_at",
             end_name="created_end_at",
         )
-        _validate_optional_range(
+        validate_optional_range(
             updated_start_at,
             updated_end_at,
             start_name="updated_start_at",
@@ -179,7 +186,7 @@ class TodoService:
         ):
             raise ValidationError("priority_min cannot be greater than priority_max")
 
-        regex = _compile_search_query(query, use_regex=use_regex, ignore_case=ignore_case)
+        regex = compile_search_query(query, use_regex=use_regex, ignore_case=ignore_case)
 
         todos = self._repository.list_filtered(
             planned_start_at=planned_start_at,
@@ -198,9 +205,11 @@ class TodoService:
         matched = [
             todo
             for todo in todos
-            if regex.search(_search_text(todo, resolved_fields))
+            if regex.search(search_text(todo, resolved_fields))
         ]
-        return _sort_results(matched, sort_by=sort_by, sort_order=sort_order)
+        return sort_results(
+            matched, sort_by=sort_by, sort_order=sort_order, value_fn=_todo_sort_value
+        )
 
     def update(self, todo_id: int, update: TodoUpdate) -> Todo:
         """Update mutable ToDo fields."""
@@ -298,11 +307,70 @@ class TodoService:
         return todo
 
     def remove(self, todo_id: int) -> Todo:
-        """Remove a ToDo by id."""
+        """Soft-delete a ToDo by id (move to trash)."""
 
         todo = self.show(todo_id)
+        now = self._clock.now_epoch()
+        todo.deleted_at = now
+        todo.updated_at = now
+        return todo
+
+    def restore(self, todo_id: int) -> Todo:
+        """Restore a soft-deleted ToDo."""
+
+        todo = self._repository.get_including_deleted(todo_id)
+        if todo is None:
+            raise NotFoundError(f"todo #{todo_id} was not found")
+        if todo.deleted_at is None:
+            raise ValidationError(f"todo #{todo_id} is not deleted")
+        now = self._clock.now_epoch()
+        todo.deleted_at = None
+        todo.updated_at = now
+        return todo
+
+    def purge(self, todo_id: int) -> Todo:
+        """Permanently delete a ToDo (must already be soft-deleted)."""
+
+        todo = self._repository.get_including_deleted(todo_id)
+        if todo is None:
+            raise NotFoundError(f"todo #{todo_id} was not found")
+        if todo.deleted_at is None:
+            raise ValidationError(f"todo #{todo_id} is not deleted; use remove first")
         self._repository.remove(todo)
         return todo
+
+    def list_deleted(
+        self,
+        *,
+        planned_start_at: int | None = None,
+        planned_end_at: int | None = None,
+        due_start_at: int | None = None,
+        due_end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
+        completed: bool | None = None,
+        priority_min: int | None = None,
+        priority_max: int | None = None,
+        tag: str | None = None,
+    ) -> list[Todo]:
+        """Return deleted ToDos matching optional filters."""
+
+        return self._repository.list_deleted(
+            planned_start_at=planned_start_at,
+            planned_end_at=planned_end_at,
+            due_start_at=due_start_at,
+            due_end_at=due_end_at,
+            created_start_at=created_start_at,
+            created_end_at=created_end_at,
+            updated_start_at=updated_start_at,
+            updated_end_at=updated_end_at,
+            completed=completed,
+            priority_min=priority_min,
+            priority_max=priority_max,
+            tag=tag,
+        )
 
     def stats(
         self,
@@ -328,94 +396,8 @@ class TodoService:
         }
 
 
-def _search_text(todo: Todo, fields: list[str]) -> str:
-    return "\n".join(
-        str(value)
-        for value in (getattr(todo, field) or "" for field in fields)
-        if value
-    )
-
-
-def _compile_search_query(query: str, *, use_regex: bool, ignore_case: bool) -> re.Pattern[str]:
-    flags = re.IGNORECASE if ignore_case else 0
-    pattern = query if use_regex else re.escape(query)
-    try:
-        return re.compile(pattern, flags=flags)
-    except re.error as exc:
-        msg = f"invalid regex pattern: {exc}"
-        raise ValidationError(msg) from exc
-
-
-def _validate_fields(
-    fields: list[str] | None,
-    allowed: frozenset[str],
-    label: str,
-) -> list[str]:
-    resolved = list(fields) if fields is not None else sorted(allowed)
-    if not resolved:
-        raise ValidationError(f"{label} cannot be empty")
-    unknown = sorted(set(resolved) - allowed)
-    if unknown:
-        raise ValidationError(f"unknown {label}: {', '.join(unknown)}")
-    return resolved
-
-
-def _validate_sort(
-    sort_by: str,
-    sort_order: str,
-    allowed: frozenset[str],
-) -> None:
-    if sort_by not in allowed:
-        raise ValidationError(f"unknown sort_by: {sort_by}")
-    if sort_order not in {"asc", "desc"}:
-        raise ValidationError("sort_order must be 'asc' or 'desc'")
-
-
-def _sort_results(
-    todos: list[Todo],
-    *,
-    sort_by: str,
-    sort_order: str,
-) -> list[Todo]:
-    descending = sort_order == "desc"
-    return sorted(
-        todos,
-        key=lambda todo: _sort_key(todo, sort_by, descending=descending),
-        reverse=descending,
-    )
-
-
-def _sort_key(todo: Todo, sort_by: str, *, descending: bool) -> tuple[bool, Any]:
-    value = _sort_value(todo, sort_by)
-    if isinstance(value, str):
-        value = value.casefold()
-    if descending:
-        return (value is not None, value if value is not None else _empty_sort_value(sort_by))
-    return (value is None, value if value is not None else _empty_sort_value(sort_by))
-
-
-def _sort_value(todo: Todo, sort_by: str) -> object:
+def _todo_sort_value(todo: Todo, sort_by: str) -> object:
+    """Extract sort value from a Todo entity."""
     if sort_by == "updated_at":
         return todo.updated_at if todo.updated_at is not None else todo.created_at
     return getattr(todo, sort_by)
-
-
-def _empty_sort_value(sort_by: str) -> object:
-    if sort_by == "title":
-        return ""
-    return 0
-
-
-def _validate_optional_range(
-    start_at: int | None,
-    end_at: int | None,
-    *,
-    start_name: str,
-    end_name: str,
-) -> None:
-    if start_at is not None and start_at < 0:
-        raise ValidationError(f"{start_name} cannot be negative")
-    if end_at is not None and end_at < 0:
-        raise ValidationError(f"{end_name} cannot be negative")
-    if start_at is not None and end_at is not None and start_at >= end_at:
-        raise ValidationError(f"{start_name} must be earlier than {end_name}")
