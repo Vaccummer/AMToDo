@@ -485,51 +485,48 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
 
           <div className="settings-modal-field">
             <div className="settings-modal-input-row">
-              <label className="settings-modal-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={hotkeyEnabled}
-                  onChange={(e) => {
-                    setHotkeyEnabled(e.target.checked);
-                    if (!e.target.checked) setHotkeyError(null);
-                  }}
-                />
-                启用全局快捷键
-              </label>
-            </div>
-          </div>
-
-          {hotkeyEnabled ? (
-            <div className="settings-modal-field">
               <label className="settings-modal-label">快捷键组合</label>
-              <div className="settings-modal-input-row">
-                <input
-                  type="text"
-                  className="settings-modal-input"
-                  value={recording ? "请按下快捷键..." : hotkeyValue}
-                  readOnly
-                  onClick={() => setRecording(true)}
-                  onKeyDown={handleHotkeyKeyDown}
-                  onBlur={() => setRecording(false)}
-                  style={{ cursor: "pointer", color: recording ? "#999" : undefined }}
-                  placeholder="点击后按下快捷键组合"
-                />
-                {hotkeyValue ? (
-                  <button
-                    type="button"
-                    className="settings-modal-inline-btn"
-                    onClick={() => { setHotkeyValue(""); setHotkeyError(null); }}
-                  >
-                    清除
-                  </button>
-                ) : null}
-              </div>
-              <span className="settings-modal-hint">必须包含至少一个修饰键 (Ctrl/Alt/Shift/Super)</span>
-              {hotkeyError ? (
-                <span className="settings-modal-field-msg err">{hotkeyError}</span>
+              <button
+                type="button"
+                className={`toggle-switch${hotkeyEnabled ? " on" : ""}`}
+                onClick={() => {
+                  setHotkeyEnabled((v) => !v);
+                  if (hotkeyEnabled) setHotkeyError(null);
+                }}
+                role="switch"
+                aria-checked={hotkeyEnabled}
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </div>
+            <div className="settings-modal-input-row">
+              <input
+                type="text"
+                className="settings-modal-input"
+                value={recording ? "请按下快捷键..." : hotkeyValue}
+                readOnly
+                disabled={!hotkeyEnabled}
+                onClick={() => hotkeyEnabled && setRecording(true)}
+                onKeyDown={handleHotkeyKeyDown}
+                onBlur={() => setRecording(false)}
+                style={{ cursor: hotkeyEnabled ? "pointer" : "default", color: recording ? "#999" : undefined }}
+                placeholder="点击后按下快捷键组合"
+              />
+              {hotkeyValue && hotkeyEnabled ? (
+                <button
+                  type="button"
+                  className="settings-modal-inline-btn"
+                  onClick={() => { setHotkeyValue(""); setHotkeyError(null); }}
+                >
+                  清除
+                </button>
               ) : null}
             </div>
-          ) : null}
+            <span className="settings-modal-hint">必须包含至少一个修饰键 (Ctrl/Alt/Shift/Super)</span>
+            {hotkeyError ? (
+              <span className="settings-modal-field-msg err">{hotkeyError}</span>
+            ) : null}
+          </div>
 
           <div className="settings-modal-divider" />
 
