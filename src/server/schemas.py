@@ -103,6 +103,37 @@ class TodoTargetsRequest(UserAuthMixin):
     targets: list[int]
 
 
+# ── Batch Create/Update ──
+
+class TodoCreateFields(BaseModel):
+    """Fields for a single todo in a batch create request."""
+    title: str
+    description: str | None = None
+    planned_at: int | None = None
+    due_at: int | None = None
+    priority: int = Field(default=0, ge=0)
+    tag: str | None = None
+
+
+class TodoBatchCreateRequest(UserAuthMixin):
+    items: list[TodoCreateFields]
+
+
+class TodoBatchUpdateItem(BaseModel):
+    """Fields for a single todo in a batch update request."""
+    id: int
+    title: str | None = None
+    description: str | None = None
+    planned_at: int | None = None
+    due_at: int | None = None
+    priority: int | None = Field(default=None, ge=0)
+    tag: str | None = None
+
+
+class TodoBatchUpdateRequest(UserAuthMixin):
+    items: list[TodoBatchUpdateItem]
+
+
 class TodoAttachmentListRequest(UserAuthMixin):
     todo_id: int
 
@@ -229,3 +260,32 @@ class ScheduleUpdateRequest(UserAuthMixin):
 
 class ScheduleTargetsRequest(UserAuthMixin):
     targets: list[int]
+
+
+class ScheduleCreateFields(BaseModel):
+    """Fields for a single schedule in a batch create request."""
+    title: str
+    description: str | None = None
+    start_at: int
+    end_at: int
+    location: str | None = None
+    category: str | None = None
+
+
+class ScheduleBatchCreateRequest(UserAuthMixin):
+    items: list[ScheduleCreateFields]
+
+
+class ScheduleBatchUpdateItem(BaseModel):
+    """Fields for a single schedule in a batch update request."""
+    id: int
+    title: str | None = None
+    description: str | None = None
+    start_at: int | None = None
+    end_at: int | None = None
+    location: str | None = None
+    category: str | None = None
+
+
+class ScheduleBatchUpdateRequest(UserAuthMixin):
+    items: list[ScheduleBatchUpdateItem]
