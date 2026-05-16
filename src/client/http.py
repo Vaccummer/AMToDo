@@ -206,6 +206,12 @@ class AMTodoClient:
             body["end_at"] = end_at
         return self._user_post("/api/v1/todos/stats", body)
 
+    def todo_batch_create(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/batch-create", {"items": items})
+
+    def todo_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/batch-update", {"items": items})
+
     def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
         content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
         return self._user_post(
@@ -363,6 +369,12 @@ class AMTodoClient:
         if end_at is not None:
             body["end_at"] = end_at
         return self._user_post("/api/v1/schedules/stats", body)
+
+    def schedule_batch_create(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/batch-create", {"items": items})
+
+    def schedule_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/batch-update", {"items": items})
 
     # ── schedule attachments ──
 
