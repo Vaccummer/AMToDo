@@ -134,6 +134,37 @@ class TodoBatchUpdateRequest(UserAuthMixin):
     items: list[TodoBatchUpdateItem]
 
 
+class TodoTrashListRequest(UserAuthMixin):
+    query: str = ""
+    use_regex: bool = False
+    ignore_case: bool = True
+    fields: list[str] = Field(default_factory=lambda: ["title", "description", "tag"])
+    planned_start_at: int | None = None
+    planned_end_at: int | None = None
+    due_start_at: int | None = None
+    due_end_at: int | None = None
+    created_start_at: int | None = None
+    created_end_at: int | None = None
+    updated_start_at: int | None = None
+    updated_end_at: int | None = None
+    completed: bool | None = None
+    priority_min: int | None = Field(default=None, ge=0)
+    priority_max: int | None = Field(default=None, ge=0)
+    tag: str | None = None
+    sort_by: str = "updated_at"
+    sort_order: str = "desc"
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class TodoTrashRestoreRequest(UserAuthMixin):
+    targets: list[int]
+
+
+class TodoTrashDeleteRequest(UserAuthMixin):
+    targets: list[int]
+
+
 class TodoAttachmentListRequest(UserAuthMixin):
     todo_id: int
 
@@ -289,3 +320,32 @@ class ScheduleBatchUpdateItem(BaseModel):
 
 class ScheduleBatchUpdateRequest(UserAuthMixin):
     items: list[ScheduleBatchUpdateItem]
+
+
+class ScheduleTrashListRequest(UserAuthMixin):
+    query: str = ""
+    use_regex: bool = False
+    ignore_case: bool = True
+    fields: list[str] = Field(
+        default_factory=lambda: ["title", "description", "location", "category"]
+    )
+    start_at: int | None = None
+    end_at: int | None = None
+    created_start_at: int | None = None
+    created_end_at: int | None = None
+    updated_start_at: int | None = None
+    updated_end_at: int | None = None
+    category: str | None = None
+    location: str | None = None
+    sort_by: str = "updated_at"
+    sort_order: str = "desc"
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class ScheduleTrashRestoreRequest(UserAuthMixin):
+    targets: list[int]
+
+
+class ScheduleTrashDeleteRequest(UserAuthMixin):
+    targets: list[int]
