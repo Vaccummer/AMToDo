@@ -96,6 +96,11 @@ def agent_guide() -> dict[str, object]:
             {"method": "POST", "path": "/todos/done", "auth": "user"},
             {"method": "POST", "path": "/todos/reopen", "auth": "user"},
             {"method": "POST", "path": "/todos/remove", "auth": "user"},
+            {"method": "POST", "path": "/todos/batch-create", "auth": "user"},
+            {"method": "POST", "path": "/todos/batch-update", "auth": "user"},
+            {"method": "POST", "path": "/todos/trash/list", "auth": "user"},
+            {"method": "POST", "path": "/todos/trash/restore", "auth": "user"},
+            {"method": "POST", "path": "/todos/trash/delete", "auth": "user"},
             {"method": "POST", "path": "/schedules/list", "auth": "user"},
             {
                 "method": "POST",
@@ -117,6 +122,11 @@ def agent_guide() -> dict[str, object]:
             {"method": "POST", "path": "/schedules/get", "auth": "user"},
             {"method": "POST", "path": "/schedules/update", "auth": "user"},
             {"method": "POST", "path": "/schedules/remove", "auth": "user"},
+            {"method": "POST", "path": "/schedules/batch-create", "auth": "user"},
+            {"method": "POST", "path": "/schedules/batch-update", "auth": "user"},
+            {"method": "POST", "path": "/schedules/trash/list", "auth": "user"},
+            {"method": "POST", "path": "/schedules/trash/restore", "auth": "user"},
+            {"method": "POST", "path": "/schedules/trash/delete", "auth": "user"},
         ],
         "conventions": {
             "timestamps": "All timestamps are Unix epoch seconds (int).",
@@ -132,9 +142,10 @@ def init_db(
     request: Request,
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
-    """Initialize database schema."""
+    """Initialize database schema and stamp Alembic as current."""
     db = request.app.state.db
     Base.metadata.create_all(db.engine)
+    db.stamp_head()
     return {"ok": True, "database": "initialized"}
 
 
