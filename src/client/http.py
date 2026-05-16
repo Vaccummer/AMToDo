@@ -212,6 +212,15 @@ class AMTodoClient:
     def todo_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         return self._user_post("/api/v1/todos/batch-update", {"items": items})
 
+    def todo_trash_list(self, **kwargs: Any) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/trash/list", kwargs)
+
+    def todo_trash_restore(self, targets: list[int]) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/trash/restore", {"targets": targets})
+
+    def todo_trash_delete(self, targets: list[int]) -> dict[str, Any]:
+        return self._user_post("/api/v1/todos/trash/delete", {"targets": targets})
+
     def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
         content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
         return self._user_post(
@@ -375,6 +384,15 @@ class AMTodoClient:
 
     def schedule_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         return self._user_post("/api/v1/schedules/batch-update", {"items": items})
+
+    def schedule_trash_list(self, **kwargs: Any) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/trash/list", kwargs)
+
+    def schedule_trash_restore(self, targets: list[int]) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/trash/restore", {"targets": targets})
+
+    def schedule_trash_delete(self, targets: list[int]) -> dict[str, Any]:
+        return self._user_post("/api/v1/schedules/trash/delete", {"targets": targets})
 
     # ── schedule attachments ──
 
