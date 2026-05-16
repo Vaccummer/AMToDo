@@ -27,3 +27,4 @@ class Todo(EpochAuditMixin, Base):
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tag: Mapped[str | None] = mapped_column(String(80), nullable=True)
     completed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deleted_at: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)

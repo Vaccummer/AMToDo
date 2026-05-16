@@ -26,3 +26,4 @@ class Schedule(EpochAuditMixin, Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    deleted_at: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
