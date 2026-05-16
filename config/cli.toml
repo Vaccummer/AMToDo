@@ -6,6 +6,6 @@
 #
 # Remote mode (uncomment and set):
 server_url = "http://127.0.0.1:8000"
-access_token = "ZPIAhpVXmyGPnyIE1ifEG-q9oc-XNZL2ZJToNvxaL-A"
+access_token = "UsKLFcbMTsqbGjPI_z3-dR0afo9O9PdYp_IQLbeYyTU"
 admin_token = "123456"
 server_public_key_path = "config/keys/server_public.pem"
