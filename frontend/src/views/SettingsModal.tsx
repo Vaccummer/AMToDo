@@ -74,6 +74,12 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
 
+  // Global hotkey
+  const [hotkeyEnabled, setHotkeyEnabled] = useState(initial.global_hotkey_enabled);
+  const [hotkeyValue, setHotkeyValue] = useState(initial.global_hotkey);
+  const [recording, setRecording] = useState(false);
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+
   const formatSize = useCallback((bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -99,6 +105,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     setScheduleStartHour(String(initial.scheduler_start_hour));
     setScheduleEndHour(String(initial.scheduler_end_hour));
     setSlotMinutes(String(initial.scheduler_slot_minutes));
+    setHotkeyEnabled(initial.global_hotkey_enabled);
+    setHotkeyValue(initial.global_hotkey);
+    setRecording(false);
+    setHotkeyError(null);
     setUrlTestResult(null);
     setTokenResult(null);
   }, [initial]);
@@ -116,7 +126,9 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       Number(weekStart) !== initial.week_start ||
       Number(scheduleStartHour) !== initial.scheduler_start_hour ||
       Number(scheduleEndHour) !== initial.scheduler_end_hour ||
-      Number(slotMinutes) !== initial.scheduler_slot_minutes
+      Number(slotMinutes) !== initial.scheduler_slot_minutes ||
+      hotkeyEnabled !== initial.global_hotkey_enabled ||
+      hotkeyValue !== initial.global_hotkey
     );
   }, [
     serverUrl,
@@ -127,6 +139,8 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     scheduleStartHour,
     scheduleEndHour,
     slotMinutes,
+    hotkeyEnabled,
+    hotkeyValue,
     initial
   ]);
 
@@ -232,8 +246,55 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       scheduler_start_hour: Number(scheduleStartHour),
       scheduler_end_hour: Number(scheduleEndHour),
       scheduler_slot_minutes: Number(slotMinutes),
+      global_hotkey_enabled: hotkeyEnabled,
+      global_hotkey: hotkeyValue,
     };
     onSave(updated);
+    if (hotkeyEnabled && hotkeyValue) {
+      window.amtodoShell?.registerHotkey?.(hotkeyValue)?.then?.((result: { ok: boolean; error?: string }) => {
+        if (!result?.ok) {
+          setHotkeyError(result?.error || "快捷键注册失败");
+        }
+      });
+    } else {
+      window.amtodoShell?.unregisterHotkey?.();
+    }
+  }
+
+  function formatKeyCombo(e: React.KeyboardEvent): string | null {
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    if (e.metaKey) parts.push("Super");
+
+    const key = e.key;
+    if (["Control", "Alt", "Shift", "Meta"].includes(key)) return null;
+    if (key === "Escape") return null;
+
+    let keyName = key;
+    if (key.length === 1) keyName = key.toUpperCase();
+    else if (key === " ") keyName = "Space";
+    else if (key === "ArrowUp") keyName = "Up";
+    else if (key === "ArrowDown") keyName = "Down";
+    else if (key === "ArrowLeft") keyName = "Left";
+    else if (key === "ArrowRight") keyName = "Right";
+
+    parts.push(keyName);
+    if (parts.length < 2) return null; // must have at least one modifier
+    return parts.join("+");
+  }
+
+  function handleHotkeyKeyDown(e: React.KeyboardEvent) {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const combo = formatKeyCombo(e);
+    if (combo) {
+      setHotkeyValue(combo);
+      setRecording(false);
+      setHotkeyError(null);
+    }
   }
 
   return (
@@ -416,6 +477,59 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
               />
             </div>
           </div>
+
+          <div className="settings-modal-divider" />
+
+          {/* Global Hotkey */}
+          <div className="settings-modal-section-label">全局快捷键</div>
+
+          <div className="settings-modal-field">
+            <div className="settings-modal-input-row">
+              <label className="settings-modal-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={hotkeyEnabled}
+                  onChange={(e) => {
+                    setHotkeyEnabled(e.target.checked);
+                    if (!e.target.checked) setHotkeyError(null);
+                  }}
+                />
+                启用全局快捷键
+              </label>
+            </div>
+          </div>
+
+          {hotkeyEnabled ? (
+            <div className="settings-modal-field">
+              <label className="settings-modal-label">快捷键组合</label>
+              <div className="settings-modal-input-row">
+                <input
+                  type="text"
+                  className="settings-modal-input"
+                  value={recording ? "请按下快捷键..." : hotkeyValue}
+                  readOnly
+                  onClick={() => setRecording(true)}
+                  onKeyDown={handleHotkeyKeyDown}
+                  onBlur={() => setRecording(false)}
+                  style={{ cursor: "pointer", color: recording ? "#999" : undefined }}
+                  placeholder="点击后按下快捷键组合"
+                />
+                {hotkeyValue ? (
+                  <button
+                    type="button"
+                    className="settings-modal-inline-btn"
+                    onClick={() => { setHotkeyValue(""); setHotkeyError(null); }}
+                  >
+                    清除
+                  </button>
+                ) : null}
+              </div>
+              <span className="settings-modal-hint">必须包含至少一个修饰键 (Ctrl/Alt/Shift/Super)</span>
+              {hotkeyError ? (
+                <span className="settings-modal-field-msg err">{hotkeyError}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="settings-modal-divider" />
 
