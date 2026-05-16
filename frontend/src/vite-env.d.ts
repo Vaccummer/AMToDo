@@ -13,6 +13,8 @@ interface SettingsData {
   scheduler_start_hour?: string;
   scheduler_end_hour?: string;
   scheduler_slot_minutes?: string;
+  global_hotkey_enabled?: string;
+  global_hotkey?: string;
 }
 
 interface Window {
@@ -24,5 +26,7 @@ interface Window {
     onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
     readSettings: () => Promise<SettingsData>;
     writeSettings: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
+    registerHotkey?: (accelerator: string) => Promise<{ ok: boolean; error?: string }>;
+    unregisterHotkey?: () => Promise<void>;
   };
 }
