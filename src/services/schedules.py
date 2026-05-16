@@ -271,6 +271,7 @@ class ScheduleService:
         if schedule.deleted_at is None:
             raise ValidationError(f"schedule #{schedule_id} is not deleted; use remove first")
         self._repository.remove(schedule)
+        self._repository.flush()
         return schedule
 
     def list_deleted(

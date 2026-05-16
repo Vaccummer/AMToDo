@@ -337,6 +337,7 @@ class TodoService:
         if todo.deleted_at is None:
             raise ValidationError(f"todo #{todo_id} is not deleted; use remove first")
         self._repository.remove(todo)
+        self._repository.flush()
         return todo
 
     def list_deleted(
