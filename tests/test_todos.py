@@ -384,6 +384,81 @@ def test_create_rejects_empty_title(tmp_path: Path) -> None:
     raise AssertionError(msg)
 
 
+def test_soft_delete_and_restore_todo(tmp_path: Path) -> None:
+    """A soft-deleted ToDo is hidden from normal queries but can be restored."""
+    from services.uow import UnitOfWork
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        todo = service.create(TodoDraft(title="Trash me", due_at=clock.epoch))
+        uow.session.flush()
+        todo_id = todo.id
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        removed = service.remove(todo_id)
+        assert removed.deleted_at == clock.epoch
+
+        # Hidden from normal queries
+        assert uow.todos.get(todo_id) is None
+        assert service.list_all() == []
+
+        # Visible in trash
+        deleted = service.list_deleted()
+        assert len(deleted) == 1
+        assert deleted[0].id == todo_id
+
+        # Restore
+        restored = service.restore(todo_id)
+        assert restored.deleted_at is None
+        assert uow.todos.get(todo_id) is not None
+
+
+def test_purge_permanently_deletes_todo(tmp_path: Path) -> None:
+    """Purge permanently removes a soft-deleted ToDo."""
+    from services.uow import UnitOfWork
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        todo = service.create(TodoDraft(title="Purge me", due_at=clock.epoch))
+        uow.session.flush()
+        todo_id = todo.id
+        service.remove(todo_id)
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        purged = service.purge(todo_id)
+        assert purged.id == todo_id
+        assert uow.todos.get_including_deleted(todo_id) is None
+
+
+def test_restore_non_deleted_raises(tmp_path: Path) -> None:
+    """Restoring a non-deleted ToDo raises ValidationError."""
+    from services.uow import UnitOfWork
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(day_start_epoch(date(2026, 5, 11), TIMEZONE))
+
+    with UnitOfWork(database) as uow:
+        service = TodoService(uow.todos, clock, uow.todo_model)
+        todo = service.create(TodoDraft(title="Not deleted", due_at=clock.epoch))
+        uow.session.flush()
+
+        try:
+            service.restore(todo.id)
+        except ValidationError:
+            return
+
+    msg = "expected ValidationError"
+    raise AssertionError(msg)
+
+
 def _create_test_database(tmp_path: Path) -> Database:
     settings = AppSettings(database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}")
     database = create_database(settings)

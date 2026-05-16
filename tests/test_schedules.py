@@ -244,6 +244,63 @@ def test_show_missing_and_invalid_window_raise_domain_errors(tmp_path: Path) -> 
     raise AssertionError(msg)
 
 
+def test_soft_delete_and_restore_schedule(tmp_path: Path) -> None:
+    """A soft-deleted schedule is hidden from normal queries but can be restored."""
+    from services.uow import UnitOfWork
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(1_778_400_000)
+
+    with UnitOfWork(database) as uow:
+        service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+        schedule = service.create(
+            ScheduleDraft(title="Trash me", start_at=100, end_at=200, timezone=TIMEZONE)
+        )
+        uow.session.flush()
+        schedule_id = schedule.id
+
+    with UnitOfWork(database) as uow:
+        service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+        removed = service.remove(schedule_id)
+        assert removed.deleted_at == clock.epoch
+
+        # Hidden from normal queries
+        assert uow.schedules.get(schedule_id) is None
+
+        # Visible in trash
+        deleted = service.list_deleted()
+        assert len(deleted) == 1
+        assert deleted[0].id == schedule_id
+
+        # Restore
+        restored = service.restore(schedule_id)
+        assert restored.deleted_at is None
+        assert uow.schedules.get(schedule_id) is not None
+
+
+def test_purge_permanently_deletes_schedule(tmp_path: Path) -> None:
+    """Purge permanently removes a soft-deleted schedule."""
+    from services.uow import UnitOfWork
+
+    database = _create_test_database(tmp_path)
+    clock = FixedClock(1_778_400_000)
+
+    with UnitOfWork(database) as uow:
+        service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+        schedule = service.create(
+            ScheduleDraft(title="Purge me", start_at=100, end_at=200, timezone=TIMEZONE)
+        )
+        uow.session.flush()
+        schedule_id = schedule.id
+        service.remove(schedule_id)
+
+    with UnitOfWork(database) as uow:
+        service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+        purged = service.purge(schedule_id)
+        assert purged.id == schedule_id
+        assert uow.schedules.get_including_deleted(schedule_id) is None
+
+
 def _create_test_database(tmp_path: Path) -> Database:
     settings = AppSettings(database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}")
     database = create_database(settings)

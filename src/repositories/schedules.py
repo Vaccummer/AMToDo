@@ -26,6 +26,10 @@ class ScheduleRepository:
         """Delete a schedule row."""
         self._session.delete(schedule)
 
+    def flush(self) -> None:
+        """Flush pending changes to the database."""
+        self._session.flush()
+
     def get(self, schedule_id: int) -> object | None:
         """Return a non-deleted schedule by id."""
         return self._session.scalars(

@@ -26,6 +26,10 @@ class TodoRepository:
         """Delete a ToDo row."""
         self._session.delete(todo)
 
+    def flush(self) -> None:
+        """Flush pending changes to the database."""
+        self._session.flush()
+
     def get(self, todo_id: int) -> object | None:
         """Return a non-deleted ToDo by id."""
         return self._session.scalars(
