@@ -167,6 +167,8 @@ export function App() {
       scheduler_start_hour: String(newSettings.scheduler_start_hour),
       scheduler_end_hour: String(newSettings.scheduler_end_hour),
       scheduler_slot_minutes: String(newSettings.scheduler_slot_minutes),
+      global_hotkey_enabled: String(newSettings.global_hotkey_enabled),
+      global_hotkey: newSettings.global_hotkey,
     }).catch(() => { /* keep going */ });
     setSettings(newSettings);
     setDefaultTimezone(newSettings.timezone);
