@@ -661,6 +661,12 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
           y={contextMenu.y}
           items={[
             {
+              label: `id:${contextMenu.id}`,
+              icon: null,
+              action: () => {},
+              disabled: true
+            },
+            {
               label: "编辑",
               icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -806,6 +812,9 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
             <span className="schedule-event-time">{timeText}</span>
           ) : null}
           <strong className="schedule-event-title">{block.item.title}</strong>
+          {block.textMode === "full" ? (
+            <span className="schedule-event-id">id:{block.item.id}</span>
+          ) : null}
         </>
       )}
       {selected ? (
@@ -919,5 +928,5 @@ function textModeForHeight(height: number): ScheduleTextMode {
 
 function titleLinesForHeight(height: number): number {
   if (height < 58) return 1;
-  return Math.max(1, Math.min(4, Math.floor((height - 24) / 18)));
+  return Math.max(1, Math.min(4, Math.floor((height - 36) / 18)));
 }
