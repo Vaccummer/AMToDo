@@ -277,6 +277,34 @@ export type ChangelogResponse = {
   entries: ChangelogEntry[];
 };
 
+export type NotificationMentionItem = {
+  id: number;
+  target_type: "todo" | "schedule";
+  target_id: number;
+};
+
+export type NotificationItem = {
+  id: number;
+  title: string;
+  description: string | null;
+  trigger_at: number;
+  created_at: number;
+  updated_at: number | null;
+  deleted_at?: number | null;
+  mentions: NotificationMentionItem[];
+};
+
+export type NotificationResponse = {
+  ok: boolean;
+  notification: NotificationItem;
+};
+
+export type NotificationListResponse = {
+  ok: boolean;
+  count: number;
+  notifications: NotificationItem[];
+};
+
 export type TodoUpdateRequest = {
   title?: string;
   description?: string | null;
@@ -726,6 +754,71 @@ export class AMToDoApi {
       limit: params?.limit ?? 50,
       offset: params?.offset ?? 0
     });
+  }
+
+  // --- Notifications ---
+
+  async createNotification(params: {
+    title: string;
+    trigger_at: number;
+    description?: string | null;
+    mentions?: { target_type: string; target_id: number }[];
+  }): Promise<NotificationResponse> {
+    return this.post("/api/v1/notifications/create", {
+      title: params.title,
+      trigger_at: params.trigger_at,
+      description: params.description ?? null,
+      mentions: params.mentions ?? [],
+    });
+  }
+
+  async getNotification(notificationId: number): Promise<NotificationResponse> {
+    return this.post("/api/v1/notifications/get", { notification_id: notificationId });
+  }
+
+  async updateNotification(
+    notificationId: number,
+    fields: {
+      title?: string;
+      description?: string | null;
+      trigger_at?: number;
+      mentions?: { target_type: string; target_id: number }[] | null;
+    }
+  ): Promise<NotificationResponse> {
+    return this.post("/api/v1/notifications/update", {
+      notification_id: notificationId,
+      ...fields,
+    });
+  }
+
+  async deleteNotification(notificationId: number): Promise<{ ok: boolean }> {
+    return this.post("/api/v1/notifications/remove", { notification_id: notificationId });
+  }
+
+  async listNotifications(params?: {
+    start_at?: number | null;
+    end_at?: number | null;
+  }): Promise<NotificationListResponse> {
+    return this.post("/api/v1/notifications/list", {
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+    });
+  }
+
+  async listTriggeredNotifications(after: number): Promise<NotificationListResponse> {
+    return this.post("/api/v1/notifications/list_triggered", { after });
+  }
+
+  async listNotificationTrash(): Promise<NotificationListResponse> {
+    return this.post("/api/v1/notifications/trash/list", {});
+  }
+
+  async restoreNotification(notificationId: number): Promise<{ ok: boolean }> {
+    return this.post("/api/v1/notifications/trash/restore", { notification_id: notificationId });
+  }
+
+  async purgeNotification(notificationId: number): Promise<{ ok: boolean }> {
+    return this.post("/api/v1/notifications/trash/delete", { notification_id: notificationId });
   }
 
   // --- Private helpers ---

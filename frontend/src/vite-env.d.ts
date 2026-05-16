@@ -15,6 +15,8 @@ interface SettingsData {
   scheduler_slot_minutes?: string;
   global_hotkey_enabled?: string;
   global_hotkey?: string;
+  notification_poll_interval?: string;
+  notification_query_window?: string;
 }
 
 interface Window {

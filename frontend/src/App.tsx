@@ -9,14 +9,20 @@ import { ScheduleView } from "./views/ScheduleView";
 import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
 import { TrashView } from "./views/TrashView";
+import { NotificationView } from "./views/NotificationView";
 import closeIcon from "./assets/close.svg";
 import gearIcon from "./assets/gear.svg";
 import maximumIcon from "./assets/maximum.svg";
 import minimumIcon from "./assets/minimum.svg";
+import todoIcon from "./assets/todo.svg";
+import scheduleIcon from "./assets/schedule.svg";
+import searchIcon from "./assets/search.svg";
+import trashIcon from "./assets/trash.svg";
+import notificationIcon from "./assets/notification.svg";
 import userIcon from "./assets/user.svg";
 import windowlizeIcon from "./assets/windowlize.svg";
 
-type Tab = "todo" | "schedule" | "search" | "trash";
+type Tab = "todo" | "schedule" | "search" | "trash" | "notification";
 type ConnectionStatus = "checking" | "online" | "offline";
 
 const selectedDateCache: Record<string, string> = {};
@@ -167,6 +173,8 @@ export function App() {
       scheduler_start_hour: String(newSettings.scheduler_start_hour),
       scheduler_end_hour: String(newSettings.scheduler_end_hour),
       scheduler_slot_minutes: String(newSettings.scheduler_slot_minutes),
+      notification_poll_interval: String(newSettings.notification_poll_interval),
+      notification_query_window: String(newSettings.notification_query_window),
       global_hotkey_enabled: String(newSettings.global_hotkey_enabled),
       global_hotkey: newSettings.global_hotkey,
     }).catch(() => { /* keep going */ });
@@ -232,6 +240,7 @@ export function App() {
             className={activeTab === "todo" ? "active" : ""}
             onClick={() => setActiveTab("todo")}
           >
+            <img src={todoIcon} alt="" className="nav-icon" />
             ToDo
           </button>
           <button
@@ -239,6 +248,7 @@ export function App() {
             className={activeTab === "schedule" ? "active" : ""}
             onClick={() => setActiveTab("schedule")}
           >
+            <img src={scheduleIcon} alt="" className="nav-icon" />
             Schedule
           </button>
           <button
@@ -246,6 +256,7 @@ export function App() {
             className={activeTab === "search" ? "active" : ""}
             onClick={() => setActiveTab("search")}
           >
+            <img src={searchIcon} alt="" className="nav-icon" />
             Search
           </button>
           <button
@@ -253,7 +264,16 @@ export function App() {
             className={activeTab === "trash" ? "active" : ""}
             onClick={() => setActiveTab("trash")}
           >
+            <img src={trashIcon} alt="" className="nav-icon" />
             Trash
+          </button>
+          <button
+            type="button"
+            className={activeTab === "notification" ? "active" : ""}
+            onClick={() => setActiveTab("notification")}
+          >
+            <img src={notificationIcon} alt="" className="nav-icon" />
+            Notification
           </button>
         </nav>
         <section className="content-panel">
@@ -277,6 +297,8 @@ export function App() {
             />
           ) : activeTab === "search" ? (
             <SearchView api={api} onNavigate={(target) => setActiveTab(target)} />
+          ) : activeTab === "notification" ? (
+            <NotificationView api={api} settings={settings} />
           ) : (
             <TrashView api={api} />
           )}
