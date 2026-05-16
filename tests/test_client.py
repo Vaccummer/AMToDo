@@ -196,6 +196,35 @@ class TestTodoClient:
         assert result["results"][1]["ok"] is False
         assert result["results"][1]["error"]["type"] == "NotFoundError"
 
+    def test_trash_flow(self, client):
+        client.todo_create(title="To trash")
+        result = client.todo_remove([1])
+        assert result["ok"] is True
+        assert result["results"][0]["todo"]["deleted_at"] is not None
+
+        # Not visible in normal list
+        result = client.todo_list()
+        assert result["count"] == 0
+
+        # Visible in trash
+        result = client.todo_trash_list()
+        assert result["count"] == 1
+
+        # Restore
+        result = client.todo_trash_restore([1])
+        assert result["ok"] is True
+        result = client.todo_list()
+        assert result["count"] == 1
+
+    def test_trash_purge(self, client):
+        client.todo_create(title="To purge")
+        client.todo_remove([1])
+        result = client.todo_trash_delete([1])
+        assert result["ok"] is True
+
+        result = client.todo_trash_list()
+        assert result["count"] == 0
+
 
 class TestScheduleClient:
     def test_add_and_list(self, client):
@@ -257,6 +286,29 @@ class TestScheduleClient:
         assert result["ok"] is True
         assert result["results"][0]["schedule"]["title"] == "A updated"
         assert result["results"][1]["schedule"]["location"] == "Room 101"
+
+    def test_trash_flow(self, client):
+        client.schedule_create(title="To trash", start_at=1000, end_at=2000)
+        result = client.schedule_remove([1])
+        assert result["ok"] is True
+
+        result = client.schedule_trash_list()
+        assert result["count"] == 1
+
+        result = client.schedule_trash_restore([1])
+        assert result["ok"] is True
+
+        result = client.schedule_list(start_at=0, end_at=5000)
+        assert result["count"] == 1
+
+    def test_trash_purge(self, client):
+        client.schedule_create(title="To purge", start_at=1000, end_at=2000)
+        client.schedule_remove([1])
+        result = client.schedule_trash_delete([1])
+        assert result["ok"] is True
+
+        result = client.schedule_trash_list()
+        assert result["count"] == 0
 
 
 class TestAdminClient:

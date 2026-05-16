@@ -14,7 +14,7 @@ from fastapi import (
 
 from clock import Clock
 from config import AppSettings
-from exceptions import AMToDoError
+from exceptions import AMToDoError, NotFoundError
 from serialization import schedule_attachment_to_dict, schedule_to_dict
 from server.attachment_helpers import (
     build_download_response,
@@ -269,8 +269,10 @@ def list_deleted_schedules(
         category=body.category,
         location=body.location,
     )
+    from services.search_common import sort_results
+
     if body.query:
-        from services.search_common import compile_search_query, search_text, sort_results
+        from services.search_common import compile_search_query, search_text
         regex = compile_search_query(body.query, use_regex=body.use_regex, ignore_case=body.ignore_case)
         resolved_fields = set(body.fields) & {"title", "description", "location", "category"}
         schedules = [s for s in schedules if regex.search(search_text(s, resolved_fields))]
@@ -314,8 +316,11 @@ def purge_schedules(
     att_svc = make_attachment_service(uow, clock, request, "schedule")
 
     def _purge_with_attachments(schedule_id: int) -> Schedule:
-        for att in att_svc.list_for_owner(schedule_id):
-            att_svc.remove(schedule_id, att.id)
+        try:
+            for att in att_svc.list_for_owner(schedule_id):
+                att_svc.remove(schedule_id, att.id)
+        except NotFoundError:
+            pass  # owner already soft-deleted; skip attachment cleanup
         return service.purge(schedule_id)
 
     results = [
