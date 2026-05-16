@@ -17,7 +17,7 @@ from config import AppSettings, __version__, amtodo_root, load_cli_settings
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.factory import get_user_tables
 from models.user import User
-from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict, user_to_dict
+from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict, user_to_dict_with_token
 from services import (
     AttachmentDraft,
     AttachmentService,
@@ -1303,7 +1303,7 @@ def _user_create_direct(name: str) -> dict[str, object]:
         session.add(user)
         session.commit()
 
-        result = user_to_dict(user)
+        result = user_to_dict_with_token(user)
 
     get_user_tables(user_id)
     database.create_schema()
@@ -1322,7 +1322,7 @@ def _user_list_direct() -> dict[str, object]:
         return {
             "ok": True,
             "count": len(users),
-            "users": [user_to_dict(u) for u in users],
+            "users": [user_to_dict_with_token(u) for u in users],
         }
 
 
@@ -1382,7 +1382,7 @@ def _user_update_direct(user_id: int, name: str) -> dict[str, object]:
 
         user.name = name
         session.commit()
-        return {"ok": True, "user": user_to_dict(user)}
+        return {"ok": True, "user": user_to_dict_with_token(user)}
 
 
 def _user_regen_token_direct(user_id: int) -> dict[str, object]:
@@ -1407,7 +1407,7 @@ def _user_regen_token_direct(user_id: int) -> dict[str, object]:
 
         user.token = new_token
         session.commit()
-        return {"ok": True, "user": user_to_dict(user)}
+        return {"ok": True, "user": user_to_dict_with_token(user)}
 
 
 @user_app.command("me")
