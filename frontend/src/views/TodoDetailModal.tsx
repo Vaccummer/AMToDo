@@ -3,6 +3,7 @@ import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../api/client";
 import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
 import { DatePicker } from "./DatePicker";
+import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 
@@ -453,17 +454,17 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             <div className="modal-datetime-row">
               <DatePicker
                 value={plannedDate}
-                onChange={setPlannedDate}
+                onChange={(dateKey) => {
+                  setPlannedDate(dateKey);
+                  if (!plannedTime) setPlannedTime("00:00:00");
+                }}
                 hasError={datetimeValidation.plannedDateError}
                 theme="green"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`modal-input modal-datetime-time${datetimeValidation.plannedTimeError ? " invalid" : ""}`}
                 value={plannedTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => setPlannedTime(e.target.value)}
+                onChange={setPlannedTime}
               />
             </div>
           </div>
@@ -473,17 +474,17 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             <div className="modal-datetime-row">
               <DatePicker
                 value={dueDate}
-                onChange={setDueDate}
+                onChange={(dateKey) => {
+                  setDueDate(dateKey);
+                  if (dateKey && !dueTime) setDueTime("00:00:00");
+                }}
                 hasError={datetimeValidation.dueDateError}
                 theme="green"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`modal-input modal-datetime-time${datetimeValidation.dueTimeError ? " invalid" : ""}`}
                 value={dueTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => setDueTime(e.target.value)}
+                onChange={setDueTime}
               />
             </div>
             {datetimeValidation.message ? (

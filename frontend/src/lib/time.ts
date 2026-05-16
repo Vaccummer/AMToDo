@@ -115,6 +115,29 @@ export function formatTime(epoch: number, timezone = DEFAULT_TIMEZONE): string {
   }).format(epoch * 1000);
 }
 
+export function formatDueTime(epoch: number, timezone = DEFAULT_TIMEZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date(epoch * 1000));
+  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const nowParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric"
+  }).formatToParts(new Date());
+  const nowYear = Object.fromEntries(nowParts.map((p) => [p.type, p.value])).year;
+  const hm = `${lookup.hour}:${lookup.minute}`;
+  if (lookup.year === nowYear) {
+    return `${lookup.month}-${lookup.day} ${hm}`;
+  }
+  return `${lookup.year}-${lookup.month}-${lookup.day} ${hm}`;
+}
+
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
