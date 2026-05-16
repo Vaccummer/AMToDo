@@ -42,6 +42,9 @@ from server.schemas import (
     ScheduleSearchRequest,
     ScheduleStatsRequest,
     ScheduleTargetsRequest,
+    ScheduleTrashDeleteRequest,
+    ScheduleTrashListRequest,
+    ScheduleTrashRestoreRequest,
     ScheduleUpdateRequest,
 )
 from services import (
@@ -234,23 +237,92 @@ def update_schedule(
 @router.post("/remove")
 def remove_schedules(
     body: ScheduleTargetsRequest,
-    request: Request,
+    settings: SettingsDep,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    """Remove one or more schedules by id."""
+    """Soft-delete one or more schedules by id (move to trash)."""
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    results = [
+        _target_result(target, lambda sid: service.remove(sid))
+        for target in unique_targets(body.targets)
+    ]
+    uow.session.flush()
+    return {"ok": all(result["ok"] for result in results), "results": results}
+
+
+@router.post("/trash/list")
+def list_deleted_schedules(
+    body: ScheduleTrashListRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """List deleted (trashed) schedules with search filters."""
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    schedules = service.list_deleted(
+        start_at=body.start_at,
+        end_at=body.end_at,
+        created_start_at=body.created_start_at,
+        created_end_at=body.created_end_at,
+        updated_start_at=body.updated_start_at,
+        updated_end_at=body.updated_end_at,
+        category=body.category,
+        location=body.location,
+    )
+    if body.query:
+        from services.search_common import compile_search_query, search_text, sort_results
+        regex = compile_search_query(body.query, use_regex=body.use_regex, ignore_case=body.ignore_case)
+        resolved_fields = set(body.fields) & {"title", "description", "location", "category"}
+        schedules = [s for s in schedules if regex.search(search_text(s, resolved_fields))]
+    schedules = sort_results(schedules, sort_by=body.sort_by, sort_order=body.sort_order, value_fn=_schedule_sort_value)
+    paged = schedules[body.offset:body.offset + body.limit]
+    return {
+        "ok": True,
+        "total": len(schedules),
+        "count": len(paged),
+        "schedules": [schedule_to_dict(schedule) for schedule in paged],
+    }
+
+
+@router.post("/trash/restore")
+def restore_schedules(
+    body: ScheduleTrashRestoreRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Restore one or more soft-deleted schedules."""
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    results = [
+        _target_result(target, lambda sid: service.restore(sid))
+        for target in unique_targets(body.targets)
+    ]
+    uow.session.flush()
+    return {"ok": all(result["ok"] for result in results), "results": results}
+
+
+@router.post("/trash/delete")
+def purge_schedules(
+    body: ScheduleTrashDeleteRequest,
+    request: Request,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Permanently delete one or more soft-deleted schedules (with attachments)."""
     service = ScheduleService(uow.schedules, clock, uow.schedule_model)
     att_svc = make_attachment_service(uow, clock, request, "schedule")
 
-    def _remove_with_attachments(schedule_id: int) -> Schedule:
+    def _purge_with_attachments(schedule_id: int) -> Schedule:
         for att in att_svc.list_for_owner(schedule_id):
             att_svc.remove(schedule_id, att.id)
-        return service.remove(schedule_id)
+        return service.purge(schedule_id)
 
     results = [
-        _target_result(target, lambda sid: _remove_with_attachments(sid))
+        _target_result(target, lambda sid: _purge_with_attachments(sid))
         for target in unique_targets(body.targets)
     ]
+    uow.session.flush()
     return {"ok": all(result["ok"] for result in results), "results": results}
 
 
@@ -291,7 +363,6 @@ def batch_create_schedules(
 @router.post("/batch-update")
 def batch_update_schedules(
     body: ScheduleBatchUpdateRequest,
-    settings: SettingsDep,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
@@ -445,5 +516,14 @@ def _target_result(
             "error": {"type": type(exc).__name__, "message": str(exc)},
         }
     return {"target": target, "ok": True, "schedule": schedule_to_dict(schedule)}
+
+
+def _schedule_sort_value(schedule: Schedule, sort_by: str) -> object:
+    """Extract sort value from a Schedule entity."""
+    if sort_by == "updated_at":
+        return schedule.updated_at if schedule.updated_at is not None else schedule.created_at
+    if sort_by == "duration":
+        return schedule.end_at - schedule.start_at
+    return getattr(schedule, sort_by, None)
 
 
