@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -7,6 +7,7 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let mainWindow = null;
 let tray = null;
 let forceQuit = false;
+let registeredHotkey = null;
 
 function createTrayIcon() {
   const size = 16;
@@ -124,6 +125,41 @@ function createTray() {
   });
 }
 
+function toggleWindowVisibility() {
+  if (!mainWindow) return;
+  if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
+    mainWindow.hide();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function registerGlobalHotkey(accelerator) {
+  if (registeredHotkey) {
+    globalShortcut.unregister(registeredHotkey);
+    registeredHotkey = null;
+  }
+  if (!accelerator) return { ok: true };
+  try {
+    const success = globalShortcut.register(accelerator, toggleWindowVisibility);
+    if (success) {
+      registeredHotkey = accelerator;
+      return { ok: true };
+    }
+    return { ok: false, error: "快捷键注册失败" };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function unregisterGlobalHotkey() {
+  if (registeredHotkey) {
+    globalShortcut.unregister(registeredHotkey);
+    registeredHotkey = null;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1080,
@@ -229,6 +265,15 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle("hotkey:register", (_event, accelerator) => {
+    return registerGlobalHotkey(accelerator);
+  });
+
+  ipcMain.handle("hotkey:unregister", () => {
+    unregisterGlobalHotkey();
+    return { ok: true };
+  });
+
   ipcMain.handle("window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
@@ -255,6 +300,16 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
+  // Register global hotkey if enabled in settings
+  try {
+    const settings = readUiToml();
+    if (settings.global_hotkey_enabled === "true" && settings.global_hotkey) {
+      registerGlobalHotkey(settings.global_hotkey);
+    }
+  } catch {
+    // settings file may not exist yet
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -273,4 +328,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   forceQuit = true;
+  unregisterGlobalHotkey();
 });
