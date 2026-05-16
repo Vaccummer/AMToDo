@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { AMToDoApi, ScheduleItem } from "../api/client";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
-  formatDateKeyDay,
-  formatDateKeyWeekday,
+  dateKeyFromEpoch,
   formatTime,
   startOfWeekDateKey,
   startOfDateKeyEpoch,
@@ -13,12 +12,10 @@ import {
 } from "../lib/time";
 import { CalendarPopup } from "./CalendarPopup";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
+import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { ScheduleCreateModal } from "./ScheduleCreateModal";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
-import leftIcon from "../assets/left.svg";
-import rightIcon from "../assets/right.svg";
-import toTodayIcon from "../assets/ToToday.svg";
 import scheduleNormalIcon from "../assets/schedule-normal.svg";
 import scheduleFullIcon from "../assets/schedule-full.svg";
 
@@ -28,6 +25,8 @@ type Props = {
   endHour?: number;
   slotMinutes?: number;
   weekStart?: number;
+  cachedDateKey?: string;
+  onDateChange?: (dateKey: string) => void;
 };
 
 const HOUR_HEIGHT = 64;
@@ -51,14 +50,51 @@ type RenderedScheduleBlock = {
   titleLines: number;
 };
 
-export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0 }: Props) {
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedDateKey, setSelectedDateKey] = useState<string>(dateKeyFromDate(new Date()));
+type ScheduleEditPointerMode = "move" | "resize-start" | "resize-end";
+
+type EditingSchedule = {
+  id: number;
+  original: ScheduleItem;
+  draft: ScheduleItem;
+  dirty: boolean;
+  saving: boolean;
+};
+
+type PointerEditState = {
+  id: number;
+  mode: ScheduleEditPointerMode;
+  startClientX: number;
+  startClientY: number;
+  initialStartAt: number;
+  initialEndAt: number;
+  initialDayIndex: number;
+  initialMinuteOfDay: number;
+  durationSeconds: number;
+  moved: boolean;
+};
+
+const MIN_DURATION_SECONDS = 60;
+
+export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange }: Props) {
+  const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
+  const normalizedWeekStart = weekStart === 1 ? 1 : 0;
+  const naturalWeekStartKey = useMemo(
+    () => startOfWeekDateKey(todayKey, normalizedWeekStart),
+    [todayKey, normalizedWeekStart]
+  );
+
+  const initDateKey = cachedDateKey ?? todayKey;
+  const initTargetWeekStart = startOfWeekDateKey(initDateKey, normalizedWeekStart);
+  const initDiff = Math.round((startOfDateKeyEpoch(initTargetWeekStart) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400);
+  const [weekOffset, setWeekOffset] = useState(Math.round(initDiff / 7));
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(initDateKey);
   const [showCalendar, setShowCalendar] = useState(false);
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [status, setStatus] = useState<string>("加载中");
   const [fullHours, setFullHours] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditingSchedule | null>(null);
+  const [editStatus, setEditStatus] = useState<string>("");
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const [emptyContextMenu, setEmptyContextMenu] = useState<{
     startAt: number;
@@ -67,9 +103,13 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     y: number;
   } | null>(null);
   const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
-  const weekLabelRef = useRef<HTMLDivElement>(null);
+  const dateBarRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
-  const dayHeadersRef = useRef<HTMLDivElement>(null);
+  const dayOverlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scheduleEventRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const editingRef = useRef<EditingSchedule | null>(null);
+  const pointerEditRef = useRef<PointerEditState | null>(null);
+  const suppressNextClickRef = useRef(false);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
 
   const normalizedSlotMinutes = useMemo(
@@ -87,19 +127,12 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     [visibleStartHour, visibleEndHour, normalizedSlotMinutes]
   );
 
-  const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
-
-  const normalizedWeekStart = weekStart === 1 ? 1 : 0;
-
-  const naturalWeekStartKey = useMemo(
-    () => startOfWeekDateKey(todayKey, normalizedWeekStart),
-    [todayKey, normalizedWeekStart]
-  );
-
   const weekStartKey = useMemo(
     () => addDaysToDateKey(naturalWeekStartKey, weekOffset * 7),
     [naturalWeekStartKey, weekOffset]
   );
+
+  useEffect(() => { onDateChange?.(selectedDateKey); }, [selectedDateKey, onDateChange]);
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekStartKey, i)),
@@ -113,13 +146,27 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
   }, [normalizedWeekStart, weekStartKey]);
 
+  const renderItems = useMemo(
+    () => (editing ? items.map((item) => (item.id === editing.id ? editing.draft : item)) : items),
+    [editing, items]
+  );
+
   const blocksByDay = useMemo(
-    () => buildScheduleBlocks(items, days, visibleStartHour, visibleEndHour),
-    [items, days, visibleStartHour, visibleEndHour]
+    () => buildScheduleBlocks(renderItems, days, visibleStartHour, visibleEndHour),
+    [renderItems, days, visibleStartHour, visibleEndHour]
   );
   const gridStyle = {
     "--schedule-slot-height": `${(HOUR_HEIGHT * normalizedSlotMinutes) / 60}px`
   } as CSSProperties;
+
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
+
+  useEffect(() => {
+    if (!editing) return;
+    scheduleEventRefs.current[editing.id]?.focus();
+  }, [editing?.id, editing?.draft.start_at]);
 
   // Fetch schedules for the displayed week
   useEffect(() => {
@@ -130,6 +177,9 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
       .then((result) => {
         setItems(result.schedules);
         setStatus("");
+        if (editingRef.current && !result.schedules.some((item) => item.id === editingRef.current?.id)) {
+          setEditing(null);
+        }
       })
       .catch((error: unknown) => {
         setItems([]);
@@ -137,26 +187,99 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
       });
   }, [api, days]);
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const pointerState = pointerEditRef.current;
+      if (!pointerState) return;
+      event.preventDefault();
+
+      const deltaX = event.clientX - pointerState.startClientX;
+      const deltaY = event.clientY - pointerState.startClientY;
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        pointerState.moved = true;
+      }
+
+      const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 60);
+      const deltaSeconds = deltaMinutes * 60;
+      let nextStartAt = pointerState.initialStartAt;
+      let nextEndAt = pointerState.initialEndAt;
+
+      if (pointerState.mode === "move") {
+        const dayWidth = dayOverlayRefs.current[days[pointerState.initialDayIndex]]?.getBoundingClientRect().width ?? 1;
+        const nextDayIndex = clamp(
+          pointerState.initialDayIndex + Math.round(deltaX / Math.max(1, dayWidth)),
+          0,
+          days.length - 1
+        );
+        const durationMinutes = Math.max(1, Math.round(pointerState.durationSeconds / 60));
+        const nextMinute = clamp(pointerState.initialMinuteOfDay + deltaMinutes, 0, 1440 - durationMinutes);
+        nextStartAt = startOfDateKeyEpoch(days[nextDayIndex]) + nextMinute * 60;
+        nextEndAt = nextStartAt + pointerState.durationSeconds;
+      } else if (pointerState.mode === "resize-start") {
+        nextStartAt = Math.min(
+          pointerState.initialStartAt + deltaSeconds,
+          pointerState.initialEndAt - MIN_DURATION_SECONDS
+        );
+      } else {
+        nextEndAt = Math.max(
+          pointerState.initialEndAt + deltaSeconds,
+          pointerState.initialStartAt + MIN_DURATION_SECONDS
+        );
+      }
+
+      updateEditingDraft(pointerState.id, (draft) => ({
+        ...draft,
+        start_at: nextStartAt,
+        end_at: nextEndAt,
+        duration: nextEndAt - nextStartAt
+      }));
+    }
+
+    function handlePointerUp() {
+      if (pointerEditRef.current?.moved) {
+        suppressNextClickRef.current = true;
+      }
+      pointerEditRef.current = null;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [days]);
+
   function prevWeek() {
-    setWeekOffset((w) => w - 1);
+    void commitEditingSchedule().then(() => {
+      setWeekOffset((w) => w - 1);
+    });
   }
 
   function nextWeek() {
-    setWeekOffset((w) => w + 1);
+    void commitEditingSchedule().then(() => {
+      setWeekOffset((w) => w + 1);
+    });
   }
 
   function goToToday() {
-    setWeekOffset(0);
-    setSelectedDateKey(todayKey);
+    void commitEditingSchedule().then(() => {
+      setWeekOffset(0);
+      setSelectedDateKey(todayKey);
+    });
   }
 
   function goToDate(dateKey: string) {
-    const targetWeekStartKey = startOfWeekDateKey(dateKey, normalizedWeekStart);
-    const diffDays = Math.round(
-      (startOfDateKeyEpoch(targetWeekStartKey) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400
-    );
-    setWeekOffset(Math.round(diffDays / 7));
-    setSelectedDateKey(dateKey);
+    void commitEditingSchedule().then(() => {
+      const targetWeekStartKey = startOfWeekDateKey(dateKey, normalizedWeekStart);
+      const diffDays = Math.round(
+        (startOfDateKeyEpoch(targetWeekStartKey) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400
+      );
+      setWeekOffset(Math.round(diffDays / 7));
+      setSelectedDateKey(dateKey);
+    });
   }
 
   async function deleteSchedule(id: number) {
@@ -173,8 +296,8 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   async function askDeleteSchedule(id: number) {
     const ok = await ask({
       title: "删除日程",
-      message: "确定删除这条日程吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      message: "确定将这条日程移入回收站吗？之后可以在 Trash 中恢复。",
+      confirmLabel: "移入回收站",
       danger: true,
     });
     if (ok) deleteSchedule(id);
@@ -191,7 +314,9 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   function beginCreate(dayKey: string, slot: ScheduleSlot) {
     setSelectedDateKey(dayKey);
     setEmptyContextMenu(null);
-    setCreateDraft(scheduleWindowForSlot(dayKey, slot));
+    void commitEditingSchedule().then(() => {
+      setCreateDraft(scheduleWindowForSlot(dayKey, slot));
+    });
   }
 
   function addSchedule(schedule: ScheduleItem) {
@@ -199,41 +324,238 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   }
 
   function toggleCalendar() {
-    if (!showCalendar && dayHeadersRef.current) {
-      setCalendarAnchor(dayHeadersRef.current.getBoundingClientRect());
+    if (!showCalendar && dateBarRef.current) {
+      setCalendarAnchor(dateBarRef.current.getBoundingClientRect());
     }
     setShowCalendar((v) => !v);
   }
 
+  function replaceScheduleItem(schedule: ScheduleItem) {
+    setItems((prev) =>
+      prev
+        .map((item) => (item.id === schedule.id ? schedule : item))
+        .sort((a, b) => a.start_at - b.start_at || a.end_at - b.end_at || a.id - b.id)
+    );
+  }
+
+  function beginEditingSchedule(item: ScheduleItem) {
+    setEditStatus("");
+    setDetailId(null);
+    setEditing({
+      id: item.id,
+      original: item,
+      draft: item,
+      dirty: false,
+      saving: false
+    });
+    setSelectedDateKey(dateKeyFromEpoch(item.start_at));
+  }
+
+  async function commitEditingSchedule(target = editingRef.current, clearWhenDone = true) {
+    if (!target) return;
+    if (!target.dirty) {
+      if (clearWhenDone && editingRef.current?.id === target.id) {
+        setEditing(null);
+      }
+      return;
+    }
+
+    if (editingRef.current?.id === target.id) {
+      setEditing((prev) => (prev ? { ...prev, saving: true } : prev));
+    }
+    try {
+      const result = await api.updateSchedule(target.id, {
+        start_at: target.draft.start_at,
+        end_at: target.draft.end_at
+      });
+      replaceScheduleItem(result.schedule);
+      setEditStatus("");
+      if (editingRef.current?.id === target.id) {
+        if (clearWhenDone) {
+          setEditing(null);
+        } else {
+          setEditing({
+            id: result.schedule.id,
+            original: result.schedule,
+            draft: result.schedule,
+            dirty: false,
+            saving: false
+          });
+        }
+      }
+    } catch (error: unknown) {
+      try {
+        const fresh = await api.getSchedule(target.id);
+        replaceScheduleItem(fresh.schedule);
+        if (editingRef.current?.id === target.id) {
+          if (clearWhenDone) {
+            setEditing(null);
+          } else {
+            setEditing({
+              id: fresh.schedule.id,
+              original: fresh.schedule,
+              draft: fresh.schedule,
+              dirty: false,
+              saving: false
+            });
+          }
+        }
+      } catch {
+        replaceScheduleItem(target.original);
+        if (editingRef.current?.id === target.id) {
+          setEditing(clearWhenDone ? null : { ...target, draft: target.original, dirty: false, saving: false });
+        }
+      }
+      setEditStatus(error instanceof Error ? `日程保存失败，已恢复服务器状态：${error.message}` : "日程保存失败，已恢复服务器状态");
+    }
+  }
+
+  function cancelEditingSchedule() {
+    const current = editingRef.current;
+    if (current?.dirty) {
+      replaceScheduleItem(current.original);
+    }
+    setEditing(null);
+    pointerEditRef.current = null;
+  }
+
+  function updateEditingDraft(id: number, transform: (draft: ScheduleItem) => ScheduleItem) {
+    setEditing((prev) => {
+      if (!prev || prev.id !== id || prev.saving) return prev;
+      const draft = normalizeScheduleDraft(transform(prev.draft));
+      return {
+        ...prev,
+        draft,
+        dirty: draft.start_at !== prev.original.start_at || draft.end_at !== prev.original.end_at
+      };
+    });
+  }
+
+  function handleScheduleClick(item: ScheduleItem) {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
+    const current = editingRef.current;
+    if (current?.id === item.id) return;
+    if (current) {
+      void commitEditingSchedule(current, true);
+    }
+    beginEditingSchedule(item);
+  }
+
+  function beginPointerEdit(
+    event: React.PointerEvent,
+    item: ScheduleItem,
+    mode: ScheduleEditPointerMode
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    focusScheduleEvent(event.currentTarget);
+    const current = editingRef.current;
+    if (current && current.id !== item.id) {
+      void commitEditingSchedule(current, true);
+    }
+    const base = current?.id === item.id ? current.draft : item;
+    if (current?.id !== item.id) {
+      beginEditingSchedule(base);
+    }
+
+    const startDayKey = dateKeyFromEpoch(base.start_at);
+    const initialDayIndex = Math.max(0, days.indexOf(startDayKey));
+    const dayStart = startOfDateKeyEpoch(days[initialDayIndex] ?? startDayKey);
+    pointerEditRef.current = {
+      id: base.id,
+      mode,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      initialStartAt: base.start_at,
+      initialEndAt: base.end_at,
+      initialDayIndex,
+      initialMinuteOfDay: Math.round((base.start_at - dayStart) / 60),
+      durationSeconds: Math.max(MIN_DURATION_SECONDS, base.end_at - base.start_at),
+      moved: false
+    };
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  function handleScheduleKeyDown(event: React.KeyboardEvent, item: ScheduleItem) {
+    if (editingRef.current?.id !== item.id) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditingSchedule();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openScheduleDetail(item.id);
+      return;
+    }
+
+    const minuteStep = event.shiftKey ? 5 : 1;
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const deltaSeconds = (event.key === "ArrowUp" ? -minuteStep : minuteStep) * 60;
+      updateEditingDraft(item.id, (draft) => moveScheduleVertically(draft, deltaSeconds));
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      updateEditingDraft(item.id, (draft) =>
+        moveScheduleToAdjacentDay(draft, event.key === "ArrowLeft" ? -1 : 1, days)
+      );
+      return;
+    }
+
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      updateEditingDraft(item.id, (draft) => resizeScheduleEnd(draft, minuteStep * 60));
+      return;
+    }
+
+    if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      updateEditingDraft(item.id, (draft) => resizeScheduleEnd(draft, -minuteStep * 60));
+    }
+  }
+
+  function openScheduleDetail(id: number) {
+    const current = editingRef.current;
+    if (current?.id === id) {
+      void commitEditingSchedule(current, true).then(() => setDetailId(id));
+      return;
+    }
+    setDetailId(id);
+  }
+
   return (
     <div className="schedule-view">
-      <div className="schedule-week-header" ref={weekLabelRef}>
-        <button type="button" className="cal-nav" aria-label="上一周" onClick={prevWeek}>
-          <img src={leftIcon} alt="" />
-        </button>
-        <div className="schedule-week-center">
-          <button type="button" className="cal-month-label" onClick={toggleCalendar}>
-            {weekLabel}
-            {showCalendar ? (
-              <svg className="cal-month-arrow" width="14" height="14" viewBox="0 0 100 100">
-                <path d="M18 22 H82 Q90 22 86 30 L56 74 Q50 82 44 74 L14 30 Q10 22 18 22 Z" fill="currentColor" />
-              </svg>
-            ) : null}
-          </button>
+      <DateBar
+        ref={dateBarRef}
+        title={weekLabel}
+        days={days}
+        selectedDateKey={selectedDateKey}
+        todayKey={todayKey}
+        open={showCalendar}
+        leftTool={(
           <button
             type="button"
-            className="cal-today"
-            aria-label="回到今天"
-            onClick={goToToday}
-            disabled={weekOffset === 0 && selectedDateKey === todayKey}
+            className="datebar-side-btn"
+            onClick={() => setFullHours((v) => !v)}
+            title="切换时间范围"
           >
-            <img src={toTodayIcon} alt="" />
+            <img src={fullHours ? scheduleFullIcon : scheduleNormalIcon} alt="" />
           </button>
-        </div>
-        <button type="button" className="cal-nav" aria-label="下一周" onClick={nextWeek}>
-          <img src={rightIcon} alt="" />
-        </button>
-      </div>
+        )}
+        onPrevious={prevWeek}
+        onNext={nextWeek}
+        onTitleClick={toggleCalendar}
+        onToday={goToToday}
+        onSelectDate={setSelectedDateKey}
+      />
 
       {showCalendar && calendarAnchor ? (
         <CalendarPopup
@@ -246,45 +568,18 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
         />
       ) : null}
 
-      <div className="schedule-day-headers" ref={dayHeadersRef}>
-        <button
-          type="button"
-          className="schedule-corner-btn"
-          onClick={() => setFullHours((v) => !v)}
-          title="切换时间范围"
-        >
-          <img src={fullHours ? scheduleFullIcon : scheduleNormalIcon} alt="" />
-        </button>
-        {days.map((dayKey) => {
-          const isToday = dayKey === todayKey;
-          const isSelected = dayKey === selectedDateKey;
-          const cls = [
-            "schedule-day-header",
-            isToday ? "today" : "",
-            isSelected ? "selected-col" : ""
-          ].filter(Boolean).join(" ");
-          return (
-            <button
-              type="button"
-              className={cls}
-              key={dayKey}
-              onClick={() => setSelectedDateKey(dayKey)}
-            >
-              <span>{formatDateKeyWeekday(dayKey)}</span>
-              <strong>{formatDateKeyDay(dayKey)}</strong>
-            </button>
-          );
-        })}
-      </div>
-
       <div className="schedule-grid-scroll">
-        <div className="schedule-grid" style={gridStyle}>
+        <div className={`schedule-grid${editing ? " editing" : ""}`} style={gridStyle}>
           {slots.map((slot) => (
             <TimeRow
               key={slot.key}
               slot={slot}
               days={days}
               onCreate={beginCreate}
+              onClick={(dayKey) => {
+                setSelectedDateKey(dayKey);
+                void commitEditingSchedule();
+              }}
               onContextMenu={(dayKey, currentSlot, event) => {
                 event.preventDefault();
                 setSelectedDateKey(dayKey);
@@ -302,13 +597,25 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
               <div
                 className="schedule-day-overlay"
                 key={`${dayKey}-events`}
+                ref={(node) => {
+                  dayOverlayRefs.current[dayKey] = node;
+                }}
                 style={{ gridColumn: dayIndex + 2 }}
               >
                 {(blocksByDay[dayKey] ?? []).map((block) => (
                   <ScheduleEventBlock
                     block={block}
                     key={`${dayKey}-${block.item.id}`}
-                    onClick={() => setDetailId(block.item.id)}
+                    ref={(node) => {
+                      scheduleEventRefs.current[block.item.id] = node;
+                    }}
+                    selected={editing?.id === block.item.id}
+                    saving={editing?.id === block.item.id && editing.saving}
+                    onClick={() => handleScheduleClick(block.item)}
+                    onDoubleClick={() => openScheduleDetail(block.item.id)}
+                    onKeyDown={(event) => handleScheduleKeyDown(event, block.item)}
+                    onPointerDown={(event) => beginPointerEdit(event, block.item, "move")}
+                    onResizePointerDown={(event, mode) => beginPointerEdit(event, block.item, mode)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -322,7 +629,7 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
           </div>
         </div>
       </div>
-      {status ? <div className="empty-state schedule-status">{status}</div> : null}
+      {status || editStatus ? <div className="empty-state schedule-status">{editStatus || status}</div> : null}
 
       {detailId != null ? (
         <ScheduleDetailModal
@@ -361,7 +668,7 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               ),
-              action: () => setDetailId(contextMenu.id)
+              action: () => openScheduleDetail(contextMenu.id)
             },
             {
               label: "删除",
@@ -397,10 +704,11 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   );
 }
 
-function TimeRow({ slot, days, onCreate, onContextMenu }: {
+function TimeRow({ slot, days, onCreate, onClick, onContextMenu }: {
   slot: ScheduleSlot;
   days: string[];
   onCreate: (dayKey: string, slot: ScheduleSlot) => void;
+  onClick: (dayKey: string) => void;
   onContextMenu: (dayKey: string, slot: ScheduleSlot, event: React.MouseEvent) => void;
 }) {
   return (
@@ -410,6 +718,7 @@ function TimeRow({ slot, days, onCreate, onContextMenu }: {
         <div
           className="schedule-cell"
           key={`${dayKey}-${slot.key}`}
+          onClick={() => onClick(dayKey)}
           onDoubleClick={() => onCreate(dayKey, slot)}
           onContextMenu={(event) => onContextMenu(dayKey, slot, event)}
         />
@@ -445,28 +754,52 @@ function formatSlotLabel(minutes: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function ScheduleEventBlock({ block, onClick, onContextMenu }: {
+const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
   block: RenderedScheduleBlock;
+  selected?: boolean;
+  saving?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
+  onResizePointerDown?: (e: React.PointerEvent, mode: ScheduleEditPointerMode) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
-}) {
+}>(function ScheduleEventBlock({ block, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onResizePointerDown, onContextMenu }, ref) {
   const style = {
     top: `${block.top}px`,
     height: `${block.height}px`,
     "--title-lines": block.titleLines
   } as CSSProperties & Record<"--title-lines", number>;
-  const className = ["schedule-event", block.colorClass, block.textMode].join(" ");
+  const className = [
+    "schedule-event",
+    block.colorClass,
+    block.textMode,
+    selected ? "selected" : "",
+    saving ? "saving" : ""
+  ].filter(Boolean).join(" ");
   const timeText = `${formatTime(block.item.start_at)}-${formatTime(block.item.end_at)}`;
 
   return (
     <button
       type="button"
       className={className}
+      ref={ref}
       style={style}
       title={`${timeText} ${block.item.title}`}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
+      onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
+      aria-pressed={selected}
     >
+      {selected ? (
+        <span
+          className="schedule-resize-handle top"
+          onPointerDown={(event) => onResizePointerDown?.(event, "resize-start")}
+          aria-hidden="true"
+        />
+      ) : null}
       {block.textMode === "tiny" ? null : (
         <>
           {(block.textMode === "mid" || block.textMode === "full") ? (
@@ -475,8 +808,73 @@ function ScheduleEventBlock({ block, onClick, onContextMenu }: {
           <strong className="schedule-event-title">{block.item.title}</strong>
         </>
       )}
+      {selected ? (
+        <span
+          className="schedule-resize-handle bottom"
+          onPointerDown={(event) => onResizePointerDown?.(event, "resize-end")}
+          aria-hidden="true"
+        />
+      ) : null}
     </button>
   );
+});
+
+function normalizeScheduleDraft(item: ScheduleItem): ScheduleItem {
+  const startAt = Math.trunc(item.start_at);
+  const endAt = Math.max(startAt + MIN_DURATION_SECONDS, Math.trunc(item.end_at));
+  return {
+    ...item,
+    start_at: startAt,
+    end_at: endAt,
+    duration: endAt - startAt
+  };
+}
+
+function moveScheduleVertically(item: ScheduleItem, deltaSeconds: number): ScheduleItem {
+  const duration = Math.max(MIN_DURATION_SECONDS, item.end_at - item.start_at);
+  const dayKey = dateKeyFromEpoch(item.start_at);
+  const dayStart = startOfDateKeyEpoch(dayKey);
+  const maxStart = dayStart + 86400 - duration;
+  const nextStart = clamp(item.start_at + deltaSeconds, dayStart, Math.max(dayStart, maxStart));
+  return {
+    ...item,
+    start_at: nextStart,
+    end_at: nextStart + duration,
+    duration
+  };
+}
+
+function moveScheduleToAdjacentDay(item: ScheduleItem, deltaDays: number, days: string[]): ScheduleItem {
+  const dayKey = dateKeyFromEpoch(item.start_at);
+  const currentIndex = days.indexOf(dayKey);
+  if (currentIndex < 0) return item;
+  const nextIndex = clamp(currentIndex + deltaDays, 0, days.length - 1);
+  if (nextIndex === currentIndex) return item;
+  const deltaSeconds = startOfDateKeyEpoch(days[nextIndex]) - startOfDateKeyEpoch(days[currentIndex]);
+  return {
+    ...item,
+    start_at: item.start_at + deltaSeconds,
+    end_at: item.end_at + deltaSeconds
+  };
+}
+
+function resizeScheduleEnd(item: ScheduleItem, deltaSeconds: number): ScheduleItem {
+  const endAt = Math.max(item.start_at + MIN_DURATION_SECONDS, item.end_at + deltaSeconds);
+  return {
+    ...item,
+    end_at: endAt,
+    duration: endAt - item.start_at
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function focusScheduleEvent(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) return;
+  const button = target.closest<HTMLButtonElement>(".schedule-event");
+  button?.focus();
 }
 
 function buildScheduleBlocks(
