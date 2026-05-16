@@ -6,15 +6,18 @@ from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
 STANDALONE_USER_ID = 0
 
-_cache: dict[int, tuple[type, type, type, type, type]] = {}
+_cache: dict[int, tuple[type, ...]] = {}
 
 
-def get_standalone_tables() -> tuple[type, type, type, type, type]:
+def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, type, type]:
     """Return concrete model classes for standalone (non-multi-user) usage."""
     if STANDALONE_USER_ID in _cache:
         return _cache[STANDALONE_USER_ID]
 
     from models.attachment import TodoAttachment
+    from models.changelog import ScheduleChangelog, TodoChangelog
+    from models.notification import Notification
+    from models.notification_mention import NotificationMention
     from models.schedule import Schedule
     from models.schedule_attachment import ScheduleAttachment
     from models.setting import Setting
@@ -83,24 +86,79 @@ def get_standalone_tables() -> tuple[type, type, type, type, type]:
             ),
         },
     )
+    StandaloneTodoChangelog = type(
+        "TodoChangelog_standalone",
+        (TodoChangelog,),
+        {
+            "__tablename__": "todo_changelogs",
+            "__table_args__": (
+                Index("ix_todo_changelogs_entity_created", "entity_id", "created_at"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    StandaloneScheduleChangelog = type(
+        "ScheduleChangelog_standalone",
+        (ScheduleChangelog,),
+        {
+            "__tablename__": "schedule_changelogs",
+            "__table_args__": (
+                Index(
+                    "ix_schedule_changelogs_entity_created",
+                    "entity_id",
+                    "created_at",
+                ),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    StandaloneNotification = type(
+        "Notification_standalone",
+        (Notification,),
+        {
+            "__tablename__": "notifications",
+            "__table_args__": (
+                Index("ix_notifications_trigger_at", "trigger_at"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    StandaloneNotificationMention = type(
+        "NotificationMention_standalone",
+        (NotificationMention,),
+        {
+            "__tablename__": "notification_mentions",
+            "__table_args__": (
+                Index("ix_notification_mentions_notification", "notification_id"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
     result = (
         StandaloneTodo,
         StandaloneSchedule,
         StandaloneSetting,
         StandaloneTodoAttachment,
         StandaloneScheduleAttachment,
+        StandaloneTodoChangelog,
+        StandaloneScheduleChangelog,
+        StandaloneNotification,
+        StandaloneNotificationMention,
     )
     _cache[STANDALONE_USER_ID] = result
     return result
 
 
-def get_user_tables(user_id: int) -> tuple[type, type, type, type, type]:
+def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, type, type, type]:
     """Return per-user table model classes."""
 
     if user_id in _cache:
         return _cache[user_id]
 
     from models.attachment import TodoAttachment
+    from models.changelog import ScheduleChangelog, TodoChangelog
+    from models.notification import Notification
+    from models.notification_mention import NotificationMention
     from models.schedule import Schedule
     from models.schedule_attachment import ScheduleAttachment
     from models.setting import Setting
@@ -110,6 +168,10 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type]:
     schedule_table = f"schedules_{user_id}"
     attachment_table = f"todo_attachments_{user_id}"
     schedule_attachment_table = f"schedule_attachments_{user_id}"
+    todo_changelog_table = f"todo_changelogs_{user_id}"
+    schedule_changelog_table = f"schedule_changelogs_{user_id}"
+    notification_table = f"notifications_{user_id}"
+    notification_mention_table = f"notification_mentions_{user_id}"
 
     TodoModel = type(
         f"Todo_{user_id}",
@@ -167,6 +229,68 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type]:
             ),
         },
     )
-    result = (TodoModel, ScheduleModel, SettingModel, TodoAttachmentModel, ScheduleAttachmentModel)
+    TodoChangelogModel = type(
+        f"TodoChangelog_{user_id}",
+        (TodoChangelog,),
+        {
+            "__tablename__": todo_changelog_table,
+            "__table_args__": (
+                Index(
+                    f"ix_{todo_changelog_table}_entity_created",
+                    "entity_id",
+                    "created_at",
+                ),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    ScheduleChangelogModel = type(
+        f"ScheduleChangelog_{user_id}",
+        (ScheduleChangelog,),
+        {
+            "__tablename__": schedule_changelog_table,
+            "__table_args__": (
+                Index(
+                    f"ix_{schedule_changelog_table}_entity_created",
+                    "entity_id",
+                    "created_at",
+                ),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    NotificationModel = type(
+        f"Notification_{user_id}",
+        (Notification,),
+        {
+            "__tablename__": notification_table,
+            "__table_args__": (
+                Index(f"ix_{notification_table}_trigger_at", "trigger_at"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    NotificationMentionModel = type(
+        f"NotificationMention_{user_id}",
+        (NotificationMention,),
+        {
+            "__tablename__": notification_mention_table,
+            "__table_args__": (
+                Index(f"ix_{notification_mention_table}_notification", "notification_id"),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
+    result = (
+        TodoModel,
+        ScheduleModel,
+        SettingModel,
+        TodoAttachmentModel,
+        ScheduleAttachmentModel,
+        TodoChangelogModel,
+        ScheduleChangelogModel,
+        NotificationModel,
+        NotificationMentionModel,
+    )
     _cache[user_id] = result
     return result

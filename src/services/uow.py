@@ -6,12 +6,17 @@ from typing import TYPE_CHECKING, Self
 
 from models.factory import STANDALONE_USER_ID, get_standalone_tables, get_user_tables
 from repositories import (
+    NotificationMentionRepository,
+    NotificationRepository,
     ScheduleAttachmentRepository,
+    ScheduleChangelogRepository,
     ScheduleRepository,
     SettingsRepository,
     TodoAttachmentRepository,
+    TodoChangelogRepository,
     TodoRepository,
 )
+from services.changelogs import ScheduleChangelogService, TodoChangelogService
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -36,6 +41,10 @@ class UnitOfWork:
                 self._setting_model,
                 self._attachment_model,
                 self._schedule_attachment_model,
+                self._todo_changelog_model,
+                self._schedule_changelog_model,
+                self._notification_model,
+                self._notification_mention_model,
             ) = get_standalone_tables()
         else:
             (
@@ -44,6 +53,10 @@ class UnitOfWork:
                 self._setting_model,
                 self._attachment_model,
                 self._schedule_attachment_model,
+                self._todo_changelog_model,
+                self._schedule_changelog_model,
+                self._notification_model,
+                self._notification_mention_model,
             ) = get_user_tables(user_id)
 
     def __enter__(self) -> Self:
@@ -100,6 +113,26 @@ class UnitOfWork:
         return self._schedule_attachment_model
 
     @property
+    def todo_changelog_model(self) -> type:
+        """Return the todo changelog model class for the current user."""
+        return self._todo_changelog_model
+
+    @property
+    def schedule_changelog_model(self) -> type:
+        """Return the schedule changelog model class for the current user."""
+        return self._schedule_changelog_model
+
+    @property
+    def notification_model(self) -> type:
+        """Return the notification model class for the current user."""
+        return self._notification_model
+
+    @property
+    def notification_mention_model(self) -> type:
+        """Return the notification mention model class for the current user."""
+        return self._notification_mention_model
+
+    @property
     def user_id(self) -> int:
         """Return the user id represented by this unit of work."""
         return self._user_id
@@ -133,3 +166,35 @@ class UnitOfWork:
         """Return the ToDo repository for the active session."""
 
         return TodoRepository(self.session, self._todo_model)
+
+    @property
+    def todo_changelogs(self) -> TodoChangelogRepository:
+        """Return the todo changelog repository for the active session."""
+        return TodoChangelogRepository(self.session, self._todo_changelog_model)
+
+    @property
+    def todo_changelog_service(self) -> TodoChangelogService:
+        """Return the todo changelog service for the active session."""
+        from clock import SystemClock
+        return TodoChangelogService(self.todo_changelogs, SystemClock(), self._todo_changelog_model)
+
+    @property
+    def schedule_changelogs(self) -> ScheduleChangelogRepository:
+        """Return the schedule changelog repository for the active session."""
+        return ScheduleChangelogRepository(self.session, self._schedule_changelog_model)
+
+    @property
+    def schedule_changelog_service(self) -> ScheduleChangelogService:
+        """Return the schedule changelog service for the active session."""
+        from clock import SystemClock
+        return ScheduleChangelogService(self.schedule_changelogs, SystemClock(), self._schedule_changelog_model)
+
+    @property
+    def notifications(self) -> NotificationRepository:
+        """Return the notification repository for the active session."""
+        return NotificationRepository(self.session, self._notification_model)
+
+    @property
+    def notification_mentions(self) -> NotificationMentionRepository:
+        """Return the notification mention repository for the active session."""
+        return NotificationMentionRepository(self.session, self._notification_mention_model)
