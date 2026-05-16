@@ -24,7 +24,7 @@ function timeKeyValid(key: string) {
   return /^\d{2}:\d{2}(:\d{2})?$/.test(key);
 }
 
-export function NotificationFormModal({ api, editId, onClose }: Props) {
+export function NotifyFormModal({ api, editId, onClose }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [triggerDate, setTriggerDate] = useState("");

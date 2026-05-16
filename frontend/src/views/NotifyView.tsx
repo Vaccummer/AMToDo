@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AMToDoApi, NotificationItem } from "../api/client";
 import type { UISettings } from "../lib/settings";
-import { NotificationFormModal } from "./NotificationFormModal";
-import { NotificationDetailModal } from "./NotificationDetailModal";
+import { NotifyFormModal } from "./NotifyFormModal";
+import { NotifyDetailModal } from "./NotifyDetailModal";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
 
 function EditIcon() {
@@ -72,7 +72,7 @@ type Props = {
   settings: UISettings;
 };
 
-export function NotificationView({ api, settings }: Props) {
+export function NotifyView({ api, settings }: Props) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -118,10 +118,10 @@ export function NotificationView({ api, settings }: Props) {
   }
 
   return (
-    <div className="notification-view">
-      <div className="notification-header">
+    <div className="notify-view">
+      <div className="notify-header">
         <h2>{showTrash ? "通知回收站" : "通知"}</h2>
-        <div className="notification-header-actions">
+        <div className="notify-header-actions">
           <button type="button" onClick={() => setShowTrash(!showTrash)}>
             {showTrash ? "返回" : "回收站"}
           </button>
@@ -140,11 +140,11 @@ export function NotificationView({ api, settings }: Props) {
         </div>
       </div>
 
-      <div className="notification-list">
+      <div className="notify-list">
         {notifications.map((n) => (
           <div
             key={n.id}
-            className="notification-row"
+            className="notify-row"
             onClick={() => setDetailId(n.id)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -156,15 +156,15 @@ export function NotificationView({ api, settings }: Props) {
               });
             }}
           >
-            <div className="notification-row-title">{n.title}</div>
-            <div className="notification-row-time">
+            <div className="notify-row-title">{n.title}</div>
+            <div className="notify-row-time">
               {formatDateTime(n.trigger_at, settings.timezone)}
             </div>
             {n.mentions.length > 0 && (
-              <span className="notification-row-badge">{n.mentions.length}</span>
+              <span className="notify-row-badge">{n.mentions.length}</span>
             )}
             {showTrash && (
-              <div className="notification-row-actions">
+              <div className="notify-row-actions">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -188,7 +188,7 @@ export function NotificationView({ api, settings }: Props) {
           </div>
         ))}
         {notifications.length === 0 && (
-          <div className="notification-empty">
+          <div className="notify-empty">
             {showTrash ? "回收站为空" : "暂无通知"}
           </div>
         )}
@@ -235,7 +235,7 @@ export function NotificationView({ api, settings }: Props) {
       )}
 
       {formOpen && (
-        <NotificationFormModal
+        <NotifyFormModal
           api={api}
           editId={editId}
           onClose={() => {
@@ -247,7 +247,7 @@ export function NotificationView({ api, settings }: Props) {
       )}
 
       {detailId !== null && !formOpen && (
-        <NotificationDetailModal
+        <NotifyDetailModal
           api={api}
           notificationId={detailId}
           settings={settings}

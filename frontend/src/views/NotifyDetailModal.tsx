@@ -30,7 +30,7 @@ type Props = {
   onEdit: (id: number) => void;
 };
 
-export function NotificationDetailModal({
+export function NotifyDetailModal({
   api,
   notificationId,
   settings,

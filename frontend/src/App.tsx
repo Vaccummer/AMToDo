@@ -9,7 +9,7 @@ import { ScheduleView } from "./views/ScheduleView";
 import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
 import { TrashView } from "./views/TrashView";
-import { NotificationView } from "./views/NotificationView";
+import { NotifyView } from "./views/NotifyView";
 import closeIcon from "./assets/close.svg";
 import gearIcon from "./assets/gear.svg";
 import maximumIcon from "./assets/maximum.svg";
@@ -18,11 +18,11 @@ import todoIcon from "./assets/todo.svg";
 import scheduleIcon from "./assets/schedule.svg";
 import searchIcon from "./assets/search.svg";
 import trashIcon from "./assets/trash.svg";
-import notificationIcon from "./assets/notification.svg";
+import notifyIcon from "./assets/notify.svg";
 import userIcon from "./assets/user.svg";
 import windowlizeIcon from "./assets/windowlize.svg";
 
-type Tab = "todo" | "schedule" | "search" | "trash" | "notification";
+type Tab = "todo" | "schedule" | "search" | "trash" | "notify";
 type ConnectionStatus = "checking" | "online" | "offline";
 
 const selectedDateCache: Record<string, string> = {};
@@ -269,11 +269,11 @@ export function App() {
           </button>
           <button
             type="button"
-            className={activeTab === "notification" ? "active" : ""}
-            onClick={() => setActiveTab("notification")}
+            className={activeTab === "notify" ? "active" : ""}
+            onClick={() => setActiveTab("notify")}
           >
-            <img src={notificationIcon} alt="" className="nav-icon" />
-            Notification
+            <img src={notifyIcon} alt="" className="nav-icon" />
+            Notify
           </button>
         </nav>
         <section className="content-panel">
@@ -296,9 +296,12 @@ export function App() {
               onDateChange={(key) => { selectedDateCache.schedule = key; }}
             />
           ) : activeTab === "search" ? (
-            <SearchView api={api} onNavigate={(target) => setActiveTab(target)} />
-          ) : activeTab === "notification" ? (
-            <NotificationView api={api} settings={settings} />
+            <SearchView api={api} onNavigate={(target, dateKey) => {
+              if (dateKey) selectedDateCache[target] = dateKey;
+              setActiveTab(target);
+            }} />
+          ) : activeTab === "notify" ? (
+            <NotifyView api={api} settings={settings} />
           ) : (
             <TrashView api={api} />
           )}
