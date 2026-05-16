@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from exceptions import ConflictError, NotFoundError, ValidationError
 from models import Schedule
+from services.search_common import (
+    compile_search_query,
+    search_text,
+    sort_results,
+    validate_fields,
+    validate_optional_range,
+    validate_sort,
+)
 
 if TYPE_CHECKING:
     from clock import Clock
@@ -126,26 +133,28 @@ class ScheduleService:
     ) -> list[Schedule]:
         """Search schedules with field selection, filters, and deterministic sorting."""
 
-        resolved_fields = _validate_fields(
+        resolved_fields = validate_fields(
             fields,
             SCHEDULE_SEARCH_FIELDS,
             "schedule search fields",
         )
-        _validate_sort(sort_by, sort_order, SCHEDULE_SORT_FIELDS)
-        self._validate_optional_range(start_at, end_at)
-        _validate_optional_range_names(
+        validate_sort(sort_by, sort_order, SCHEDULE_SORT_FIELDS)
+        validate_optional_range(
+            start_at, end_at, start_name="start_at", end_name="end_at"
+        )
+        validate_optional_range(
             created_start_at,
             created_end_at,
             start_name="created_start_at",
             end_name="created_end_at",
         )
-        _validate_optional_range_names(
+        validate_optional_range(
             updated_start_at,
             updated_end_at,
             start_name="updated_start_at",
             end_name="updated_end_at",
         )
-        regex = _compile_search_query(query, use_regex=use_regex, ignore_case=ignore_case)
+        regex = compile_search_query(query, use_regex=use_regex, ignore_case=ignore_case)
 
         schedules = self._repository.list_range(
             start_at=start_at,
@@ -160,9 +169,11 @@ class ScheduleService:
         matched = [
             schedule
             for schedule in schedules
-            if regex.search(_search_text(schedule, resolved_fields))
+            if regex.search(search_text(schedule, resolved_fields))
         ]
-        return _sort_results(matched, sort_by=sort_by, sort_order=sort_order)
+        return sort_results(
+            matched, sort_by=sort_by, sort_order=sort_order, value_fn=_schedule_sort_value
+        )
 
     def update(self, schedule_id: int, update: ScheduleUpdate) -> Schedule:
         """Update mutable schedule fields while preserving conflict checks."""
@@ -233,11 +244,58 @@ class ScheduleService:
         return schedule
 
     def remove(self, schedule_id: int) -> Schedule:
-        """Remove a schedule by id."""
-
+        """Soft-delete a schedule by id (move to trash)."""
         schedule = self.show(schedule_id)
+        now = self._clock.now_epoch()
+        schedule.deleted_at = now
+        schedule.updated_at = now
+        return schedule
+
+    def restore(self, schedule_id: int) -> Schedule:
+        """Restore a soft-deleted schedule."""
+        schedule = self._repository.get_including_deleted(schedule_id)
+        if schedule is None:
+            raise NotFoundError(f"schedule #{schedule_id} was not found")
+        if schedule.deleted_at is None:
+            raise ValidationError(f"schedule #{schedule_id} is not deleted")
+        now = self._clock.now_epoch()
+        schedule.deleted_at = None
+        schedule.updated_at = now
+        return schedule
+
+    def purge(self, schedule_id: int) -> Schedule:
+        """Permanently delete a schedule (must already be soft-deleted)."""
+        schedule = self._repository.get_including_deleted(schedule_id)
+        if schedule is None:
+            raise NotFoundError(f"schedule #{schedule_id} was not found")
+        if schedule.deleted_at is None:
+            raise ValidationError(f"schedule #{schedule_id} is not deleted; use remove first")
         self._repository.remove(schedule)
         return schedule
+
+    def list_deleted(
+        self,
+        *,
+        start_at: int | None = None,
+        end_at: int | None = None,
+        created_start_at: int | None = None,
+        created_end_at: int | None = None,
+        updated_start_at: int | None = None,
+        updated_end_at: int | None = None,
+        category: str | None = None,
+        location: str | None = None,
+    ) -> list[Schedule]:
+        """Return deleted schedules matching optional filters."""
+        return self._repository.list_deleted(
+            start_at=start_at,
+            end_at=end_at,
+            created_start_at=created_start_at,
+            created_end_at=created_end_at,
+            updated_start_at=updated_start_at,
+            updated_end_at=updated_end_at,
+            category=category,
+            location=location,
+        )
 
     def conflicts(
         self,
@@ -254,7 +312,7 @@ class ScheduleService:
     def stats(self, start_at: int | None = None, end_at: int | None = None) -> dict[str, object]:
         """Return schedule statistics for an optional overlap range."""
 
-        self._validate_optional_range(start_at, end_at)
+        validate_optional_range(start_at, end_at, start_name="start_at", end_name="end_at")
         schedules = self._repository.list_range(start_at=start_at, end_at=end_at)
         by_category: dict[str, dict[str, int]] = defaultdict(lambda: {"count": 0, "duration": 0})
         total_duration = 0
@@ -280,110 +338,11 @@ class ScheduleService:
         if start_at >= end_at:
             raise ValidationError("schedule start_at must be earlier than end_at")
 
-    def _validate_optional_range(self, start_at: int | None, end_at: int | None) -> None:
-        if start_at is not None and start_at < 0:
-            raise ValidationError("start_at cannot be negative")
-        if end_at is not None and end_at < 0:
-            raise ValidationError("end_at cannot be negative")
-        if start_at is not None and end_at is not None and start_at >= end_at:
-            raise ValidationError("start_at must be earlier than end_at")
 
-
-def _search_text(schedule: Schedule, fields: list[str]) -> str:
-    return "\n".join(
-        str(value)
-        for value in (getattr(schedule, field) or "" for field in fields)
-        if value
-    )
-
-
-def _compile_search_query(query: str, *, use_regex: bool, ignore_case: bool) -> re.Pattern[str]:
-    flags = re.IGNORECASE if ignore_case else 0
-    pattern = query if use_regex else re.escape(query)
-    try:
-        return re.compile(pattern, flags=flags)
-    except re.error as exc:
-        msg = f"invalid regex pattern: {exc}"
-        raise ValidationError(msg) from exc
-
-
-def _validate_fields(
-    fields: list[str] | None,
-    allowed: frozenset[str],
-    label: str,
-) -> list[str]:
-    resolved = list(fields) if fields is not None else sorted(allowed)
-    if not resolved:
-        raise ValidationError(f"{label} cannot be empty")
-    unknown = sorted(set(resolved) - allowed)
-    if unknown:
-        raise ValidationError(f"unknown {label}: {', '.join(unknown)}")
-    return resolved
-
-
-def _validate_sort(
-    sort_by: str,
-    sort_order: str,
-    allowed: frozenset[str],
-) -> None:
-    if sort_by not in allowed:
-        raise ValidationError(f"unknown sort_by: {sort_by}")
-    if sort_order not in {"asc", "desc"}:
-        raise ValidationError("sort_order must be 'asc' or 'desc'")
-
-
-def _validate_optional_range_names(
-    start_at: int | None,
-    end_at: int | None,
-    *,
-    start_name: str,
-    end_name: str,
-) -> None:
-    if start_at is not None and start_at < 0:
-        raise ValidationError(f"{start_name} cannot be negative")
-    if end_at is not None and end_at < 0:
-        raise ValidationError(f"{end_name} cannot be negative")
-    if start_at is not None and end_at is not None and start_at >= end_at:
-        raise ValidationError(f"{start_name} must be earlier than {end_name}")
-
-
-def _sort_results(
-    schedules: list[Schedule],
-    *,
-    sort_by: str,
-    sort_order: str,
-) -> list[Schedule]:
-    descending = sort_order == "desc"
-    return sorted(
-        schedules,
-        key=lambda schedule: _sort_key(schedule, sort_by, descending=descending),
-        reverse=descending,
-    )
-
-
-def _sort_key(
-    schedule: Schedule,
-    sort_by: str,
-    *,
-    descending: bool,
-) -> tuple[bool, Any]:
-    value = _sort_value(schedule, sort_by)
-    if isinstance(value, str):
-        value = value.casefold()
-    if descending:
-        return (value is not None, value if value is not None else _empty_sort_value(sort_by))
-    return (value is None, value if value is not None else _empty_sort_value(sort_by))
-
-
-def _sort_value(schedule: Schedule, sort_by: str) -> object:
+def _schedule_sort_value(schedule: Schedule, sort_by: str) -> object:
+    """Extract sort value from a Schedule entity."""
     if sort_by == "updated_at":
         return schedule.updated_at if schedule.updated_at is not None else schedule.created_at
     if sort_by == "duration":
         return schedule.end_at - schedule.start_at
     return getattr(schedule, sort_by)
-
-
-def _empty_sort_value(sort_by: str) -> object:
-    if sort_by == "title":
-        return ""
-    return 0
