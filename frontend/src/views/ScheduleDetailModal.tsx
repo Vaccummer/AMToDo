@@ -4,6 +4,7 @@ import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
 import { useConfirm } from "./ConfirmDialog";
+import { ChangelogPanel } from "./ChangelogPanel";
 
 type Props = {
   schedule: ScheduleItem;
@@ -346,8 +347,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   async function handleDelete() {
     const ok = await ask({
       title: "删除日程",
-      message: "确定删除这条日程吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      message: "确定将这条日程移入回收站吗？之后可以在 Trash 中恢复。",
+      confirmLabel: "移入回收站",
       danger: true,
     });
     if (!ok) return;
@@ -659,6 +660,11 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             <span className="schedule-modal-ro-label">更新时间</span>
             <span className="schedule-modal-ro-value">{fmtDatetime(schedule.updated_at)}</span>
           </div>
+
+          <div className="schedule-modal-divider" />
+
+          <div className="schedule-modal-section-label">历史记录</div>
+          <ChangelogPanel api={api} entityId={schedule.id} kind="schedule" />
         </div>
 
         {/* Error */}
