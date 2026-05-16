@@ -2,34 +2,38 @@
 
 from __future__ import annotations
 
-import base64
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import (
     APIRouter,
     Depends,
-    File,
-    Form,
-    HTTPException,
     Request,
     Response,
-    UploadFile,
-    status,
 )
 
 from clock import Clock
 from config import AppSettings
 from exceptions import AMToDoError, ValidationError
 from serialization import attachment_to_dict, todo_to_dict
+from server.attachment_helpers import (
+    build_download_response,
+    check_base64_size,
+    decode_base64_content,
+    make_attachment_service,
+    unique_targets,
+    validate_attachment_limits,
+)
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
-    TodoAttachmentGetRequest,
     TodoAttachmentDownloadRequest,
+    TodoAttachmentGetRequest,
     TodoAttachmentListRequest,
     TodoAttachmentRemoveOrphanedRequest,
     TodoAttachmentRemoveRequest,
     TodoAttachmentUploadRequest,
+    TodoBatchCreateRequest,
+    TodoBatchUpdateRequest,
     TodoCreateRequest,
     TodoGetRequest,
     TodoListRequest,
@@ -38,7 +42,7 @@ from server.schemas import (
     TodoTargetsRequest,
     TodoUpdateRequest,
 )
-from services import AttachmentDraft, AttachmentService, TodoDraft, TodoService, TodoUpdate
+from services import AttachmentDraft, TodoDraft, TodoService, TodoUpdate
 from services.uow import UnitOfWork
 
 if TYPE_CHECKING:
@@ -184,7 +188,7 @@ def list_attachments(
 ) -> dict[str, object]:
     """List encrypted attachment metadata for a ToDo."""
 
-    service = _attachment_service(uow, clock, request)
+    service = make_attachment_service(uow, clock, request, "todo")
     attachments = service.list_for_owner(body.todo_id)
     return {
         "ok": True,
@@ -204,7 +208,7 @@ def show_attachment(
 ) -> dict[str, object]:
     """Return encrypted attachment metadata."""
 
-    service = _attachment_service(uow, clock, request)
+    service = make_attachment_service(uow, clock, request, "todo")
     attachment = service.show(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -218,7 +222,7 @@ def remove_attachment(
 ) -> dict[str, object]:
     """Remove an attachment from a ToDo."""
 
-    service = _attachment_service(uow, clock, request)
+    service = make_attachment_service(uow, clock, request, "todo")
     attachment = service.remove(body.todo_id, body.attachment_id)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
@@ -233,18 +237,14 @@ def upload_attachment_json(
     """Upload a file attachment via encrypted JSON."""
 
     settings_obj = request.app.state.settings
-    _check_base64_size(body.content_base64, settings_obj.max_attachment_size_bytes)
+    check_base64_size(body.content_base64, settings_obj.max_attachment_size_bytes)
+    content = decode_base64_content(body.content_base64)
 
-    try:
-        content = base64.b64decode(body.content_base64, validate=True)
-    except ValueError as exc:
-        raise ValidationError("content_base64 must be valid base64") from exc
-
-    _validate_attachment_limits(
-        settings_obj, body.todo_id, len(content), None, clock, request, uow=uow
+    validate_attachment_limits(
+        settings_obj, body.todo_id, len(content), None, clock, request, "todo", uow=uow
     )
 
-    service = _attachment_service(uow, clock, request)
+    service = make_attachment_service(uow, clock, request, "todo")
     attachment = service.create(
         body.todo_id,
         AttachmentDraft(
@@ -256,59 +256,6 @@ def upload_attachment_json(
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
 
-@router.post("/{todo_id}/attachments/upload")
-async def upload_attachment(
-    todo_id: int,
-    request: Request,
-    clock: ClockDep,
-    access_token: Annotated[str, Form()],
-    file: Annotated[UploadFile, File()],
-) -> dict[str, object]:
-    """Upload a file attachment.
-
-    This multipart endpoint is intentionally outside JSON body encryption; the
-    file is encrypted at rest immediately before it is written to disk.
-    """
-
-    user_id = _require_form_or_query_user(request, access_token)
-    content = await file.read()
-    settings_obj = request.app.state.settings
-
-    if len(content) > settings_obj.max_attachment_size_bytes:
-        raise ValidationError(
-            f"attachment size ({len(content)} bytes) exceeds limit "
-            f"({settings_obj.max_attachment_size_bytes} bytes)"
-        )
-
-    with UnitOfWork(request.app.state.db, user_id) as uow:
-        service = _attachment_service(uow, clock, request)
-        existing = service.list_for_owner(todo_id)
-        if len(existing) >= settings_obj.max_attachments_per_todo:
-            raise ValidationError(
-                f"attachment count ({len(existing)}) already at limit "
-                f"({settings_obj.max_attachments_per_todo})"
-            )
-        attachment = service.create(
-            todo_id,
-            AttachmentDraft(
-                filename=file.filename or "attachment",
-                content=content,
-                mime_type=file.content_type,
-            ),
-        )
-        attachment_id = attachment.id
-        file_index = attachment.file_index
-    return {
-        "ok": True,
-        "attachment": {
-            "id": attachment_id,
-            "todo_id": todo_id,
-            "file_index": file_index,
-            "filename": file.filename or "attachment",
-        },
-    }
-
-
 @router.post("/attachments/download")
 def download_attachment(
     body: TodoAttachmentDownloadRequest,
@@ -317,23 +264,8 @@ def download_attachment(
     clock: ClockDep,
 ) -> Response:
     """Download encrypted attachment bytes."""
-
-    service = _attachment_service(uow, clock, request)
-    attachment = service.show(body.todo_id, body.attachment_id)
-    cipher = service.read_cipher(body.todo_id, body.attachment_id)
-    from urllib.parse import quote
-
-    safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
-    utf8_name = quote(attachment.filename, safe="")
-    headers = {
-        "Content-Disposition": (
-            f'attachment; filename="{safe_name}.enc"; '
-            f"filename*=UTF-8''{utf8_name}.enc"
-        ),
-        "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
-        "X-AMToDo-Updated-At": str(attachment.updated_at),
-    }
-    return Response(content=cipher, media_type="application/octet-stream", headers=headers)
+    service = make_attachment_service(uow, clock, request, "todo")
+    return build_download_response(service, body.todo_id, body.attachment_id)
 
 
 @router.post("/create")
@@ -412,7 +344,7 @@ def done_todos(
             lambda current: service.complete(current),
             settings.timezone,
         )
-        for target in _unique_targets(body.targets)
+        for target in unique_targets(body.targets)
     ]
     uow.session.flush()
     return {"ok": all(result["ok"] for result in results), "results": results}
@@ -433,7 +365,7 @@ def reopen_todos(
             lambda current: service.reopen(current),
             settings.timezone,
         )
-        for target in _unique_targets(body.targets)
+        for target in unique_targets(body.targets)
     ]
     uow.session.flush()
     return {"ok": all(result["ok"] for result in results), "results": results}
@@ -449,9 +381,9 @@ def remove_todos(
 ) -> dict[str, object]:
     """Remove one or more ToDos by id."""
     service = TodoService(uow.todos, clock, uow.todo_model)
-    att_svc = _attachment_service(uow, clock, request)
+    att_svc = make_attachment_service(uow, clock, request, "todo")
 
-    def _remove_with_attachments(todo_id: int):
+    def _remove_with_attachments(todo_id: int) -> Todo:
         for att in att_svc.list_for_owner(todo_id):
             att_svc.remove(todo_id, att.id)
         return service.remove(todo_id)
@@ -462,9 +394,77 @@ def remove_todos(
             lambda tid: _remove_with_attachments(tid),
             settings.timezone,
         )
-        for target in _unique_targets(body.targets)
+        for target in unique_targets(body.targets)
     ]
     return {"ok": all(result["ok"] for result in results), "results": results}
+
+
+@router.post("/batch-create")
+def batch_create_todos(
+    body: TodoBatchCreateRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Create multiple ToDo items. Per-item error handling."""
+    service = TodoService(uow.todos, clock, uow.todo_model)
+    results = []
+    for idx, item in enumerate(body.items):
+        try:
+            todo = service.create(
+                TodoDraft(
+                    title=item.title,
+                    description=item.description,
+                    planned_at=item.planned_at,
+                    due_at=item.due_at,
+                    priority=item.priority,
+                    tag=item.tag,
+                )
+            )
+            results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, settings.timezone)})
+        except AMToDoError as exc:
+            results.append({
+                "target": idx,
+                "ok": False,
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            })
+    uow.session.flush()
+    return {"ok": all(r["ok"] for r in results), "results": results}
+
+
+@router.post("/batch-update")
+def batch_update_todos(
+    body: TodoBatchUpdateRequest,
+    settings: SettingsDep,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Update multiple ToDo items. Per-item error handling."""
+    service = TodoService(uow.todos, clock, uow.todo_model)
+    results = []
+    for idx, item in enumerate(body.items):
+        try:
+            todo = service.update(
+                item.id,
+                TodoUpdate(
+                    title=item.title,
+                    planned_at=item.planned_at,
+                    due_at=item.due_at,
+                    description=item.description,
+                    priority=item.priority,
+                    tag=item.tag,
+                    _fields_set=frozenset(item.model_fields_set),
+                ),
+            )
+            results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, settings.timezone)})
+        except AMToDoError as exc:
+            results.append({
+                "target": idx,
+                "ok": False,
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            })
+    uow.session.flush()
+    return {"ok": all(r["ok"] for r in results), "results": results}
 
 
 @router.post("/attachments/remove-orphaned")
@@ -476,7 +476,7 @@ def remove_orphaned_attachments(
 ) -> dict[str, object]:
     """Remove orphaned attachment metadata for a ToDo."""
 
-    service = _attachment_service(uow, clock, request)
+    service = make_attachment_service(uow, clock, request, "todo")
     count = service.remove_orphaned(body.todo_id)
     return {"ok": True, "count": count, "attachments": []}
 
@@ -494,10 +494,6 @@ def _completion_filter(open_only: bool, completed_only: bool) -> bool | None:
     return None
 
 
-def _unique_targets(targets: list[int]) -> list[int]:
-    return list(dict.fromkeys(targets))
-
-
 def _target_result(
     target: int,
     operation: Callable[[int], Todo],
@@ -512,63 +508,3 @@ def _target_result(
             "error": {"type": type(exc).__name__, "message": str(exc)},
         }
     return {"target": target, "ok": True, "todo": todo_to_dict(todo, timezone)}
-
-
-def _attachment_service(uow: UnitOfWork, clock: Clock, request: Request) -> AttachmentService:
-    return AttachmentService(
-        uow.attachments,
-        uow.todos,
-        clock,
-        uow.attachment_model,
-        request.app.state.attachment_root,
-        uow.user_id,
-        owner_type="todo",
-    )
-
-
-def _require_form_or_query_user(request: Request, access_token: str) -> int:
-    token_map: dict[str, int] = request.app.state.token_map
-    user_id = token_map.get(access_token)
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user token",
-        )
-    return user_id
-
-
-def _check_base64_size(encoded: str, max_size: int) -> None:
-    """Estimate decoded size from base64 length and reject oversized payloads early."""
-    stripped = encoded.strip()
-    padding = stripped.count("=")
-    estimated = len(stripped) * 3 // 4 - padding
-    if estimated > max_size:
-        raise ValidationError(
-            f"attachment size ~{estimated} bytes exceeds limit ({max_size} bytes)"
-        )
-
-
-def _validate_attachment_limits(
-    settings: AppSettings,
-    todo_id: int,
-    content_size: int,
-    current_count: int | None,
-    clock: Clock,
-    request: Request,
-    uow: UnitOfWork | None = None,
-) -> None:
-    if content_size > settings.max_attachment_size_bytes:
-        raise ValidationError(
-            f"attachment size ({content_size} bytes) exceeds limit "
-            f"({settings.max_attachment_size_bytes} bytes)"
-        )
-
-    if current_count is None and uow is not None:
-        service = _attachment_service(uow, clock, request)
-        current_count = len(service.list_for_owner(todo_id))
-
-    if current_count is not None and current_count >= settings.max_attachments_per_todo:
-        raise ValidationError(
-            f"attachment count ({current_count}) already at limit "
-            f"({settings.max_attachments_per_todo})"
-        )
