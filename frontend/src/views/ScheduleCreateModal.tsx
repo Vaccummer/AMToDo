@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleItem, ScheduleCreateParams } from "../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
+import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 
 type Props = {
@@ -173,13 +174,10 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 hasError={!startValid && startDate !== ""}
                 theme="gold"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`schedule-modal-input schedule-modal-datetime-time${!startValid && startDate !== "" ? " invalid" : ""}`}
                 value={startTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={setStartTime}
               />
             </div>
           </div>
@@ -193,13 +191,10 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 hasError={!endValid && endDate !== ""}
                 theme="gold"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`schedule-modal-input schedule-modal-datetime-time${!endValid && endDate !== "" ? " invalid" : ""}`}
                 value={endTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={setEndTime}
               />
             </div>
           </div>

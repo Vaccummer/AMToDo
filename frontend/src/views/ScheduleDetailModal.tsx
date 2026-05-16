@@ -3,6 +3,7 @@ import type { AMToDoApi, ScheduleAttachmentMetadata, ScheduleItem, ScheduleUpdat
 import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
+import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 
@@ -443,13 +444,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 hasError={!startValid && startDate !== ""}
                 theme="gold"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`schedule-modal-input schedule-modal-datetime-time${!startValid && startDate !== "" ? " invalid" : ""}`}
                 value={startTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => handleStartTimeChange(e.target.value)}
+                onChange={setStartTime}
               />
             </div>
           </div>
@@ -466,13 +464,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 hasError={!endValid && endDate !== ""}
                 theme="gold"
               />
-              <input
-                type="text"
+              <TimeInput
                 className={`schedule-modal-input schedule-modal-datetime-time${!endValid && endDate !== "" ? " invalid" : ""}`}
                 value={endTime}
-                placeholder="HH:MM:SS"
-                maxLength={8}
-                onChange={(e) => handleEndTimeChange(e.target.value)}
+                onChange={setEndTime}
               />
             </div>
           </div>
