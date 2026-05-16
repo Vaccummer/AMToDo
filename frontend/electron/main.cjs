@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut, Notification } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -8,6 +8,13 @@ let mainWindow = null;
 let tray = null;
 let forceQuit = false;
 let registeredHotkey = null;
+
+// --- Notification polling state ---
+let notificationPollTimer = null;
+let notificationLastPollAt = null; // unix timestamp (seconds)
+const notificationFiredIds = new Set(); // IDs already shown as system notifications
+const DEFAULT_POLL_INTERVAL = 30; // seconds
+const DEFAULT_QUERY_WINDOW = 60; // seconds
 
 function createTrayIcon() {
   const size = 16;
@@ -160,6 +167,85 @@ function unregisterGlobalHotkey() {
   }
 }
 
+// --- Notification polling ---
+
+function pollNotifications(serverUrl, accessToken, queryWindow) {
+  const after = notificationLastPollAt != null
+    ? notificationLastPollAt
+    : Math.floor(Date.now() / 1000) - queryWindow;
+
+  const url = serverUrl.replace(/\/+$/, "") + "/api/v1/notifications/list_triggered";
+
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ after, access_token: accessToken }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (!data.ok || !Array.isArray(data.notifications)) return;
+
+      for (const n of data.notifications) {
+        if (notificationFiredIds.has(n.id)) continue;
+
+        notificationFiredIds.add(n.id);
+
+        const electronNotification = new Notification({
+          title: n.title || "AMToDo",
+          body: n.description || "",
+        });
+
+        const notificationId = n.id;
+        electronNotification.on("click", () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+          }
+          mainWindow?.webContents.send("notification:clicked", notificationId);
+        });
+
+        electronNotification.show();
+      }
+
+      // Advance lastPollAt to now so we don't re-query the same window
+      notificationLastPollAt = Math.floor(Date.now() / 1000);
+    })
+    .catch(() => {
+      // Swallow network errors silently — polling will retry next interval
+    });
+}
+
+function startNotificationPolling(settings) {
+  stopNotificationPolling();
+
+  const serverUrl = settings.server_url || "http://127.0.0.1:8000";
+  const accessToken = settings.access_token || "";
+  const pollInterval = Number(settings.notification_poll_interval) || DEFAULT_POLL_INTERVAL;
+  const queryWindow = Number(settings.notification_query_window) || DEFAULT_QUERY_WINDOW;
+
+  if (!accessToken) return; // no token, nothing to poll
+
+  // Reset state
+  notificationLastPollAt = Math.floor(Date.now() / 1000) - queryWindow;
+  notificationFiredIds.clear();
+
+  // Fire immediately, then on interval
+  pollNotifications(serverUrl, accessToken, queryWindow);
+  notificationPollTimer = setInterval(() => {
+    pollNotifications(serverUrl, accessToken, queryWindow);
+  }, pollInterval * 1000);
+}
+
+function stopNotificationPolling() {
+  if (notificationPollTimer) {
+    clearInterval(notificationPollTimer);
+    notificationPollTimer = null;
+  }
+  notificationLastPollAt = null;
+  notificationFiredIds.clear();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1080,
@@ -236,7 +322,8 @@ function writeUiToml(settings) {
     "language", "timezone", "font_family", "font_size",
     "calendar_days", "week_start",
     "scheduler_start_hour", "scheduler_end_hour", "scheduler_slot_minutes",
-    "global_hotkey_enabled", "global_hotkey"
+    "global_hotkey_enabled", "global_hotkey",
+    "notification_poll_interval", "notification_query_window"
   ];
   lines.push("# AMToDo UI configuration (non-visual parameters).");
   for (const key of keys) {
@@ -260,6 +347,8 @@ app.whenReady().then(() => {
   ipcMain.handle("settings:write", (_event, settings) => {
     try {
       writeUiToml(settings);
+      // Stop notification polling when settings change; renderer can restart
+      stopNotificationPolling();
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -298,6 +387,24 @@ app.whenReady().then(() => {
     return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
   });
 
+  ipcMain.handle("notification:start-polling", (_event, settings) => {
+    try {
+      startNotificationPolling(settings);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("notification:stop-polling", () => {
+    try {
+      stopNotificationPolling();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   createWindow();
   createTray();
 
@@ -307,6 +414,8 @@ app.whenReady().then(() => {
     if (settings.global_hotkey_enabled === "true" && settings.global_hotkey) {
       registerGlobalHotkey(settings.global_hotkey);
     }
+    // Start notification polling
+    startNotificationPolling(settings);
   } catch {
     // settings file may not exist yet
   }
@@ -330,4 +439,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   forceQuit = true;
   unregisterGlobalHotkey();
+  stopNotificationPolling();
 });

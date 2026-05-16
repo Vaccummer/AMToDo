@@ -30,5 +30,8 @@ interface Window {
     writeSettings: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
     registerHotkey?: (accelerator: string) => Promise<{ ok: boolean; error?: string }>;
     unregisterHotkey?: () => Promise<void>;
+    startNotificationPolling?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
+    stopNotificationPolling?: () => Promise<{ ok: boolean; error?: string }>;
+    onNotificationClicked?: (callback: (notificationId: number) => void) => () => void;
   };
 }
