@@ -11,5 +11,7 @@ contextBridge.exposeInMainWorld("amtodoShell", {
     return () => ipcRenderer.removeListener("window:maximized", listener);
   },
   readSettings: () => ipcRenderer.invoke("settings:read"),
-  writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings)
+  writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
+  registerHotkey: (accelerator) => ipcRenderer.invoke("hotkey:register", accelerator),
+  unregisterHotkey: () => ipcRenderer.invoke("hotkey:unregister")
 });
