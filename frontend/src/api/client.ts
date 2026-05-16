@@ -32,6 +32,7 @@ export type TodoItem = {
   created_at: number;
   updated_at: number;
   completed_at: number | null;
+  deleted_at?: number | null;
   attachment_count?: number;
 };
 
@@ -164,6 +165,7 @@ export type ScheduleItem = {
   category: string | null;
   created_at: number;
   updated_at: number;
+  deleted_at?: number | null;
 };
 
 export type ScheduleListResponse = {
@@ -226,6 +228,53 @@ export type TargetResult = {
 export type TargetsResponse = {
   ok: boolean;
   results: TargetResult[];
+};
+
+export type TrashListParams = {
+  query?: string;
+  start_at?: number | null;
+  end_at?: number | null;
+  limit?: number;
+  offset?: number;
+};
+
+export type TodoTrashListResponse = {
+  ok: boolean;
+  count: number;
+  total?: number;
+  todos: TodoItem[];
+};
+
+export type ScheduleTrashListResponse = {
+  ok: boolean;
+  count: number;
+  total?: number;
+  schedules: ScheduleItem[];
+};
+
+export type ChangelogAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "restore"
+  | "purge"
+  | "attachment_add"
+  | "attachment_remove";
+
+export type ChangelogEntry = {
+  id: number;
+  entity_id: number;
+  action: ChangelogAction | string;
+  changed_fields: string[];
+  before_snapshot: Record<string, unknown> | null;
+  after_snapshot: Record<string, unknown> | null;
+  created_at: number;
+};
+
+export type ChangelogResponse = {
+  ok: boolean;
+  total: number;
+  entries: ChangelogEntry[];
 };
 
 export type TodoUpdateRequest = {
@@ -419,6 +468,42 @@ export class AMToDoApi {
     return this.post("/api/v1/todos/remove", { targets: [id] });
   }
 
+  async listTodoTrash(params?: TrashListParams): Promise<TodoTrashListResponse> {
+    return this.post("/api/v1/todos/trash/list", {
+      query: params?.query ?? "",
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+      limit: params?.limit ?? 100,
+      offset: params?.offset ?? 0
+    });
+  }
+
+  async restoreTodos(targets: number[]): Promise<TargetsResponse> {
+    return this.post("/api/v1/todos/trash/restore", { targets });
+  }
+
+  async purgeTodos(targets: number[]): Promise<TargetsResponse> {
+    return this.post("/api/v1/todos/trash/delete", { targets });
+  }
+
+  async todoChangelog(params?: {
+    entity_id?: number | null;
+    action?: string | null;
+    start_at?: number | null;
+    end_at?: number | null;
+    limit?: number;
+    offset?: number;
+  }): Promise<ChangelogResponse> {
+    return this.post("/api/v1/todos/changelog", {
+      entity_id: params?.entity_id ?? null,
+      action: params?.action ?? null,
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0
+    });
+  }
+
   async listTodoAttachments(todoId: number): Promise<AttachmentListResponse> {
     return this.post("/api/v1/todos/attachments/list", { todo_id: todoId });
   }
@@ -605,6 +690,42 @@ export class AMToDoApi {
 
   async deleteSchedule(id: number): Promise<TargetsResponse> {
     return this.post("/api/v1/schedules/remove", { targets: [id] });
+  }
+
+  async listScheduleTrash(params?: TrashListParams): Promise<ScheduleTrashListResponse> {
+    return this.post("/api/v1/schedules/trash/list", {
+      query: params?.query ?? "",
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+      limit: params?.limit ?? 100,
+      offset: params?.offset ?? 0
+    });
+  }
+
+  async restoreSchedules(targets: number[]): Promise<TargetsResponse> {
+    return this.post("/api/v1/schedules/trash/restore", { targets });
+  }
+
+  async purgeSchedules(targets: number[]): Promise<TargetsResponse> {
+    return this.post("/api/v1/schedules/trash/delete", { targets });
+  }
+
+  async scheduleChangelog(params?: {
+    entity_id?: number | null;
+    action?: string | null;
+    start_at?: number | null;
+    end_at?: number | null;
+    limit?: number;
+    offset?: number;
+  }): Promise<ChangelogResponse> {
+    return this.post("/api/v1/schedules/changelog", {
+      entity_id: params?.entity_id ?? null,
+      action: params?.action ?? null,
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0
+    });
   }
 
   // --- Private helpers ---
