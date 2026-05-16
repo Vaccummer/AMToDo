@@ -221,6 +221,26 @@ class AMTodoClient:
     def todo_trash_delete(self, targets: list[int]) -> dict[str, Any]:
         return self._user_post("/api/v1/todos/trash/delete", {"targets": targets})
 
+    def todo_changelog(
+        self,
+        entity_id: int | None = None,
+        action: str | None = None,
+        start_at: int | None = None,
+        end_at: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit, "offset": offset}
+        if entity_id is not None:
+            body["entity_id"] = entity_id
+        if action is not None:
+            body["action"] = action
+        if start_at is not None:
+            body["start_at"] = start_at
+        if end_at is not None:
+            body["end_at"] = end_at
+        return self._user_post("/api/v1/todos/changelog", body)
+
     def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
         content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
         return self._user_post(
@@ -393,6 +413,26 @@ class AMTodoClient:
 
     def schedule_trash_delete(self, targets: list[int]) -> dict[str, Any]:
         return self._user_post("/api/v1/schedules/trash/delete", {"targets": targets})
+
+    def schedule_changelog(
+        self,
+        entity_id: int | None = None,
+        action: str | None = None,
+        start_at: int | None = None,
+        end_at: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit, "offset": offset}
+        if entity_id is not None:
+            body["entity_id"] = entity_id
+        if action is not None:
+            body["action"] = action
+        if start_at is not None:
+            body["start_at"] = start_at
+        if end_at is not None:
+            body["end_at"] = end_at
+        return self._user_post("/api/v1/schedules/changelog", body)
 
     # ── schedule attachments ──
 

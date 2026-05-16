@@ -50,6 +50,7 @@ class AttachmentService:
         storage_root: Path,
         user_id: int,
         owner_type: str,
+        changelog_service=None,
     ) -> None:
         self._repository = repository
         self._owner_repository = owner_repository
@@ -58,6 +59,7 @@ class AttachmentService:
         self._storage_root = storage_root
         self._user_id = user_id
         self._owner_type = owner_type
+        self._changelog = changelog_service
 
     def create(self, owner_id: int, draft: AttachmentDraft) -> object:
         """Encrypt and store a file attachment in two phases.
@@ -120,6 +122,13 @@ class AttachmentService:
 
         attachment.storage_path = str(relative_path)
         self._touch_owner(owner_id)
+        if self._changelog:
+            from serialization import attachment_to_dict, schedule_attachment_to_dict
+            if self._owner_type == "todo":
+                meta = attachment_to_dict(attachment, self._user_id)
+            else:
+                meta = schedule_attachment_to_dict(attachment, self._user_id)
+            self._changelog.record_attachment_add(owner_id, meta)
         return attachment
 
     def list_for_owner(self, owner_id: int) -> list[object]:
@@ -168,6 +177,13 @@ class AttachmentService:
         """
 
         attachment = self.show(owner_id, attachment_id)
+        if self._changelog:
+            from serialization import attachment_to_dict, schedule_attachment_to_dict
+            if self._owner_type == "todo":
+                meta = attachment_to_dict(attachment, self._user_id)
+            else:
+                meta = schedule_attachment_to_dict(attachment, self._user_id)
+            self._changelog.record_attachment_remove(owner_id, meta)
         path = self.encrypted_path(attachment)
         try:
             if path.exists():

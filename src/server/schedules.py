@@ -35,6 +35,7 @@ from server.schemas import (
     ScheduleBatchCreateRequest,
     ScheduleBatchUpdateItem,
     ScheduleBatchUpdateRequest,
+    ScheduleChangelogQueryRequest,
     ScheduleConflictsRequest,
     ScheduleCreateRequest,
     ScheduleGetRequest,
@@ -64,6 +65,19 @@ UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 
 
+def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
+    import json
+    return {
+        "id": entry.id,
+        "entity_id": entry.entity_id,
+        "action": entry.action,
+        "changed_fields": json.loads(entry.changed_fields),
+        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
+        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
+        "created_at": entry.created_at,
+    }
+
+
 @router.post("/list")
 def list_schedules(
     body: ScheduleListRequest,
@@ -74,7 +88,7 @@ def list_schedules(
     resolved_start_at = body.start_at if body.start_at is not None else clock.now_epoch()
     resolved_end_at = body.end_at if body.end_at is not None else resolved_start_at + 86_400
 
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedules = service.list_between(resolved_start_at, resolved_end_at)
 
     return {
@@ -92,7 +106,7 @@ def search_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Search schedules with text options, filters, sorting, and pagination."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedules = service.search(
         body.query,
         fields=body.fields,
@@ -145,7 +159,7 @@ def schedule_stats(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Return schedule statistics."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     stats = service.stats(start_at=body.start_at, end_at=body.end_at)
     return {
         "ok": True,
@@ -161,7 +175,7 @@ def check_conflicts(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Check schedule conflicts without creating an item."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     conflicts = service.conflicts(body.start_at, body.end_at, exclude_id=body.exclude_id)
 
     return {
@@ -182,7 +196,7 @@ def create_schedule(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Create a schedule item."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedule = service.create(
         ScheduleDraft(
             title=body.title,
@@ -205,7 +219,7 @@ def show_schedule(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Show a schedule by id."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedule = service.show(body.schedule_id)
     return {"ok": True, "schedule": schedule_to_dict(schedule)}
 
@@ -217,7 +231,7 @@ def update_schedule(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Update mutable schedule fields."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedule = service.update(
         body.schedule_id,
         ScheduleUpdate(
@@ -227,7 +241,7 @@ def update_schedule(
             description=body.description,
             location=body.location,
             category=body.category,
-            _fields_set=frozenset(body.model_fields_set),
+            _fields_set=frozenset(body.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category"},
         ),
     )
     uow.session.flush()
@@ -242,7 +256,7 @@ def remove_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Soft-delete one or more schedules by id (move to trash)."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     results = [
         _target_result(target, lambda sid: service.remove(sid))
         for target in unique_targets(body.targets)
@@ -258,7 +272,7 @@ def list_deleted_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """List deleted (trashed) schedules with search filters."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     schedules = service.list_deleted(
         start_at=body.start_at,
         end_at=body.end_at,
@@ -294,7 +308,7 @@ def restore_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Restore one or more soft-deleted schedules."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     results = [
         _target_result(target, lambda sid: service.restore(sid))
         for target in unique_targets(body.targets)
@@ -312,8 +326,8 @@ def purge_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Permanently delete one or more soft-deleted schedules (with attachments)."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
-    att_svc = make_attachment_service(uow, clock, request, "schedule")
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
+    att_svc = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
 
     def _purge_with_attachments(schedule_id: int) -> Schedule:
         try:
@@ -339,7 +353,7 @@ def batch_create_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Create multiple schedule items. Per-item error handling."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     results = []
     for idx, item in enumerate(body.items):
         try:
@@ -372,7 +386,7 @@ def batch_update_schedules(
     clock: ClockDep,
 ) -> dict[str, object]:
     """Update multiple schedule items. Per-item error handling."""
-    service = ScheduleService(uow.schedules, clock, uow.schedule_model)
+    service = ScheduleService(uow.schedules, clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
     results = []
     for idx, item in enumerate(body.items):
         try:
@@ -385,7 +399,7 @@ def batch_update_schedules(
                     description=item.description,
                     location=item.location,
                     category=item.category,
-                    _fields_set=frozenset(item.model_fields_set),
+                    _fields_set=frozenset(item.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category"},
                 ),
             )
             results.append({"target": idx, "ok": True, "schedule": schedule_to_dict(schedule)})
@@ -411,7 +425,7 @@ def list_attachments(
 ) -> dict[str, object]:
     """List encrypted attachment metadata for a Schedule."""
 
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     attachments = service.list_for_owner(body.schedule_id)
     return {
         "ok": True,
@@ -431,7 +445,7 @@ def show_attachment(
 ) -> dict[str, object]:
     """Return encrypted schedule attachment metadata."""
 
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     attachment = service.show(body.schedule_id, body.attachment_id)
     return {"ok": True, "attachment": schedule_attachment_to_dict(attachment, uow.user_id)}
 
@@ -445,7 +459,7 @@ def remove_attachment(
 ) -> dict[str, object]:
     """Remove an attachment from a Schedule."""
 
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     attachment = service.remove(body.schedule_id, body.attachment_id)
     return {"ok": True, "attachment": schedule_attachment_to_dict(attachment, uow.user_id)}
 
@@ -459,7 +473,7 @@ def remove_orphaned_attachments(
 ) -> dict[str, object]:
     """Remove orphaned attachment metadata for a Schedule."""
 
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     count = service.remove_orphaned(body.schedule_id)
     return {"ok": True, "count": count, "attachments": []}
 
@@ -481,7 +495,7 @@ def upload_attachment_json(
         settings_obj, body.schedule_id, len(content), None, clock, request, "schedule", uow=uow
     )
 
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     attachment = service.create(
         body.schedule_id,
         AttachmentDraft(
@@ -501,8 +515,31 @@ def download_attachment(
     clock: ClockDep,
 ) -> Response:
     """Download encrypted schedule attachment bytes."""
-    service = make_attachment_service(uow, clock, request, "schedule")
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     return build_download_response(service, body.schedule_id, body.attachment_id)
+
+
+@router.post("/changelog")
+def schedule_changelog(
+    body: ScheduleChangelogQueryRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Query schedule changelog entries."""
+    service = uow.schedule_changelog_service
+    entries, total = service.query(
+        entity_id=body.entity_id,
+        action=body.action,
+        start_at=body.start_at,
+        end_at=body.end_at,
+        limit=body.limit,
+        offset=body.offset,
+    )
+    return {
+        "ok": True,
+        "total": total,
+        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+    }
 
 
 # ── helpers ──

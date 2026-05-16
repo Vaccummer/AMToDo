@@ -1338,9 +1338,15 @@ def _user_delete_direct(user_id: int) -> dict[str, object]:
         token = user.token
         name = user.name
 
-        todo_model, schedule_model, setting_model, todo_att_model, sched_att_model = (
-            get_user_tables(user_id)
-        )
+        (
+            todo_model,
+            schedule_model,
+            setting_model,
+            todo_att_model,
+            sched_att_model,
+            todo_changelog_model,
+            schedule_changelog_model,
+        ) = get_user_tables(user_id)
 
         # Remove attachment files from disk
         for model in (todo_att_model, sched_att_model):

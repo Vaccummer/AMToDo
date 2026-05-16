@@ -101,6 +101,7 @@ def agent_guide() -> dict[str, object]:
             {"method": "POST", "path": "/todos/trash/list", "auth": "user"},
             {"method": "POST", "path": "/todos/trash/restore", "auth": "user"},
             {"method": "POST", "path": "/todos/trash/delete", "auth": "user"},
+            {"method": "POST", "path": "/todos/changelog", "auth": "user"},
             {"method": "POST", "path": "/schedules/list", "auth": "user"},
             {
                 "method": "POST",
@@ -127,6 +128,7 @@ def agent_guide() -> dict[str, object]:
             {"method": "POST", "path": "/schedules/trash/list", "auth": "user"},
             {"method": "POST", "path": "/schedules/trash/restore", "auth": "user"},
             {"method": "POST", "path": "/schedules/trash/delete", "auth": "user"},
+            {"method": "POST", "path": "/schedules/changelog", "auth": "user"},
         ],
         "conventions": {
             "timestamps": "All timestamps are Unix epoch seconds (int).",

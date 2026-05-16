@@ -51,6 +51,7 @@ class Database:
 
         alembic_cfg = Config(str(_find_alembic_ini()))
         alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
+        alembic_cfg.set_main_option("script_location", str(_find_alembic_dir()))
         command.upgrade(alembic_cfg, "head")
 
     def stamp_head(self) -> None:
@@ -65,6 +66,7 @@ class Database:
 
         alembic_cfg = Config(str(_find_alembic_ini()))
         alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
+        alembic_cfg.set_main_option("script_location", str(_find_alembic_dir()))
         command.stamp(alembic_cfg, "head")
 
     def ensure_per_user_todo_indexes(self) -> None:
@@ -167,3 +169,14 @@ def _find_alembic_ini() -> Path:
     if ini_path.is_file():
         return ini_path
     raise FileNotFoundError(f"alembic.ini not found at {ini_path}")
+
+
+def _find_alembic_dir() -> Path:
+    """Locate the alembic scripts directory relative to AMTODO_ROOT."""
+    from config import amtodo_root
+
+    root = amtodo_root()
+    dir_path = root / "alembic"
+    if dir_path.is_dir():
+        return dir_path
+    raise FileNotFoundError(f"alembic directory not found at {dir_path}")

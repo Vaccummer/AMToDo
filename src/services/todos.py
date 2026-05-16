@@ -68,10 +68,11 @@ class TodoUpdate:
 class TodoService:
     """Coordinates ToDo use cases without depending on UI or CLI."""
 
-    def __init__(self, repository: TodoRepository, clock: Clock, model_class: type) -> None:
+    def __init__(self, repository: TodoRepository, clock: Clock, model_class: type, changelog_service=None) -> None:
         self._repository = repository
         self._clock = clock
         self._model = model_class
+        self._changelog = changelog_service
 
     def create(self, draft: TodoDraft) -> Todo:
         """Create a ToDo item."""
@@ -99,7 +100,12 @@ class TodoService:
             created_at=now,
             updated_at=None,
         )
-        return self._repository.add(todo)
+        todo = self._repository.add(todo)
+        if self._changelog:
+            self._repository.flush()
+            from serialization import todo_to_dict
+            self._changelog.record_create(todo.id, todo_to_dict(todo, "UTC"))
+        return todo
 
     def list_all(self, completed: bool | None = None) -> list[Todo]:
         """Return all ToDos, optionally filtered by completion."""
@@ -215,6 +221,10 @@ class TodoService:
         """Update mutable ToDo fields."""
 
         todo = self.show(todo_id)
+        before = None
+        if self._changelog:
+            from serialization import todo_to_dict
+            before = todo_to_dict(todo, "UTC")
         changed = False
         explicit = update._fields_set
 
@@ -277,6 +287,9 @@ class TodoService:
 
         if changed:
             todo.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            after = todo_to_dict(todo, "UTC")
+            self._changelog.record_update(todo.id, before, after, list(update._fields_set))
         return todo
 
     def complete(self, todo_id: int) -> Todo:
@@ -310,9 +323,15 @@ class TodoService:
         """Soft-delete a ToDo by id (move to trash)."""
 
         todo = self.show(todo_id)
+        before = None
+        if self._changelog:
+            from serialization import todo_to_dict
+            before = todo_to_dict(todo, "UTC")
         now = self._clock.now_epoch()
         todo.deleted_at = now
         todo.updated_at = now
+        if self._changelog and before is not None:
+            self._changelog.record_delete(todo_id, before)
         return todo
 
     def restore(self, todo_id: int) -> Todo:
@@ -323,9 +342,16 @@ class TodoService:
             raise NotFoundError(f"todo #{todo_id} was not found")
         if todo.deleted_at is None:
             raise ValidationError(f"todo #{todo_id} is not deleted")
+        before = None
+        if self._changelog:
+            from serialization import todo_to_dict
+            before = todo_to_dict(todo, "UTC")
         now = self._clock.now_epoch()
         todo.deleted_at = None
         todo.updated_at = now
+        if self._changelog and before is not None:
+            after = todo_to_dict(todo, "UTC")
+            self._changelog.record_restore(todo_id, before, after)
         return todo
 
     def purge(self, todo_id: int) -> Todo:
@@ -336,8 +362,14 @@ class TodoService:
             raise NotFoundError(f"todo #{todo_id} was not found")
         if todo.deleted_at is None:
             raise ValidationError(f"todo #{todo_id} is not deleted; use remove first")
+        before = None
+        if self._changelog:
+            from serialization import todo_to_dict
+            before = todo_to_dict(todo, "UTC")
         self._repository.remove(todo)
         self._repository.flush()
+        if self._changelog and before is not None:
+            self._changelog.record_purge(todo_id, before)
         return todo
 
     def list_deleted(

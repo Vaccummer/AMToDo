@@ -109,15 +109,16 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
     settings: AppSettings = app.state.settings
     db: Database = create_database(settings)
 
-    # Create static tables first, then run Alembic migrations
-    db.create_schema()
-    _run_alembic_migrations(db)
-
-    token_map = _build_token_map(db)
-    _register_per_user_tables(db, token_map)
-    if token_map:
+    try:
         db.create_schema()
-        db.ensure_per_user_todo_indexes()
+        token_map = _build_token_map(db)
+        _register_per_user_tables(db, token_map)
+        if token_map:
+            db.create_schema()
+            db.ensure_per_user_todo_indexes()
+    except Exception as exc:
+        print(f"FATAL: startup failed: {exc}", file=sys.stderr)
+        raise
 
     app.state.db = db
     app.state.token_map = token_map
@@ -126,29 +127,6 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
 
     db.engine.dispose()
 
-
-def _run_alembic_migrations(db) -> None:
-    """Run Alembic migrations, stamping existing databases as current."""
-    try:
-        from alembic.config import Config  # noqa: F401
-    except ImportError:
-        logging.getLogger("amtodo").warning(
-            "Alembic not installed, skipping schema migrations"
-        )
-        return
-
-    from sqlalchemy import inspect as sa_inspect
-
-    inspector = sa_inspect(db.engine)
-    tables = set(inspector.get_table_names())
-
-    if "alembic_version" in tables:
-        db.run_migrations()
-    else:
-        logging.getLogger("amtodo").info(
-            "Existing database detected, stamping as current for Alembic"
-        )
-        db.stamp_head()
 
 
 def _build_replay_protector(settings: AppSettings) -> ReplayProtector:
@@ -184,8 +162,8 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
     async def decryption_middleware(request, call_next):
         from starlette.requests import Request
 
-        # Health check passes through unencrypted
-        if request.url.path.rstrip("/") == "/api/v1/health":
+        # Health check and notification polling pass through unencrypted
+        if request.url.path.rstrip("/") in ("/api/v1/health", "/api/v1/notifications/list_triggered"):
             return await call_next(request)
 
         # Read-only methods pass through without body encryption
