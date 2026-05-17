@@ -1,0 +1,174 @@
+{
+  "name": "warm-light",
+
+  "global": {
+    "shell": {
+      "_comment": "App shell and workspace background",
+      "bg": "#f3f0eb"
+    },
+    "surface": {
+      "_comment": "Cards, rows, cells, panels",
+      "bg": "#faf7f2",
+      "border": "#d1c7ba",
+      "border-light": "#e7dfd5",
+      "line": "#e4ddd3",
+      "muted": "#8c8277"
+    },
+    "text": {
+      "_comment": "Global text hierarchy",
+      "primary": "#342f2a",
+      "secondary": "#5c5650",
+      "muted": "#8a8078",
+      "darkest": "#27231f",
+      "inverse": "#fff",
+      "on-primary": "#fff8ef"
+    }
+  },
+
+  "components": {
+    "nav": {
+      "_comment": "Side navigation bar",
+      "bg": "#ebe5dc"
+    },
+    "input": {
+      "_comment": "Input fields across the app",
+      "focus": "#1a7f72"
+    },
+    "scrollbar": {
+      "_comment": "Scrollbar thumb colors",
+      "thumb": "#c8c1b6",
+      "thumb-hover": "#a89f94"
+    },
+    "dropdown": {
+      "_comment": "Dropdown menus (settings modal, etc.)",
+      "focus": "#4a6fa5",
+      "bg": "#fbfcfe",
+      "border": "#c8d6e5"
+    },
+    "calendar": {
+      "_comment": "Date picker / calendar popup",
+      "today-ring": "#c4a33a",
+      "gold-selected": "#c4a33a",
+      "gold-header": "#c4a33a",
+      "gold-text": "#5c4a1e",
+      "gold-bg": "#fffef9",
+      "gold-border": "#e0d5b0"
+    },
+    "context-menu": {
+      "_comment": "Right-click context menu",
+      "danger": "#c62f2f"
+    }
+  },
+
+  "views": {
+    "todo": {
+      "_comment": "Todo list view",
+      "datebar": {
+        "_comment": "Date navigation bar at top",
+        "today-marker": "#f5d78c",
+        "selected-bg": "#e07b3c",
+        "selected-text": "#fff8ef"
+      },
+      "row": {
+        "_comment": "Individual todo items",
+        "bg": "#faf7f2",
+        "border": "#e4ddd3"
+      },
+      "check-button": {
+        "_comment": "Completion checkbox",
+        "color": "#1a7f72"
+      },
+      "empty-state": {
+        "_comment": "Empty list placeholder text",
+        "color": "#8c8277"
+      }
+    },
+    "schedule": {
+      "_comment": "Schedule / calendar grid view",
+      "cell-bg": "#faf7f2",
+      "time-label": "#ebe5dc",
+      "event-selected": "#254f5c"
+    },
+    "search": {
+      "_comment": "Search view",
+      "bg": "#f6f3ee",
+      "title-input": "#254f5c"
+    },
+    "trash": {
+      "_comment": "Trash / recycle bin view",
+      "filter-bar": "#ebe5dc"
+    },
+    "notify": {
+      "_comment": "Notification view",
+      "bg": "#f6f3ee",
+      "header-bg": "#254f5c",
+      "header-text": "#fff8ef",
+      "event-bg": "#e07b3c"
+    }
+  },
+
+  "modals": {
+    "_comment": "All modal dialogs",
+    "backdrop": {
+      "_comment": "Modal overlay backgrounds",
+      "default": "rgba(30, 28, 24, 0.45)",
+      "confirm": "rgba(20, 18, 16, 0.55)"
+    },
+    "card": {
+      "_comment": "Modal card container",
+      "bg": "#faf7f2"
+    },
+    "input-focus": {
+      "_comment": "Input fields inside modals",
+      "color": "#1a7f72"
+    },
+    "schedule": {
+      "_comment": "Schedule detail modal",
+      "dot": "#c4a33a",
+      "save-btn": "#b8960c",
+      "timeline-bar": "#c4a33a",
+      "timeline-icon": "#b8960c",
+      "input-bg": "#fffef9",
+      "border": "#e0d5b0"
+    },
+    "settings": {
+      "_comment": "Settings modal",
+      "dot": "#4a6fa5",
+      "save-btn": "#4a6fa5",
+      "input-bg": "#fbfcfe",
+      "border": "#c8d6e5"
+    },
+    "confirm": {
+      "_comment": "Confirmation dialog",
+      "primary-btn": "#1a7f72"
+    }
+  },
+
+  "status": {
+    "_comment": "Semantic status colors used across views",
+    "primary": {
+      "_comment": "Green - main action / accent color",
+      "base": "#1a7f72",
+      "hover": "#167064",
+      "badge-bg": "#e8f3f1",
+      "focus-ring": "rgba(26, 127, 114, 0.25)"
+    },
+    "danger": {
+      "_comment": "Red - destructive actions, overdue, errors",
+      "base": "#c62f2f",
+      "hover": "#d9442e",
+      "badge-bg": "#fde8e8",
+      "focus-ring": "rgba(198, 47, 47, 0.25)"
+    },
+    "completed": {
+      "_comment": "Done / finished items",
+      "text": "#8a9187",
+      "border": "#dce4d8",
+      "bg": "#f2f4ef"
+    },
+    "overdue": {
+      "_comment": "Past-due items",
+      "badge-bg": "#f7dada"
+    }
+  }
+}
