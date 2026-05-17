@@ -16,6 +16,9 @@ DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
 DEFAULT_MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES = int(DEFAULT_MAX_ATTACHMENT_SIZE_BYTES * 1.5)
 DEFAULT_MAX_ATTACHMENTS_PER_TODO = 20
+DEFAULT_RATE_LIMIT_REQUESTS = 30
+DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
+DEFAULT_IP_CACHE_TTL_SECONDS = 300
 AMTODO_ROOT_ENV_VAR = Path()
 
 
@@ -28,7 +31,7 @@ class AppSettings:
     timezone: str = DEFAULT_TIMEZONE
     server_url: str = ""
     access_token: str = ""
-    server_host: str = "0.0.0.0"
+    server_host: str | None = "0.0.0.0"
     server_port: int = 8000
     admin_token: str = ""
     server_public_key_path: str = ""
@@ -38,6 +41,9 @@ class AppSettings:
     max_attachment_request_body_bytes: int = DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES
     max_attachments_per_todo: int = DEFAULT_MAX_ATTACHMENTS_PER_TODO
     attachment_root: str = ""
+    rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
+    rate_limit_window_seconds: int = DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+    ip_cache_ttl_seconds: int = DEFAULT_IP_CACHE_TTL_SECONDS
 
 
 def amtodo_root() -> Path:

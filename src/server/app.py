@@ -17,13 +17,14 @@ from sqlalchemy import select
 
 import json
 
-from config import DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, __version__, AppSettings, amtodo_root
+from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, __version__, AppSettings, amtodo_root
 from amtodo_crypto import ReplayProtector, is_envelope, open_envelope, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
 from server.admin import router as admin_router
 from server.notifications import router as notification_router
+from server.rate_limit import RateLimitMiddleware, RateLimiter
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
 
@@ -282,6 +283,19 @@ def _setup_request_size_middleware(app: FastAPI, settings: AppSettings) -> None:
         return await call_next(request)
 
 
+def _setup_rate_limit_middleware(app: FastAPI, settings: AppSettings) -> None:
+    """Add per-IP rate limiting middleware for public (unauthenticated) endpoints."""
+    limiter = RateLimiter(
+        max_requests=settings.rate_limit_requests,
+        window_seconds=settings.rate_limit_window_seconds,
+    )
+    public_paths = frozenset({
+        "/api/v1/health",
+        "/api/v1/agent-guide",
+    })
+    app.add_middleware(RateLimitMiddleware, limiter=limiter, public_paths=public_paths)
+
+
 def create_app(settings: AppSettings) -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(
@@ -300,6 +314,9 @@ def create_app(settings: AppSettings) -> FastAPI:
         _setup_encryption_middleware(app, settings)
 
     _setup_request_size_middleware(app, settings)
+
+    if settings.rate_limit_requests > 0:
+        _setup_rate_limit_middleware(app, settings)
 
     @app.exception_handler(ValidationError)
     async def handle_validation(request, exc):
@@ -349,10 +366,14 @@ def main() -> None:
     log_cfg = raw.get("log", {})
     storage_cfg = raw.get("storage", {})
     encryption_cfg = raw.get("encryption", {})
+    rate_limit_cfg = raw.get("rate_limit", {})
+    health_cfg = raw.get("health", {})
 
     log_file = log_cfg.get("file", "log/server.log")
     database_url = database_cfg.get("url", "sqlite:///db/amtodo.sqlite3")
-    host = server.get("host", "0.0.0.0")
+    host = server.get("host", "")
+    if not host or host == "null":
+        host = None
     port = server.get("port", 8000)
     admin_token = auth.get("admin_token", "")
     attachment_root = storage_cfg.get("attachment_root", "")
@@ -366,6 +387,9 @@ def main() -> None:
     private_key_path = encryption_cfg.get("private_key_path", "")
     public_key_path = encryption_cfg.get("public_key_path", "")
     tolerance = encryption_cfg.get("request_timestamp_tolerance_seconds", 300)
+    rate_limit_requests = rate_limit_cfg.get("requests", DEFAULT_RATE_LIMIT_REQUESTS)
+    rate_limit_window_seconds = rate_limit_cfg.get("window_seconds", DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
+    ip_cache_ttl = health_cfg.get("ip_cache_ttl", DEFAULT_IP_CACHE_TTL_SECONDS)
 
     if not admin_token:
         print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
@@ -380,8 +404,10 @@ def main() -> None:
     print(f"AMToDo Server v{__version__}")
     print(f"  Log:       {log_path}")
     print(f"  Database:  {database_url}")
-    print(f"  Listen:    http://{host}:{port}")
+    listen_display = "[::]:port (dual-stack)" if host is None else f"{host}:{port}"
+    print(f"  Listen:    {listen_display}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
+    print(f"  Rate limit: {rate_limit_requests} req / {rate_limit_window_seconds}s per IP (public endpoints)")
 
     settings = AppSettings(
         database_url=database_url,
@@ -394,6 +420,9 @@ def main() -> None:
         attachment_root=attachment_root,
         max_attachment_size_bytes=max_attachment_size_bytes,
         max_attachment_request_body_bytes=max_attachment_request_body_bytes,
+        rate_limit_requests=rate_limit_requests,
+        rate_limit_window_seconds=rate_limit_window_seconds,
+        ip_cache_ttl_seconds=ip_cache_ttl,
     )
     app = create_app(settings)
 

@@ -1,5 +1,5 @@
 [server]
-host = "0.0.0.0"
+host = ""
 port = 8000
 
 [database]
@@ -18,3 +18,12 @@ request_timestamp_tolerance_seconds = 300
 
 [storage]
 attachment_root = "db"
+
+[rate_limit]
+# Max requests per IP in the time window for public (unauthenticated) endpoints
+requests = 30
+window_seconds = 60
+
+[health]
+# TTL (seconds) for cached public IP addresses (0 = no cache, fetch every time)
+ip_cache_ttl = 300
