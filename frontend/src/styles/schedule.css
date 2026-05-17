@@ -45,11 +45,11 @@
 }
 
 .schedule-grid.editing .schedule-cell {
-  background: #f8f1df;
+  background: var(--components-calendar-gold-bg);
 }
 
 .schedule-grid.editing .schedule-day-overlay {
-  background: rgba(224, 123, 60, 0.045);
+  background: color-mix(in srgb, var(--views-notify-event-bg) 4.5%, transparent);
 }
 
 .schedule-events-layer {
@@ -74,7 +74,7 @@
   right: 6px;
   border: 0;
   border-radius: var(--radius-md);
-  color: #243042;
+  color: var(--modals-schedule-text-darkest);
   padding: 5px 7px;
   text-align: left;
   display: flex;
@@ -104,8 +104,8 @@
   outline-offset: 1px;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.58),
-    0 0 0 4px rgba(37, 79, 92, 0.16),
-    0 5px 12px rgba(54, 47, 41, 0.2);
+    0 0 0 4px color-mix(in srgb, var(--views-schedule-event-selected) 16%, transparent),
+    0 5px 12px color-mix(in srgb, var(--global-text-darkest) 20%, transparent);
   z-index: 5;
 }
 
@@ -129,7 +129,7 @@
   right: 24%;
   height: 2px;
   border-radius: var(--radius-pill);
-  background: rgba(37, 79, 92, 0.54);
+  background: color-mix(in srgb, var(--views-schedule-event-selected) 54%, transparent);
 }
 
 .schedule-resize-handle.top {
@@ -175,39 +175,11 @@
   overflow-wrap: anywhere;
 }
 
-.schedule-event-id {
-  font-size: var(--font-xs);
-  line-height: 1.15;
-  opacity: 0.55;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 .schedule-event.mini .schedule-event-title,
 .schedule-event.mid .schedule-event-title {
   white-space: nowrap;
   text-overflow: ellipsis;
   display: block;
-}
-
-.event-color-0 {
-  background: #f0c66d;
-}
-
-.event-color-1 {
-  background: #a7d8bc;
-}
-
-.event-color-2 {
-  background: #94c7dc;
-}
-
-.event-color-3 {
-  background: #e8a2aa;
-}
-
-.event-color-4 {
-  background: #c7b3e7;
 }
 
 .schedule-status {
@@ -223,7 +195,7 @@
   height: 24px;
   border: 0;
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--global-text-darkest);
   padding: 3px 7px;
   text-align: left;
   display: flex;
@@ -234,7 +206,7 @@
   pointer-events: auto;
   background: var(--views-notify-event-bg);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25),
-    0 1px 3px rgba(232, 93, 58, 0.3);
+    0 1px 3px color-mix(in srgb, var(--status-danger-orange) 30%, transparent);
   transition: filter 0.12s, transform 0.12s;
   touch-action: none;
   user-select: none;
@@ -298,7 +270,7 @@
   outline: 2px solid #fff;
   outline-offset: -2px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-    0 0 0 2px var(--views-notify-event-bg), 0 2px 8px rgba(232, 93, 58, 0.4);
+    0 0 0 2px var(--views-notify-event-bg), 0 2px 8px color-mix(in srgb, var(--status-danger-orange) 40%, transparent);
   z-index: 3;
 }
 
@@ -315,10 +287,10 @@
   width: 34px;
   height: 34px;
   padding: 0;
-  border: 1px solid #d9d5c9;
+  border: 1px solid var(--global-surface-border-warm);
   border-radius: var(--radius-md);
   background: var(--views-search-bg);
-  color: #6b6560;
+  color: var(--modals-schedule-brown);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.12s, color 0.12s;
@@ -344,7 +316,7 @@
 
 .notify-mention-type-select .dropdown-trigger:focus {
   border-color: var(--components-calendar-gold-selected);
-  box-shadow: 0 0 0 3px rgba(196, 163, 58, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--components-calendar-gold-selected) 12%, transparent);
 }
 
 .notify-mention-type-select .dropdown-panel {
@@ -358,12 +330,12 @@
 }
 
 .notify-mention-type-select .dropdown-option.selected {
-  background: rgba(196, 163, 58, 0.15);
-  color: #5f4510;
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 15%, transparent);
+  color: var(--modals-schedule-amber-dark);
 }
 
 .notify-mention-type-select .dropdown-option:hover {
-  background: rgba(196, 163, 58, 0.08);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
 }
 
 .notify-mention-id-input {
@@ -375,8 +347,8 @@
 }
 
 .notify-mention-icon-btn:hover:not(:disabled) {
-  background: #ece8df;
-  color: #3d3a36;
+  background: var(--global-surface-warm-2);
+  color: var(--global-text-warm-darkest);
 }
 
 .notify-mention-icon-btn:disabled {
@@ -385,9 +357,9 @@
 }
 
 .notify-mention-icon-btn-delete:hover:not(:disabled) {
-  background: #f5e0df;
-  color: #b34040;
-  border-color: #e0b4b4;
+  background: var(--status-danger-surface);
+  color: var(--status-danger-hover);
+  border-color: var(--status-danger-light);
 }
 
 .notify-mention-add-group {
@@ -402,7 +374,7 @@
   padding: 5px 10px;
   border: 1px solid var(--global-surface-line);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--components-input-bg);
   color: var(--global-surface-muted);
   font-size: var(--font-sm);
   font-weight: 700;
@@ -420,18 +392,18 @@
 }
 
 .notify-mention-add-btn .add-btn-icon.todo-icon {
-  background: rgba(74, 143, 122, 0.12);
-  color: #4a8f7a;
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
+  color: var(--views-notify-mention-green);
 }
 
 .notify-mention-add-btn .add-btn-icon.sch-icon {
-  background: rgba(122, 111, 196, 0.12);
-  color: #7a6fc4;
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 12%, transparent);
+  color: var(--views-notify-mention-purple);
 }
 
 .notify-mention-add-btn:hover {
   border-color: var(--status-primary-base);
-  box-shadow: 0 1px 4px rgba(26, 127, 114, 0.12);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--status-primary-base) 12%, transparent);
 }
 
 .notify-mention-error {
@@ -439,4 +411,113 @@
   margin-top: 2px;
   font-size: var(--font-sm);
   color: var(--status-danger-hover);
+}
+
+/* ── Glass Tooltip (portal, 方案D style) ── */
+
+.glass-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: auto;
+  min-width: 220px;
+  max-width: 280px;
+  background: color-mix(in srgb, var(--global-surface-bg) 78%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--global-surface-border) 50%, transparent);
+  border-radius: 12px;
+  box-shadow:
+    0 8px 32px color-mix(in srgb, var(--global-text-darkest) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 60%, transparent);
+  padding: 12px 14px;
+  animation: glass-tooltip-in 0.14s ease-out;
+}
+
+@keyframes glass-tooltip-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.glass-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.glass-tooltip-header .glass-tooltip-tag {
+  margin-left: auto;
+}
+
+.glass-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.glass-tooltip-title {
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--global-text-darkest);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-tooltip-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.glass-tooltip-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--global-text-darkest) 3%, transparent);
+}
+
+.glass-tooltip-field-icon {
+  font-size: 13px;
+  color: var(--global-surface-muted);
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.glass-tooltip-field-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.glass-tooltip-field-label {
+  font-size: 10px;
+  color: var(--global-surface-muted);
+  font-weight: 600;
+}
+
+.glass-tooltip-field-value {
+  font-size: var(--font-sm);
+  color: var(--global-text-darkest);
+  font-weight: 700;
+}
+
+.glass-tooltip-tag {
+  display: inline-block;
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 700;
+  color: #624c10;
+  background: #ede5d8;
+  border-radius: 6px;
+  padding: 2px 7px;
+  letter-spacing: 0.3px;
 }
