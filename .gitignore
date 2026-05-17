@@ -33,4 +33,7 @@ log/
 keys/
 
 .superpowers/
+.omc/
 docs/
+demo/
+db/
