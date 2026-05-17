@@ -13,6 +13,7 @@ from config import AppSettings
 from serialization import notification_to_dict
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
+    NotificationChangelogQueryRequest,
     NotificationCreateRequest,
     NotificationGetRequest,
     NotificationListRequest,
@@ -39,6 +40,7 @@ def _make_service(uow: UnitOfWork, clock: Clock) -> NotificationService:
         clock,
         uow.notification_model,
         uow.notification_mention_model,
+        changelog_service=uow.notification_changelog_service,
     )
 
 
@@ -186,3 +188,38 @@ def purge_notification(
     service = _make_service(uow, clock)
     service.purge(body.notification_id)
     return {"ok": True}
+
+
+def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
+    import json
+    return {
+        "id": entry.id,
+        "entity_id": entry.entity_id,
+        "action": entry.action,
+        "changed_fields": json.loads(entry.changed_fields),
+        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
+        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
+        "created_at": entry.created_at,
+    }
+
+
+@router.post("/changelog")
+def notification_changelog(
+    body: NotificationChangelogQueryRequest,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    service = uow.notification_changelog_service
+    entries, total = service.query(
+        entity_id=body.entity_id,
+        action=body.action,
+        start_at=body.start_at,
+        end_at=body.end_at,
+        limit=body.limit,
+        offset=body.offset,
+    )
+    return {
+        "ok": True,
+        "total": total,
+        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+    }

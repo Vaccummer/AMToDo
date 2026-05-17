@@ -7,6 +7,7 @@ from repositories.attachments import (
     TodoAttachmentRepository,
 )
 from repositories.changelogs import (
+    NotificationChangelogRepository,
     ScheduleChangelogRepository,
     TodoChangelogRepository,
 )
@@ -19,6 +20,7 @@ from repositories.settings import SettingsRepository
 from repositories.todos import TodoRepository
 
 __all__ = [
+    "NotificationChangelogRepository",
     "NotificationMentionRepository",
     "NotificationRepository",
     "ScheduleAttachmentRepository",

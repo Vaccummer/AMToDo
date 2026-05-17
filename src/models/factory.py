@@ -9,13 +9,13 @@ STANDALONE_USER_ID = 0
 _cache: dict[int, tuple[type, ...]] = {}
 
 
-def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, type, type]:
+def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, type, type, type]:
     """Return concrete model classes for standalone (non-multi-user) usage."""
     if STANDALONE_USER_ID in _cache:
         return _cache[STANDALONE_USER_ID]
 
     from models.attachment import TodoAttachment
-    from models.changelog import ScheduleChangelog, TodoChangelog
+    from models.changelog import NotificationChangelog, ScheduleChangelog, TodoChangelog
     from models.notification import Notification
     from models.notification_mention import NotificationMention
     from models.schedule import Schedule
@@ -112,6 +112,21 @@ def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, t
             ),
         },
     )
+    StandaloneNotificationChangelog = type(
+        "NotificationChangelog_standalone",
+        (NotificationChangelog,),
+        {
+            "__tablename__": "notification_changelogs",
+            "__table_args__": (
+                Index(
+                    "ix_notification_changelogs_entity_created",
+                    "entity_id",
+                    "created_at",
+                ),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
     StandaloneNotification = type(
         "Notification_standalone",
         (Notification,),
@@ -142,6 +157,7 @@ def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, t
         StandaloneScheduleAttachment,
         StandaloneTodoChangelog,
         StandaloneScheduleChangelog,
+        StandaloneNotificationChangelog,
         StandaloneNotification,
         StandaloneNotificationMention,
     )
@@ -149,14 +165,14 @@ def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, t
     return result
 
 
-def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, type, type, type]:
+def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, type, type, type, type]:
     """Return per-user table model classes."""
 
     if user_id in _cache:
         return _cache[user_id]
 
     from models.attachment import TodoAttachment
-    from models.changelog import ScheduleChangelog, TodoChangelog
+    from models.changelog import NotificationChangelog, ScheduleChangelog, TodoChangelog
     from models.notification import Notification
     from models.notification_mention import NotificationMention
     from models.schedule import Schedule
@@ -170,6 +186,7 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, t
     schedule_attachment_table = f"schedule_attachments_{user_id}"
     todo_changelog_table = f"todo_changelogs_{user_id}"
     schedule_changelog_table = f"schedule_changelogs_{user_id}"
+    notification_changelog_table = f"notification_changelogs_{user_id}"
     notification_table = f"notifications_{user_id}"
     notification_mention_table = f"notification_mentions_{user_id}"
 
@@ -259,6 +276,21 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, t
             ),
         },
     )
+    NotificationChangelogModel = type(
+        f"NotificationChangelog_{user_id}",
+        (NotificationChangelog,),
+        {
+            "__tablename__": notification_changelog_table,
+            "__table_args__": (
+                Index(
+                    f"ix_{notification_changelog_table}_entity_created",
+                    "entity_id",
+                    "created_at",
+                ),
+                {"sqlite_autoincrement": True},
+            ),
+        },
+    )
     NotificationModel = type(
         f"Notification_{user_id}",
         (Notification,),
@@ -289,6 +321,7 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, t
         ScheduleAttachmentModel,
         TodoChangelogModel,
         ScheduleChangelogModel,
+        NotificationChangelogModel,
         NotificationModel,
         NotificationMentionModel,
     )
