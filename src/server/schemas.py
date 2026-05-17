@@ -371,6 +371,15 @@ class ScheduleChangelogQueryRequest(UserAuthMixin):
     offset: int = Field(default=0, ge=0)
 
 
+class NotificationChangelogQueryRequest(UserAuthMixin):
+    entity_id: int | None = None
+    action: str | None = None
+    start_at: int | None = None
+    end_at: int | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
 # -- Notification --
 
 class NotificationMentionInput(BaseModel):

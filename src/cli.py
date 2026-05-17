@@ -1346,6 +1346,9 @@ def _user_delete_direct(user_id: int) -> dict[str, object]:
             sched_att_model,
             todo_changelog_model,
             schedule_changelog_model,
+            _notification_changelog_model,
+            _notification_model,
+            _notification_mention_model,
         ) = get_user_tables(user_id)
 
         # Remove attachment files from disk

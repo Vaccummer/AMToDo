@@ -44,12 +44,14 @@ class NotificationService:
         clock: Clock,
         model_class: type,
         mention_model_class: type,
+        changelog_service=None,
     ) -> None:
         self._repository = repository
         self._mention_repo = mention_repository
         self._clock = clock
         self._model = model_class
         self._mention_model = mention_model_class
+        self._changelog = changelog_service
 
     def create(self, draft: NotificationDraft) -> object:
         title = draft.title.strip()
@@ -83,6 +85,11 @@ class NotificationService:
             )
             self._mention_repo.add(mention)
 
+        if self._changelog:
+            self._repository.flush()
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            self._changelog.record_create(notification.id, notification_to_dict(notification, mentions))
         return notification
 
     def show(self, notification_id: int) -> object:
@@ -93,6 +100,11 @@ class NotificationService:
 
     def update(self, notification_id: int, update: NotificationUpdate) -> object:
         notification = self.show(notification_id)
+        before = None
+        if self._changelog:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            before = notification_to_dict(notification, mentions)
         changed = False
         explicit = update._fields_set
 
@@ -135,13 +147,25 @@ class NotificationService:
 
         if changed:
             notification.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            after = notification_to_dict(notification, mentions)
+            self._changelog.record_update(notification.id, before, after, list(update._fields_set))
         return notification
 
     def remove(self, notification_id: int) -> object:
         notification = self.show(notification_id)
+        before = None
+        if self._changelog:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            before = notification_to_dict(notification, mentions)
         now = self._clock.now_epoch()
         notification.deleted_at = now
         notification.updated_at = now
+        if self._changelog and before is not None:
+            self._changelog.record_delete(notification_id, before)
         return notification
 
     def restore(self, notification_id: int) -> object:
@@ -150,9 +174,19 @@ class NotificationService:
             raise NotFoundError(f"notification #{notification_id} was not found")
         if notification.deleted_at is None:
             raise ValidationError(f"notification #{notification_id} is not deleted")
+        before = None
+        if self._changelog:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            before = notification_to_dict(notification, mentions)
         now = self._clock.now_epoch()
         notification.deleted_at = None
         notification.updated_at = now
+        if self._changelog and before is not None:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            after = notification_to_dict(notification, mentions)
+            self._changelog.record_restore(notification_id, before, after)
         return notification
 
     def purge(self, notification_id: int) -> object:
@@ -161,9 +195,16 @@ class NotificationService:
             raise NotFoundError(f"notification #{notification_id} was not found")
         if notification.deleted_at is None:
             raise ValidationError(f"notification #{notification_id} is not deleted; use remove first")
+        before = None
+        if self._changelog:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            before = notification_to_dict(notification, mentions)
         self._mention_repo.delete_for_notification(notification_id)
         self._repository.remove(notification)
         self._repository.flush()
+        if self._changelog and before is not None:
+            self._changelog.record_purge(notification_id, before)
         return notification
 
     def list_between(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from models.attachment import TodoAttachment
-from models.changelog import ScheduleChangelog, TodoChangelog
+from models.changelog import NotificationChangelog, ScheduleChangelog, TodoChangelog
 from models.notification import Notification
 from models.notification_mention import NotificationMention
 from models.schedule import Schedule
@@ -14,6 +14,7 @@ from models.user import User
 
 __all__ = [
     "Notification",
+    "NotificationChangelog",
     "NotificationMention",
     "Schedule",
     "ScheduleAttachment",

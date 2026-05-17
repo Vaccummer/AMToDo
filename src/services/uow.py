@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Self
 
 from models.factory import STANDALONE_USER_ID, get_standalone_tables, get_user_tables
 from repositories import (
+    NotificationChangelogRepository,
     NotificationMentionRepository,
     NotificationRepository,
     ScheduleAttachmentRepository,
@@ -16,7 +17,7 @@ from repositories import (
     TodoChangelogRepository,
     TodoRepository,
 )
-from services.changelogs import ScheduleChangelogService, TodoChangelogService
+from services.changelogs import NotificationChangelogService, ScheduleChangelogService, TodoChangelogService
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -43,6 +44,7 @@ class UnitOfWork:
                 self._schedule_attachment_model,
                 self._todo_changelog_model,
                 self._schedule_changelog_model,
+                self._notification_changelog_model,
                 self._notification_model,
                 self._notification_mention_model,
             ) = get_standalone_tables()
@@ -55,6 +57,7 @@ class UnitOfWork:
                 self._schedule_attachment_model,
                 self._todo_changelog_model,
                 self._schedule_changelog_model,
+                self._notification_changelog_model,
                 self._notification_model,
                 self._notification_mention_model,
             ) = get_user_tables(user_id)
@@ -188,6 +191,17 @@ class UnitOfWork:
         """Return the schedule changelog service for the active session."""
         from clock import SystemClock
         return ScheduleChangelogService(self.schedule_changelogs, SystemClock(), self._schedule_changelog_model)
+
+    @property
+    def notification_changelogs(self) -> NotificationChangelogRepository:
+        """Return the notification changelog repository for the active session."""
+        return NotificationChangelogRepository(self.session, self._notification_changelog_model)
+
+    @property
+    def notification_changelog_service(self) -> NotificationChangelogService:
+        """Return the notification changelog service for the active session."""
+        from clock import SystemClock
+        return NotificationChangelogService(self.notification_changelogs, SystemClock(), self._notification_changelog_model)
 
     @property
     def notifications(self) -> NotificationRepository:
