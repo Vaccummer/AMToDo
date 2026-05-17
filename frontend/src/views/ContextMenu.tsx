@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useLayoutEffect, useState } from "react";
 
 export type MenuItem = {
   label: string;
@@ -38,6 +38,7 @@ function TrashIcon() {
 
 export function ContextMenu({ x, y, items, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: 0, top: 0 });
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -56,8 +57,19 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, [onClose]);
 
+  useLayoutEffect(() => {
+    if (!menuRef.current) return;
+    const { offsetWidth: w, offsetHeight: h } = menuRef.current;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    setPos({
+      left: Math.max(4, Math.min(x, vw - w - 4)),
+      top: Math.max(4, Math.min(y, vh - h - 4)),
+    });
+  }, [x, y]);
+
   return (
-    <div className="context-menu" ref={menuRef} style={{ left: x, top: y }}>
+    <div className="context-menu" ref={menuRef} style={{ left: pos.left, top: pos.top }}>
       {items.map((item, i) => (
         <button
           key={i}
