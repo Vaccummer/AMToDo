@@ -3,6 +3,7 @@ import { AMToDoApi } from "../api/client";
 import { importP256PublicKey } from "../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
 import type { UISettings } from "../lib/settings";
+import { listThemes, applyTheme, getTheme } from "../themes";
 import { Dropdown } from "./Dropdown";
 import { useConfirm } from "./ConfirmDialog";
 
@@ -55,6 +56,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [accessToken, setAccessToken] = useState(initial.access_token);
   const [language, setLanguage] = useState(initial.language);
   const [timezone, setTimezone] = useState(initial.timezone);
+  const [theme, setTheme] = useState(initial.theme);
   const [weekStart, setWeekStart] = useState(String(initial.week_start));
   const [scheduleStartHour, setScheduleStartHour] = useState(String(initial.scheduler_start_hour));
   const [scheduleEndHour, setScheduleEndHour] = useState(String(initial.scheduler_end_hour));
@@ -85,6 +87,16 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
 
+  const themeOptions = useMemo(
+    () => listThemes().map((name) => ({ value: name, label: name })),
+    []
+  );
+
+  function handleThemeChange(name: string) {
+    setTheme(name);
+    applyTheme(getTheme(name));
+  }
+
   const formatSize = useCallback((bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -107,6 +119,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     setAccessToken(initial.access_token);
     setLanguage(initial.language);
     setTimezone(initial.timezone);
+    setTheme(initial.theme);
     setWeekStart(String(initial.week_start));
     setScheduleStartHour(String(initial.scheduler_start_hour));
     setScheduleEndHour(String(initial.scheduler_end_hour));
@@ -130,6 +143,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       accessToken !== initial.access_token ||
       language !== initial.language ||
       timezone !== initial.timezone ||
+      theme !== initial.theme ||
       Number(weekStart) !== initial.week_start ||
       Number(scheduleStartHour) !== initial.scheduler_start_hour ||
       Number(scheduleEndHour) !== initial.scheduler_end_hour ||
@@ -143,6 +157,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     accessToken,
     language,
     timezone,
+    theme,
     weekStart,
     scheduleStartHour,
     scheduleEndHour,
@@ -294,6 +309,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       access_token: accessToken,
       language,
       timezone,
+      theme,
       week_start: Number(weekStart),
       scheduler_start_hour: Number(scheduleStartHour),
       scheduler_end_hour: Number(scheduleEndHour),
@@ -507,6 +523,15 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                   { value: "1", label: "周一" },
                 ]}
                 onChange={setWeekStart}
+              />
+            </div>
+            <div className="settings-modal-field settings-modal-field-half">
+              <label className="settings-modal-label" htmlFor="sui-theme">主题</label>
+              <Dropdown
+                id="sui-theme"
+                value={theme}
+                options={themeOptions}
+                onChange={handleThemeChange}
               />
             </div>
           </div>

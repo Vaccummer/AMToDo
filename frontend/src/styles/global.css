@@ -7,14 +7,14 @@
   border-radius: var(--radius-xl);
   display: grid;
   grid-template-rows: 46px 1fr;
-  box-shadow: 0 0 0 1px rgba(42, 35, 30, 0.08);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--global-text-darkest) 8%, transparent);
 }
 
 .titlebar {
   app-region: drag;
   -webkit-app-region: drag;
   height: 46px;
-  background: linear-gradient(to right, rgb(58, 31, 107), rgb(44, 62, 80));
+  background: var(--components-titlebar-bg);
   color: #2a3040;
   display: flex;
   align-items: center;
@@ -37,12 +37,12 @@
   width: 14px;
   height: 14px;
   border-radius: var(--radius-pill);
-  background: #3a7bd5;
+  background: var(--components-dropdown-accent);
   transition: background 0.3s;
 }
 
 .brand-dot.ok {
-  background: #3a7bd5;
+  background: var(--components-dropdown-accent);
 }
 
 .brand-title {
@@ -51,15 +51,15 @@
 }
 
 .server-pill {
-  border: 1px solid #cdd4dc;
+  border: 1px solid var(--components-dropdown-border-alt);
   border-radius: var(--radius-pill);
-  color: #3a7bd5;
+  color: var(--components-dropdown-accent);
   font-size: var(--font-base);
   padding: 3px 9px;
 }
 
 .server-pill.ok {
-  color: #3a7bd5;
+  color: var(--components-dropdown-accent);
   border-color: rgba(58, 123, 213, 0.25);
 }
 
@@ -82,7 +82,7 @@
 }
 
 .titlebar-user-name {
-  color: #6a7580;
+  color: var(--global-surface-blue-gray);
   font-size: var(--font-md);
   font-weight: 500;
 }
@@ -97,7 +97,7 @@
 .window-controls button {
   width: 46px;
   border: 0;
-  color: #6a7580;
+  color: var(--global-surface-blue-gray);
   background: transparent;
   display: grid;
   place-items: center;
@@ -108,7 +108,7 @@
 }
 
 .window-controls .close:hover {
-  background: #c42b1c;
+  background: var(--status-danger-dark);
   color: #fff;
 }
 
@@ -163,12 +163,12 @@
 }
 
 .side-nav button:hover {
-  background: rgba(198, 47, 47, 0.08);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
   color: var(--global-text-primary);
 }
 
 .side-nav button.active {
-  background: #d4c9ba;
+  background: var(--components-nav-active-bg);
   color: var(--global-text-primary);
 }
 

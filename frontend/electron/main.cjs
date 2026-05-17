@@ -335,6 +335,8 @@ function writeUiToml(settings) {
   fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
 }
 
+app.setAppUserModelId("com.amtodo.app");
+
 app.whenReady().then(() => {
   ipcMain.handle("settings:read", () => {
     try {

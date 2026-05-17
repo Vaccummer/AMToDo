@@ -31,7 +31,7 @@
   border: 0;
   border-radius: var(--radius-lg);
   background: transparent;
-  color: #f7f3ee;
+  color: var(--views-search-bg-alt);
   font-size: var(--font-3xl);
   font-weight: 700;
   letter-spacing: 2px;
@@ -164,7 +164,7 @@
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #f7f3ee;
+  color: var(--views-search-bg-alt);
   padding: 18px 4px;
   min-width: 0;
   min-height: 68px;
@@ -249,7 +249,7 @@
 }
 
 .todo-row.late-done:last-of-type {
-  border-bottom-color: #f0d9a8;
+  border-bottom-color: var(--modals-schedule-cream-dark);
 }
 
 .todo-main {
@@ -282,13 +282,13 @@
   padding: 4px 8px;
   font: inherit;
   color: inherit;
-  background: #fff;
+  background: var(--components-input-bg);
   outline: none;
 }
 
 .todo-edit-input::selection {
-  color: #4a3020;
-  background: rgba(212, 165, 116, 0.3);
+  color: var(--global-text-warm-dark);
+  background: color-mix(in srgb, var(--components-calendar-orange-light) 30%, transparent);
 }
 
 .todo-meta {
@@ -305,8 +305,8 @@
   min-width: 42px;
   height: 22px;
   border-radius: var(--radius-pill);
-  background: rgba(235, 229, 220, 0.9);
-  color: #00a878;
+  background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
+  color: var(--status-primary-light);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -340,7 +340,7 @@
 
 .todo-row.overdue {
   --todo-row-accent: var(--status-danger-base);
-  background: rgba(198, 47, 47, 0.1);
+  background: color-mix(in srgb, var(--status-danger-base) 10%, transparent);
 }
 
 .todo-row.overdue .todo-title {
@@ -381,8 +381,8 @@
   min-width: 42px;
   height: 22px;
   border-radius: var(--radius-pill);
-  background: rgba(235, 229, 220, 0.9);
-  color: #6f6257;
+  background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
+  color: var(--global-text-warm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -400,8 +400,8 @@
 }
 
 .todo-row.completed {
-  --todo-row-accent: #7d9984;
-  background: linear-gradient(90deg, var(--status-completed-bg), #faf9f5);
+  --todo-row-accent: var(--status-primary-muted);
+  background: linear-gradient(90deg, var(--status-completed-bg), var(--components-calendar-gold-bg));
   border-color: var(--status-completed-border);
 }
 
@@ -409,66 +409,66 @@
   color: var(--status-completed-text);
   font-weight: 600;
   text-decoration: line-through;
-  text-decoration-color: #a9b0a6;
+  text-decoration-color: var(--global-surface-cool-2);
   text-decoration-thickness: 1.5px;
 }
 
 .todo-row.completed .todo-meta {
-  color: #9a9f95;
+  color: var(--global-surface-cool-1);
 }
 
 .todo-row.completed .todo-status-badge {
   background: #e7ede4;
-  color: #6f8976;
+  color: var(--global-surface-cool-5);
   text-decoration: none;
 }
 
 .todo-row.completed .check-button {
-  border-color: #7d9984;
+  border-color: var(--status-primary-muted);
   background: #e4ebe1;
-  color: #708777;
+  color: var(--global-surface-cool-4);
 }
 
 .todo-row.completed .todo-attachment-count {
   background: #e8ede5;
-  color: #718579;
+  color: var(--global-surface-cool-3);
   text-decoration: none;
 }
 
 .todo-row.late-done {
-  --todo-row-accent: #d4860a;
-  background: linear-gradient(90deg, #fdf6e8, #fefcf6);
-  border-color: #f0d9a8;
+  --todo-row-accent: var(--modals-schedule-amber);
+  background: linear-gradient(90deg, var(--components-calendar-gold-bg), var(--components-calendar-gold-bg));
+  border-color: var(--modals-schedule-cream-dark);
 }
 
 .todo-row.late-done .todo-title {
-  color: #7a5a0a;
-  text-decoration-color: #c8a050;
+  color: var(--modals-schedule-amber-dark);
+  text-decoration-color: var(--components-calendar-gold-mid);
 }
 
 .todo-row.late-done .todo-meta {
-  color: #9c8540;
+  color: var(--components-calendar-gold-deep);
 }
 
 .todo-row.late-done .todo-status-badge {
-  background: #fef0d0;
-  color: #9a6d08;
+  background: var(--modals-schedule-cream);
+  color: var(--modals-schedule-label);
 }
 
 .todo-row.late-done .due-time {
-  color: #9a6d08;
+  color: var(--modals-schedule-label);
   font-weight: 650;
 }
 
 .todo-row.late-done .check-button {
-  border-color: #d4860a;
-  background: #fef0d0;
-  color: #9a6d08;
+  border-color: var(--modals-schedule-amber);
+  background: var(--modals-schedule-cream);
+  color: var(--modals-schedule-label);
 }
 
 .todo-row.late-done .todo-attachment-count {
-  background: #fef0d0;
-  color: #9a6d08;
+  background: var(--modals-schedule-cream);
+  color: var(--modals-schedule-label);
 }
 
 .todo-row.overdue .check-button {
@@ -484,10 +484,10 @@
 .add-todo-button {
   width: 100%;
   min-height: 48px;
-  border: 2px dashed #d4cdc2;
+  border: 2px dashed var(--global-surface-warm-3);
   border-radius: var(--radius-lg);
   background: transparent;
-  color: #8c8277;
+  color: var(--global-surface-muted);
   margin-top: 8px;
   display: flex;
   align-items: center;
@@ -506,7 +506,7 @@
 
 .add-todo-button:hover {
   border-color: var(--status-primary-base);
-  background: rgba(26, 127, 114, 0.06);
+  background: color-mix(in srgb, var(--status-primary-base) 6%, transparent);
   color: var(--status-primary-base);
 }
 

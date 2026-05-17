@@ -37,7 +37,7 @@
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.08);
-  color: #dce9e9;
+  color: var(--global-surface-cool-0);
   font-size: var(--font-lg);
   font-weight: 700;
   padding: 0 14px;
@@ -72,21 +72,21 @@
   align-items: center;
   min-height: 72px;
   border-bottom: 1px solid var(--global-surface-border-light);
-  background: #faf7f2;
+  background: var(--global-surface-bg);
   padding: 12px 16px;
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .notify-row:hover {
-  background: #fffdf8;
+  background: var(--components-calendar-gold-bg);
 }
 
 .notify-row-title {
   min-width: 0;
   font-size: var(--font-xl);
   font-weight: 700;
-  color: #302c28;
+  color: var(--global-text-warm-darkest);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -134,22 +134,22 @@
   font-weight: 700;
   padding: 0 10px;
   cursor: pointer;
-  border: 1px solid rgba(26, 127, 114, 0.28);
-  background: rgba(26, 127, 114, 0.06);
+  border: 1px solid color-mix(in srgb, var(--status-primary-base) 28%, transparent);
+  background: color-mix(in srgb, var(--status-primary-base) 6%, transparent);
   color: var(--status-primary-base);
   transition: background 0.12s;
 }
 
 .notify-row-actions button:hover {
-  background: rgba(26, 127, 114, 0.12);
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
 }
 
 .notify-row-actions button:nth-child(2) {
-  border-color: rgba(198, 47, 47, 0.26);
+  border-color: color-mix(in srgb, var(--status-danger-base) 26%, transparent);
   background: transparent;
   color: var(--status-danger-base);
 }
 
 .notify-row-actions button:nth-child(2):hover {
-  background: rgba(198, 47, 47, 0.07);
+  background: color-mix(in srgb, var(--status-danger-base) 7%, transparent);
 }
