@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import logging
+import time
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 
@@ -14,11 +17,43 @@ from serialization import user_to_dict
 from server.auth import require_admin, require_user
 from server.schemas import AdminConfigRequest, AdminInitDbRequest, UserMeRequest
 
+logger = logging.getLogger("amtodo")
+
 router = APIRouter()
+
+# Cache for public IP addresses: {"ipv4": str|None, "ipv6": str|None, "ts": float}
+_ip_cache: dict[str, object] = {"ipv4": None, "ipv6": None, "ts": 0.0}
+
+
+async def _fetch_public_ips(ttl: int) -> tuple[str | None, str | None]:
+    """Return cached public IPs, refreshing if older than ttl seconds."""
+    now = time.monotonic()
+    if ttl > 0 and now - _ip_cache["ts"] < ttl:
+        return _ip_cache["ipv4"], _ip_cache["ipv6"]
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        ipv4, ipv6 = None, None
+        try:
+            resp = await client.get("http://v4.tcptest.cn")
+            resp.raise_for_status()
+            ipv4 = resp.text.strip()
+        except Exception:
+            logger.debug("Failed to fetch IPv4 address from v4.tcptest.cn")
+        try:
+            resp = await client.get("http://v6.tcptest.cn")
+            resp.raise_for_status()
+            ipv6 = resp.text.strip()
+        except Exception:
+            logger.debug("Failed to fetch IPv6 address from v6.tcptest.cn")
+
+    _ip_cache["ipv4"] = ipv4
+    _ip_cache["ipv6"] = ipv6
+    _ip_cache["ts"] = now
+    return ipv4, ipv6
 
 
 @router.get("/health")
-def health(request: Request) -> dict[str, object]:
+async def health(request: Request) -> dict[str, object]:
     """Return server health status and P-256 public key for request encryption."""
     settings = request.app.state.settings
     result: dict[str, object] = {
@@ -42,6 +77,22 @@ def health(request: Request) -> dict[str, object]:
                 result["public_key"] = base64.b64encode(raw).decode("ascii")
         except Exception:
             pass
+
+    ipv4, ipv6 = await _fetch_public_ips(settings.ip_cache_ttl_seconds)
+    result["ipv4"] = ipv4
+    result["ipv6"] = ipv6
+
+    host = settings.server_host
+    if host is None:
+        result["bind"] = ["ipv4", "ipv6"]
+    elif host in ("127.0.0.1", "localhost", "::1"):
+        result["bind"] = ["local"]
+    elif host == "0.0.0.0":
+        result["bind"] = ["ipv4"]
+    elif host == "::":
+        result["bind"] = ["ipv6"]
+    else:
+        result["bind"] = [host]
 
     return result
 
