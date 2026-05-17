@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { AMToDoApi, ScheduleItem } from "../api/client";
+import type { AMToDoApi, ScheduleItem, NotificationItem } from "../api/client";
+import type { UISettings } from "../lib/settings";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
@@ -16,17 +17,22 @@ import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { ScheduleCreateModal } from "./ScheduleCreateModal";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
+import { NotifyFormModal } from "./NotifyFormModal";
 import scheduleNormalIcon from "../assets/schedule-normal.svg";
 import scheduleFullIcon from "../assets/schedule-full.svg";
 
 type Props = {
   api: AMToDoApi;
+  settings: UISettings;
   startHour?: number;
   endHour?: number;
   slotMinutes?: number;
   weekStart?: number;
   cachedDateKey?: string;
   onDateChange?: (dateKey: string) => void;
+  onNavigate?: (type: "todo" | "schedule", id: number, action: "jump" | "edit") => void;
+  pendingAction?: { type: "todo" | "schedule"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
+  onPendingActionConsumed?: () => void;
 };
 
 const HOUR_HEIGHT = 64;
@@ -73,9 +79,27 @@ type PointerEditState = {
   moved: boolean;
 };
 
+type EditingNotify = {
+  id: number;
+  original: NotificationItem;
+  draft: NotificationItem;
+  dirty: boolean;
+  saving: boolean;
+};
+
+type NotifyPointerEditState = {
+  id: number;
+  startClientX: number;
+  startClientY: number;
+  initialTriggerAt: number;
+  initialDayIndex: number;
+  initialMinuteOfDay: number;
+  moved: boolean;
+};
+
 const MIN_DURATION_SECONDS = 60;
 
-export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange }: Props) {
+export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange, onNavigate, pendingAction, onPendingActionConsumed }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const naturalWeekStartKey = useMemo(
@@ -105,12 +129,47 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
   const dateBarRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    if (!pendingAction) return;
+    if (pendingAction.dateKey) {
+      const targetWeekStart = startOfWeekDateKey(pendingAction.dateKey, normalizedWeekStart);
+      const diff = Math.round((startOfDateKeyEpoch(targetWeekStart) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400);
+      setWeekOffset(Math.round(diff / 7));
+      setSelectedDateKey(pendingAction.dateKey);
+    }
+    if (pendingAction.action === "edit") {
+      const item = items.find((s) => s.id === pendingAction.id);
+      if (item) {
+        setDetailId(pendingAction.id);
+      }
+    }
+    onPendingActionConsumed?.();
+  }, [pendingAction, items]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dayOverlayRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scheduleEventRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const editingRef = useRef<EditingSchedule | null>(null);
   const pointerEditRef = useRef<PointerEditState | null>(null);
   const suppressNextClickRef = useRef(false);
   const [calendarAnchor, setCalendarAnchor] = useState<DOMRect | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifyEditId, setNotifyEditId] = useState<number | null>(null);
+  const [notifyContextMenu, setNotifyContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [editingNotify, setEditingNotify] = useState<EditingNotify | null>(null);
+  const editingNotifyRef = useRef<EditingNotify | null>(null);
+  const notifyPointerEditRef = useRef<NotifyPointerEditState | null>(null);
+  const notifyEventRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const [notifyFormOpen, setNotifyFormOpen] = useState(false);
+  const [notifyFormTriggerAt, setNotifyFormTriggerAt] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!cachedDateKey) return;
+    setSelectedDateKey(cachedDateKey);
+    const targetWeekStart = startOfWeekDateKey(cachedDateKey, normalizedWeekStart);
+    const diff = Math.round((startOfDateKeyEpoch(targetWeekStart) - startOfDateKeyEpoch(naturalWeekStartKey)) / 86400);
+    setWeekOffset(Math.round(diff / 7));
+  }, [cachedDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const normalizedSlotMinutes = useMemo(
     () => (SLOT_MINUTE_OPTIONS.includes(slotMinutes) ? slotMinutes : 30),
@@ -155,6 +214,16 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     () => buildScheduleBlocks(renderItems, days, visibleStartHour, visibleEndHour),
     [renderItems, days, visibleStartHour, visibleEndHour]
   );
+
+  const notifyRenderItems = useMemo(
+    () => (editingNotify ? notifications.map((n) => (n.id === editingNotify.id ? editingNotify.draft : n)) : notifications),
+    [editingNotify, notifications]
+  );
+
+  const notifyBlocksByDay = useMemo(
+    () => buildNotifyBlocks(notifyRenderItems, days, visibleStartHour, visibleEndHour),
+    [notifyRenderItems, days, visibleStartHour, visibleEndHour]
+  );
   const gridStyle = {
     "--schedule-slot-height": `${(HOUR_HEIGHT * normalizedSlotMinutes) / 60}px`
   } as CSSProperties;
@@ -164,9 +233,18 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   }, [editing]);
 
   useEffect(() => {
+    editingNotifyRef.current = editingNotify;
+  }, [editingNotify]);
+
+  useEffect(() => {
     if (!editing) return;
     scheduleEventRefs.current[editing.id]?.focus();
   }, [editing?.id, editing?.draft.start_at]);
+
+  useEffect(() => {
+    if (!editingNotify) return;
+    notifyEventRefs.current[editingNotify.id]?.focus();
+  }, [editingNotify?.id, editingNotify?.draft.trigger_at]);
 
   // Fetch schedules for the displayed week
   useEffect(() => {
@@ -187,59 +265,96 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
       });
   }, [api, days]);
 
+  // Fetch notifications for the displayed week
+  useEffect(() => {
+    const start = startOfDateKeyEpoch(days[0]);
+    const end = startOfDateKeyEpoch(addDaysToDateKey(days[6], 1));
+    api
+      .listNotifications({ start_at: start, end_at: end })
+      .then((result) => setNotifications(result.notifications))
+      .catch(() => setNotifications([]));
+  }, [api, days]);
+
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
-      const pointerState = pointerEditRef.current;
-      if (!pointerState) return;
+      const scheduleState = pointerEditRef.current;
+      const notifyState = notifyPointerEditRef.current;
+      if (!scheduleState && !notifyState) return;
       event.preventDefault();
 
-      const deltaX = event.clientX - pointerState.startClientX;
-      const deltaY = event.clientY - pointerState.startClientY;
-      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-        pointerState.moved = true;
+      if (scheduleState) {
+        const deltaX = event.clientX - scheduleState.startClientX;
+        const deltaY = event.clientY - scheduleState.startClientY;
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+          scheduleState.moved = true;
+        }
+
+        const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 60);
+        const deltaSeconds = deltaMinutes * 60;
+        let nextStartAt = scheduleState.initialStartAt;
+        let nextEndAt = scheduleState.initialEndAt;
+
+        if (scheduleState.mode === "move") {
+          const dayWidth = dayOverlayRefs.current[days[scheduleState.initialDayIndex]]?.getBoundingClientRect().width ?? 1;
+          const nextDayIndex = clamp(
+            scheduleState.initialDayIndex + Math.round(deltaX / Math.max(1, dayWidth)),
+            0,
+            days.length - 1
+          );
+          const durationMinutes = Math.max(1, Math.round(scheduleState.durationSeconds / 60));
+          const nextMinute = clamp(scheduleState.initialMinuteOfDay + deltaMinutes, 0, 1440 - durationMinutes);
+          nextStartAt = startOfDateKeyEpoch(days[nextDayIndex]) + nextMinute * 60;
+          nextEndAt = nextStartAt + scheduleState.durationSeconds;
+        } else if (scheduleState.mode === "resize-start") {
+          nextStartAt = Math.min(
+            scheduleState.initialStartAt + deltaSeconds,
+            scheduleState.initialEndAt - MIN_DURATION_SECONDS
+          );
+        } else {
+          nextEndAt = Math.max(
+            scheduleState.initialEndAt + deltaSeconds,
+            scheduleState.initialStartAt + MIN_DURATION_SECONDS
+          );
+        }
+
+        updateEditingDraft(scheduleState.id, (draft) => ({
+          ...draft,
+          start_at: nextStartAt,
+          end_at: nextEndAt,
+          duration: nextEndAt - nextStartAt
+        }));
       }
 
-      const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 60);
-      const deltaSeconds = deltaMinutes * 60;
-      let nextStartAt = pointerState.initialStartAt;
-      let nextEndAt = pointerState.initialEndAt;
+      if (notifyState) {
+        const deltaX = event.clientX - notifyState.startClientX;
+        const deltaY = event.clientY - notifyState.startClientY;
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+          notifyState.moved = true;
+        }
 
-      if (pointerState.mode === "move") {
-        const dayWidth = dayOverlayRefs.current[days[pointerState.initialDayIndex]]?.getBoundingClientRect().width ?? 1;
+        const deltaMinutes = Math.round((deltaY / HOUR_HEIGHT) * 60);
+        const dayWidth = dayOverlayRefs.current[days[notifyState.initialDayIndex]]?.getBoundingClientRect().width ?? 1;
         const nextDayIndex = clamp(
-          pointerState.initialDayIndex + Math.round(deltaX / Math.max(1, dayWidth)),
+          notifyState.initialDayIndex + Math.round(deltaX / Math.max(1, dayWidth)),
           0,
           days.length - 1
         );
-        const durationMinutes = Math.max(1, Math.round(pointerState.durationSeconds / 60));
-        const nextMinute = clamp(pointerState.initialMinuteOfDay + deltaMinutes, 0, 1440 - durationMinutes);
-        nextStartAt = startOfDateKeyEpoch(days[nextDayIndex]) + nextMinute * 60;
-        nextEndAt = nextStartAt + pointerState.durationSeconds;
-      } else if (pointerState.mode === "resize-start") {
-        nextStartAt = Math.min(
-          pointerState.initialStartAt + deltaSeconds,
-          pointerState.initialEndAt - MIN_DURATION_SECONDS
-        );
-      } else {
-        nextEndAt = Math.max(
-          pointerState.initialEndAt + deltaSeconds,
-          pointerState.initialStartAt + MIN_DURATION_SECONDS
-        );
-      }
+        const nextMinute = clamp(notifyState.initialMinuteOfDay + deltaMinutes, 0, 1439);
+        const nextTriggerAt = startOfDateKeyEpoch(days[nextDayIndex]) + nextMinute * 60;
 
-      updateEditingDraft(pointerState.id, (draft) => ({
-        ...draft,
-        start_at: nextStartAt,
-        end_at: nextEndAt,
-        duration: nextEndAt - nextStartAt
-      }));
+        updateNotifyDraft(notifyState.id, (draft) => ({
+          ...draft,
+          trigger_at: nextTriggerAt,
+        }));
+      }
     }
 
     function handlePointerUp() {
-      if (pointerEditRef.current?.moved) {
+      if (pointerEditRef.current?.moved || notifyPointerEditRef.current?.moved) {
         suppressNextClickRef.current = true;
       }
       pointerEditRef.current = null;
+      notifyPointerEditRef.current = null;
     }
 
     window.addEventListener("pointermove", handlePointerMove);
@@ -253,18 +368,21 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
   }, [days]);
 
   function prevWeek() {
+    void commitEditingNotify();
     void commitEditingSchedule().then(() => {
       setWeekOffset((w) => w - 1);
     });
   }
 
   function nextWeek() {
+    void commitEditingNotify();
     void commitEditingSchedule().then(() => {
       setWeekOffset((w) => w + 1);
     });
   }
 
   function goToToday() {
+    void commitEditingNotify();
     void commitEditingSchedule().then(() => {
       setWeekOffset(0);
       setSelectedDateKey(todayKey);
@@ -301,6 +419,27 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
       danger: true,
     });
     if (ok) deleteSchedule(id);
+  }
+
+  async function deleteNotification(id: number) {
+    try {
+      await api.deleteNotification(id);
+    } catch {
+      // keep going
+    }
+    if (notifyEditId === id) setNotifyEditId(null);
+    if (notifyContextMenu?.id === id) setNotifyContextMenu(null);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  async function askDeleteNotification(id: number) {
+    const ok = await ask({
+      title: "删除通知",
+      message: "确定删除这条通知吗？",
+      confirmLabel: "删除",
+      danger: true,
+    });
+    if (ok) deleteNotification(id);
   }
 
   function scheduleWindowForSlot(dayKey: string, slot: ScheduleSlot): { startAt: number; endAt: number } {
@@ -431,6 +570,164 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     });
   }
 
+  // ── Notify editing functions ──
+
+  function beginEditingNotify(item: NotificationItem) {
+    setNotifyEditId(null);
+    setEditingNotify({
+      id: item.id,
+      original: item,
+      draft: item,
+      dirty: false,
+      saving: false
+    });
+    setSelectedDateKey(dateKeyFromEpoch(item.trigger_at));
+  }
+
+  async function commitEditingNotify(target = editingNotifyRef.current, clearWhenDone = true) {
+    if (!target) return;
+    if (!target.dirty) {
+      if (clearWhenDone && editingNotifyRef.current?.id === target.id) {
+        setEditingNotify(null);
+      }
+      return;
+    }
+    if (editingNotifyRef.current?.id === target.id) {
+      setEditingNotify((prev) => (prev ? { ...prev, saving: true } : prev));
+    }
+    try {
+      const result = await api.updateNotification(target.id, { trigger_at: target.draft.trigger_at });
+      replaceNotificationItem(result.notification);
+      if (editingNotifyRef.current?.id === target.id) {
+        if (clearWhenDone) {
+          setEditingNotify(null);
+        } else {
+          setEditingNotify({
+            id: result.notification.id,
+            original: result.notification,
+            draft: result.notification,
+            dirty: false,
+            saving: false
+          });
+        }
+      }
+    } catch {
+      replaceNotificationItem(target.original);
+      if (editingNotifyRef.current?.id === target.id) {
+        setEditingNotify(clearWhenDone ? null : { ...target, draft: target.original, dirty: false, saving: false });
+      }
+    }
+  }
+
+  function cancelEditingNotify() {
+    const current = editingNotifyRef.current;
+    if (current?.dirty) {
+      replaceNotificationItem(current.original);
+    }
+    setEditingNotify(null);
+    notifyPointerEditRef.current = null;
+  }
+
+  function updateNotifyDraft(id: number, transform: (draft: NotificationItem) => NotificationItem) {
+    setEditingNotify((prev) => {
+      if (!prev || prev.id !== id || prev.saving) return prev;
+      const draft = transform(prev.draft);
+      return {
+        ...prev,
+        draft,
+        dirty: draft.trigger_at !== prev.original.trigger_at
+      };
+    });
+  }
+
+  function replaceNotificationItem(notification: NotificationItem) {
+    setNotifications((prev) =>
+      prev
+        .map((n) => (n.id === notification.id ? notification : n))
+        .sort((a, b) => a.trigger_at - b.trigger_at || a.id - b.id)
+    );
+  }
+
+  function handleNotifyClick(item: NotificationItem) {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
+    const current = editingNotifyRef.current;
+    if (current?.id === item.id) return;
+    if (current) {
+      void commitEditingNotify(current, true);
+    }
+    // Also commit any schedule editing
+    if (editingRef.current) {
+      void commitEditingSchedule(editingRef.current, true);
+    }
+    beginEditingNotify(item);
+  }
+
+  function beginNotifyPointerEdit(event: React.PointerEvent, item: NotificationItem) {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    target.focus();
+
+    // Commit any schedule editing
+    const schedCurrent = editingRef.current;
+    if (schedCurrent) {
+      void commitEditingSchedule(schedCurrent, true);
+    }
+
+    const notifyCurrent = editingNotifyRef.current;
+    if (notifyCurrent && notifyCurrent.id !== item.id) {
+      void commitEditingNotify(notifyCurrent, true);
+    }
+    const base = notifyCurrent?.id === item.id ? notifyCurrent.draft : item;
+    if (notifyCurrent?.id !== item.id) {
+      beginEditingNotify(base);
+    }
+
+    const startDayKey = dateKeyFromEpoch(base.trigger_at);
+    const initialDayIndex = Math.max(0, days.indexOf(startDayKey));
+    const dayStart = startOfDateKeyEpoch(days[initialDayIndex] ?? startDayKey);
+    notifyPointerEditRef.current = {
+      id: base.id,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      initialTriggerAt: base.trigger_at,
+      initialDayIndex,
+      initialMinuteOfDay: Math.round((base.trigger_at - dayStart) / 60),
+      moved: false
+    };
+    target.setPointerCapture(event.pointerId);
+  }
+
+  function handleNotifyKeyDown(event: React.KeyboardEvent, item: NotificationItem) {
+    const current = editingNotifyRef.current;
+    if (!current || current.id !== item.id) return;
+    const draft = current.draft;
+    const minuteStep = event.shiftKey ? 5 : 1;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditingNotify();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      void commitEditingNotify(current, true).then(() => setNotifyEditId(item.id));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      updateNotifyDraft(item.id, (d) => moveNotifyVertically(d, -minuteStep * 60));
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      updateNotifyDraft(item.id, (d) => moveNotifyVertically(d, minuteStep * 60));
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      updateNotifyDraft(item.id, (d) => moveNotifyToAdjacentDay(d, -1, days));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      updateNotifyDraft(item.id, (d) => moveNotifyToAdjacentDay(d, 1, days));
+    }
+  }
+
   function handleScheduleClick(item: ScheduleItem) {
     if (suppressNextClickRef.current) {
       suppressNextClickRef.current = false;
@@ -438,6 +735,10 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     }
     const current = editingRef.current;
     if (current?.id === item.id) return;
+    // Commit any notify editing first
+    if (editingNotifyRef.current) {
+      void commitEditingNotify(editingNotifyRef.current, true);
+    }
     if (current) {
       void commitEditingSchedule(current, true);
     }
@@ -452,6 +753,10 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
     event.preventDefault();
     event.stopPropagation();
     focusScheduleEvent(event.currentTarget);
+    // Commit any notify editing first
+    if (editingNotifyRef.current) {
+      void commitEditingNotify(editingNotifyRef.current, true);
+    }
     const current = editingRef.current;
     if (current && current.id !== item.id) {
       void commitEditingSchedule(current, true);
@@ -578,6 +883,7 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
               onCreate={beginCreate}
               onClick={(dayKey) => {
                 setSelectedDateKey(dayKey);
+                void commitEditingNotify();
                 void commitEditingSchedule();
               }}
               onContextMenu={(dayKey, currentSlot, event) => {
@@ -624,6 +930,25 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
                     }}
                   />
                 ))}
+                {(notifyBlocksByDay[dayKey] ?? []).map((nb) => (
+                  <NotifyEventBlock
+                    key={`notify-${nb.item.id}`}
+                    item={nb.item}
+                    top={nb.top}
+                    ref={(node) => { notifyEventRefs.current[nb.item.id] = node; }}
+                    selected={editingNotify?.id === nb.item.id}
+                    saving={editingNotify?.id === nb.item.id && editingNotify.saving}
+                    onClick={() => handleNotifyClick(nb.item)}
+                    onDoubleClick={() => setNotifyEditId(nb.item.id)}
+                    onKeyDown={(event) => handleNotifyKeyDown(event, nb.item)}
+                    onPointerDown={(event) => beginNotifyPointerEdit(event, nb.item)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setNotifyContextMenu({ id: nb.item.id, x: e.clientX, y: e.clientY });
+                    }}
+                  />
+                ))}
               </div>
             ))}
           </div>
@@ -652,6 +977,31 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
           endAt={createDraft.endAt}
           onClose={() => setCreateDraft(null)}
           onCreate={addSchedule}
+        />
+      ) : null}
+
+      {(notifyEditId != null || notifyFormOpen) ? (
+        <NotifyFormModal
+          api={api}
+          editId={notifyEditId}
+          initialTriggerAt={notifyFormTriggerAt}
+          onNavigate={onNavigate}
+          onOpenScheduleDetail={(id) => {
+            setNotifyEditId(null);
+            setNotifyFormOpen(false);
+            setDetailId(id);
+          }}
+          onClose={() => {
+            setNotifyEditId(null);
+            setNotifyFormOpen(false);
+            setNotifyFormTriggerAt(undefined);
+            // Reload notifications
+            const start = startOfDateKeyEpoch(days[0]);
+            const end = startOfDateKeyEpoch(addDaysToDateKey(days[6], 1));
+            api.listNotifications({ start_at: start, end_at: end })
+              .then((result) => setNotifications(result.notifications))
+              .catch(() => {});
+          }}
         />
       ) : null}
 
@@ -700,9 +1050,54 @@ export function ScheduleView({ api, startHour = 6, endHour = 24, slotMinutes = 3
                   endAt: emptyContextMenu.endAt
                 });
               }
+            },
+            {
+              label: "新建通知",
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              ),
+              action: () => {
+                setNotifyFormTriggerAt(emptyContextMenu.startAt);
+                setEmptyContextMenu(null);
+                setNotifyFormOpen(true);
+              }
             }
           ]}
           onClose={() => setEmptyContextMenu(null)}
+        />
+      ) : null}
+      {notifyContextMenu ? (
+        <ContextMenu
+          x={notifyContextMenu.x}
+          y={notifyContextMenu.y}
+          items={[
+            {
+              label: `id:${notifyContextMenu.id}`,
+              icon: null,
+              action: () => {},
+              disabled: true
+            },
+            {
+              label: "编辑",
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              ),
+              action: () => setNotifyEditId(notifyContextMenu.id)
+            },
+            {
+              label: "删除",
+              icon: <TrashIcon />,
+              danger: true,
+              action: () => askDeleteNotification(notifyContextMenu.id)
+            }
+          ]}
+          onClose={() => setNotifyContextMenu(null)}
         />
       ) : null}
       {confirmDialog}
@@ -828,6 +1223,67 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
   );
 });
 
+const NotifyEventBlock = forwardRef<HTMLButtonElement, {
+  item: NotificationItem;
+  top: number;
+  selected?: boolean;
+  saving?: boolean;
+  onClick?: () => void;
+  onDoubleClick?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}>(function NotifyEventBlock({ item, top, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onContextMenu }, ref) {
+  const timeText = formatTime(item.trigger_at);
+  const className = [
+    "notify-event",
+    selected ? "selected" : "",
+    saving ? "saving" : ""
+  ].filter(Boolean).join(" ");
+  return (
+    <button
+      type="button"
+      className={className}
+      ref={ref}
+      style={{ top: `${top}px` }}
+      title={`${item.title} ${timeText}`}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
+      onPointerDown={onPointerDown}
+      onContextMenu={onContextMenu}
+      aria-pressed={selected}
+    >
+      <span className="notify-icon">🔔</span>
+      <span className="notify-title">{item.title}</span>
+      <span className="notify-time">{timeText}</span>
+    </button>
+  );
+});
+
+function buildNotifyBlocks(
+  notifications: NotificationItem[],
+  days: string[],
+  visibleStartHour: number,
+  visibleEndHour: number
+): Record<string, { item: NotificationItem; top: number }[]> {
+  return Object.fromEntries(
+    days.map((dayKey) => {
+      const dayStart = startOfDateKeyEpoch(dayKey);
+      const visibleStart = dayStart + visibleStartHour * 3600;
+      const visibleEnd = dayStart + visibleEndHour * 3600;
+      const blocks = notifications
+        .filter((n) => n.trigger_at >= visibleStart && n.trigger_at < visibleEnd)
+        .sort((a, b) => a.trigger_at - b.trigger_at || a.id - b.id)
+        .map((item) => ({
+          item,
+          top: ((item.trigger_at - visibleStart) / 3600) * HOUR_HEIGHT,
+        }));
+      return [dayKey, blocks];
+    })
+  );
+}
+
 function normalizeScheduleDraft(item: ScheduleItem): ScheduleItem {
   const startAt = Math.trunc(item.start_at);
   const endAt = Math.max(startAt + MIN_DURATION_SECONDS, Math.trunc(item.end_at));
@@ -865,6 +1321,23 @@ function moveScheduleToAdjacentDay(item: ScheduleItem, deltaDays: number, days: 
     start_at: item.start_at + deltaSeconds,
     end_at: item.end_at + deltaSeconds
   };
+}
+
+function moveNotifyVertically(item: NotificationItem, deltaSeconds: number): NotificationItem {
+  const dayKey = dateKeyFromEpoch(item.trigger_at);
+  const dayStart = startOfDateKeyEpoch(dayKey);
+  const nextTrigger = clamp(item.trigger_at + deltaSeconds, dayStart, dayStart + 86399);
+  return { ...item, trigger_at: nextTrigger };
+}
+
+function moveNotifyToAdjacentDay(item: NotificationItem, deltaDays: number, days: string[]): NotificationItem {
+  const dayKey = dateKeyFromEpoch(item.trigger_at);
+  const currentIndex = days.indexOf(dayKey);
+  if (currentIndex < 0) return item;
+  const nextIndex = clamp(currentIndex + deltaDays, 0, days.length - 1);
+  if (nextIndex === currentIndex) return item;
+  const deltaSeconds = startOfDateKeyEpoch(days[nextIndex]) - startOfDateKeyEpoch(days[currentIndex]);
+  return { ...item, trigger_at: item.trigger_at + deltaSeconds };
 }
 
 function resizeScheduleEnd(item: ScheduleItem, deltaSeconds: number): ScheduleItem {

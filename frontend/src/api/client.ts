@@ -4,6 +4,9 @@ export type HealthResponse = {
   status: string;
   version: string;
   public_key?: string;
+  ipv4?: string;
+  ipv6?: string;
+  bind?: string[];
   limits: {
     max_attachment_size_bytes: number;
     max_attachments_per_todo: number;
@@ -422,6 +425,7 @@ export class AMToDoApi {
       priority_min?: number | null;
       priority_max?: number | null;
       tag?: string | null;
+      description?: string | null;
       sort_by?: string;
       sort_order?: string;
       limit?: number;
@@ -447,6 +451,7 @@ export class AMToDoApi {
       priority_min: null,
       priority_max: null,
       tag: null,
+      description: null,
       sort_by: "updated_at",
       sort_order: "desc",
       limit: 50,
@@ -802,6 +807,24 @@ export class AMToDoApi {
     return this.post("/api/v1/notifications/list", {
       start_at: params?.start_at ?? null,
       end_at: params?.end_at ?? null,
+    });
+  }
+
+  async notificationChangelog(params?: {
+    entity_id?: number | null;
+    action?: string | null;
+    start_at?: number | null;
+    end_at?: number | null;
+    limit?: number;
+    offset?: number;
+  }): Promise<ChangelogResponse> {
+    return this.post("/api/v1/notifications/changelog", {
+      entity_id: params?.entity_id ?? null,
+      action: params?.action ?? null,
+      start_at: params?.start_at ?? null,
+      end_at: params?.end_at ?? null,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0
     });
   }
 

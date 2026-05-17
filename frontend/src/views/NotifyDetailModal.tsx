@@ -117,7 +117,7 @@ export function NotifyDetailModal({
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">通知详情</h2>
+            <h2 className="schedule-modal-title">通知详情<span className="notify-modal-id-badge">#{notificationId}</span></h2>
           </div>
           <button
             type="button"

@@ -1,43 +1,83 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AMToDoApi, ScheduleItem, TodoItem } from "../api/client";
-import { addDaysToDateKey, formatTime, startOfDateKeyEpoch } from "../lib/time";
-import { DatePicker } from "./DatePicker";
+import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../api/client";
+import { formatTime } from "../lib/time";
 import { useConfirm } from "./ConfirmDialog";
 
 type Props = {
   api: AMToDoApi;
 };
 
-type TrashMode = "todo" | "schedule";
+type TrashMode = "all" | "todo" | "schedule" | "notify";
 type TrashResult =
   | { type: "todo"; item: TodoItem }
-  | { type: "schedule"; item: ScheduleItem };
+  | { type: "schedule"; item: ScheduleItem }
+  | { type: "notify"; item: NotificationItem };
+
+const FILTER_TABS: { value: TrashMode; label: string; dotClass?: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "todo", label: "ToDo", dotClass: "todo" },
+  { value: "schedule", label: "Schedule", dotClass: "sch" },
+  { value: "notify", label: "Notify", dotClass: "notify" },
+];
+
+function TodoIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function ScheduleIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function NotifyIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
 
 function RestoreIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M3 7v6h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.5 13A7 7 0 1 0 7 5.3L3 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M3 7v6h6" />
+      <path d="M5.5 13A7 7 0 1 0 7 5.3L3 9" />
     </svg>
   );
 }
 
 function PurgeIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 6l1 14h10l1-14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 11v5M14 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
 
 export function TrashView({ api }: Props) {
-  const [mode, setMode] = useState<TrashMode>("todo");
+  const [mode, setMode] = useState<TrashMode>("all");
   const [query, setQuery] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [items, setItems] = useState<TrashResult[]>([]);
   const [status, setStatus] = useState("加载中");
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -47,14 +87,28 @@ export function TrashView({ api }: Props) {
     let cancelled = false;
     setStatus("加载中");
     setItems([]);
-    const request = mode === "todo"
-      ? api.listTodoTrash({ limit: 500 }).then((result) => result.todos.map((item) => ({ type: "todo" as const, item })))
-      : api.listScheduleTrash({ limit: 500 }).then((result) => result.schedules.map((item) => ({ type: "schedule" as const, item })));
-    request
-      .then((next) => {
+
+    const requests: Promise<TrashResult[]>[] = [];
+    if (mode === "all" || mode === "todo") {
+      requests.push(api.listTodoTrash({ limit: 500 }).then((r) => r.todos.map((item) => ({ type: "todo" as const, item }))));
+    }
+    if (mode === "all" || mode === "schedule") {
+      requests.push(api.listScheduleTrash({ limit: 500 }).then((r) => r.schedules.map((item) => ({ type: "schedule" as const, item }))));
+    }
+    if (mode === "all" || mode === "notify") {
+      requests.push(api.listNotificationTrash().then((r) => r.notifications.map((item) => ({ type: "notify" as const, item }))));
+    }
+
+    Promise.all(requests)
+      .then((results) => {
         if (cancelled) return;
-        setItems(next);
-        setStatus(next.length ? "" : "回收站为空");
+        const merged = results.flat().sort((a, b) => {
+          const da = a.item.deleted_at ?? 0;
+          const db = b.item.deleted_at ?? 0;
+          return db - da;
+        });
+        setItems(merged);
+        setStatus(merged.length ? "" : "回收站为空");
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -68,38 +122,41 @@ export function TrashView({ api }: Props) {
 
   const filteredItems = useMemo(() => {
     const trimmed = query.trim().toLocaleLowerCase();
-    const start = startDate ? startOfDateKeyEpoch(startDate) : null;
-    const end = endDate ? startOfDateKeyEpoch(addDaysToDateKey(endDate, 1)) : null;
+    if (!trimmed) return items;
     return items.filter((entry) => {
-      const deletedAt = entry.item.deleted_at ?? null;
-      if (start !== null && (deletedAt === null || deletedAt < start)) return false;
-      if (end !== null && (deletedAt === null || deletedAt >= end)) return false;
-      if (!trimmed) return true;
-      const haystack = entry.type === "todo"
-        ? [entry.item.title, entry.item.description, entry.item.tag].filter(Boolean).join(" ")
-        : [entry.item.title, entry.item.description, entry.item.category, entry.item.location].filter(Boolean).join(" ");
+      const haystack =
+        entry.type === "todo"
+          ? [entry.item.title, entry.item.description, (entry.item as TodoItem).tag].filter(Boolean).join(" ")
+          : entry.type === "schedule"
+            ? [entry.item.title, entry.item.description, (entry.item as ScheduleItem).category, (entry.item as ScheduleItem).location].filter(Boolean).join(" ")
+            : [entry.item.title, entry.item.description].filter(Boolean).join(" ");
       return haystack.toLocaleLowerCase().includes(trimmed);
     });
-  }, [endDate, items, query, startDate]);
+  }, [items, query]);
 
-  function switchMode(next: TrashMode) {
-    setMode(next);
-    setQuery("");
-    setStartDate("");
-    setEndDate("");
-  }
+  const countByType = useMemo(() => {
+    const counts = { todo: 0, schedule: 0, notify: 0 };
+    for (const entry of items) {
+      counts[entry.type]++;
+    }
+    return counts;
+  }, [items]);
 
   async function restore(entry: TrashResult) {
     const key = resultKey(entry);
     setBusyKey(key);
     try {
-      const result = entry.type === "todo"
-        ? await api.restoreTodos([entry.item.id])
-        : await api.restoreSchedules([entry.item.id]);
-      const failed = result.results.find((item) => !item.ok);
-      if (failed) {
-        setStatus(failed.error?.message ?? "恢复失败");
-        return;
+      if (entry.type === "todo") {
+        const result = await api.restoreTodos([entry.item.id]);
+        const failed = result.results.find((r) => !r.ok);
+        if (failed) { setStatus(failed.error?.message ?? "恢复失败"); return; }
+      } else if (entry.type === "schedule") {
+        const result = await api.restoreSchedules([entry.item.id]);
+        const failed = result.results.find((r) => !r.ok);
+        if (failed) { setStatus(failed.error?.message ?? "恢复失败"); return; }
+      } else {
+        const result = await api.restoreNotification(entry.item.id);
+        if (!result.ok) { setStatus("恢复失败"); return; }
       }
       setItems((prev) => prev.filter((item) => resultKey(item) !== key));
       setStatus("已恢复");
@@ -111,24 +168,29 @@ export function TrashView({ api }: Props) {
   }
 
   async function purge(entry: TrashResult) {
+    const typeLabel = entry.type === "todo" ? "待办" : entry.type === "schedule" ? "日程" : "通知";
     const ok = await ask({
-      title: entry.type === "todo" ? "永久删除待办" : "永久删除日程",
+      title: `永久删除${typeLabel}`,
       message: "永久删除后无法恢复，相关附件也会被清除。",
       confirmLabel: "永久删除",
-      danger: true
+      danger: true,
     });
     if (!ok) return;
 
     const key = resultKey(entry);
     setBusyKey(key);
     try {
-      const result = entry.type === "todo"
-        ? await api.purgeTodos([entry.item.id])
-        : await api.purgeSchedules([entry.item.id]);
-      const failed = result.results.find((item) => !item.ok);
-      if (failed) {
-        setStatus(failed.error?.message ?? "永久删除失败");
-        return;
+      if (entry.type === "todo") {
+        const result = await api.purgeTodos([entry.item.id]);
+        const failed = result.results.find((r) => !r.ok);
+        if (failed) { setStatus(failed.error?.message ?? "永久删除失败"); return; }
+      } else if (entry.type === "schedule") {
+        const result = await api.purgeSchedules([entry.item.id]);
+        const failed = result.results.find((r) => !r.ok);
+        if (failed) { setStatus(failed.error?.message ?? "永久删除失败"); return; }
+      } else {
+        const result = await api.purgeNotification(entry.item.id);
+        if (!result.ok) { setStatus("永久删除失败"); return; }
       }
       setItems((prev) => prev.filter((item) => resultKey(item) !== key));
       setStatus("已永久删除");
@@ -141,72 +203,78 @@ export function TrashView({ api }: Props) {
 
   return (
     <div className="trash-view">
-      <div className="trash-topbar">
-        <div className="trash-tabs" role="tablist">
-          <button
-            type="button"
-            className={mode === "todo" ? "active" : ""}
-            onClick={() => switchMode("todo")}
-          >
-            ToDo
-          </button>
-          <button
-            type="button"
-            className={mode === "schedule" ? "active" : ""}
-            onClick={() => switchMode("schedule")}
-          >
-            Schedule
-          </button>
+      <div className="trash-filter-bar">
+        <div className="filter-tabs" role="tablist">
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              className={mode === tab.value ? "active" : ""}
+              onClick={() => { setMode(tab.value); setQuery(""); }}
+            >
+              {tab.dotClass && <span className={`ft-dot ${tab.dotClass}`} />}
+              {tab.label}
+              <span className="ft-count">
+                {tab.value === "all" ? items.length : countByType[tab.value]}
+              </span>
+            </button>
+          ))}
         </div>
-        <input
-          className="trash-search"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={mode === "todo" ? "搜索已删除待办" : "搜索已删除日程"}
-        />
-      </div>
-
-      <div className="trash-filterbar">
-        <span>{status || `${filteredItems.length}/${items.length} 项`}</span>
-        <div className="trash-date-filters">
-          <DatePicker value={startDate} onChange={setStartDate} placeholder="删除开始" />
-          <DatePicker value={endDate} onChange={setEndDate} placeholder="删除结束" panelAlign="right" />
+        <div className="trash-search-wrap">
+          <SearchIcon />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索回收站..."
+          />
         </div>
       </div>
 
       <div className="trash-list">
-        {filteredItems.map((entry) => (
-          <article className={`trash-row ${entry.type}`} key={resultKey(entry)}>
-            <span className="trash-kind">{entry.type === "todo" ? "ToDo" : "Schedule"}</span>
-            <div className="trash-main">
-              <strong>{entry.item.title}</strong>
-              <div className="trash-meta">{renderMeta(entry)}</div>
-              <div className="trash-deleted-at">删除于 {formatDeletedAt(entry.item.deleted_at)}</div>
+        {filteredItems.map((entry) => {
+          const busy = busyKey === resultKey(entry);
+          return (
+            <div className="trash-item" key={resultKey(entry)}>
+              <div className={`trash-type-icon ${entry.type}`}>
+                {entry.type === "todo" ? <TodoIcon /> : entry.type === "schedule" ? <ScheduleIcon /> : <NotifyIcon />}
+              </div>
+              <div className="trash-item-content">
+                <div className="trash-item-title">{entry.item.title}</div>
+                <div className="trash-item-meta">
+                  <span className={`trash-item-type-tag ${entry.type}`}>
+                    {entry.type === "todo" ? "ToDo" : entry.type === "schedule" ? "Schedule" : "Notify"}
+                  </span>
+                  <span className="trash-item-id" title={`id:${entry.item.id}`}>#{entry.item.id}</span>
+                  {renderMeta(entry)}
+                </div>
+              </div>
+              <span className="trash-item-deleted">{formatDeletedAt(entry.item.deleted_at)}</span>
+              <div className="trash-item-actions">
+                <button
+                  type="button"
+                  className="trash-action-btn restore"
+                  disabled={busy}
+                  onClick={() => void restore(entry)}
+                  title="恢复"
+                >
+                  <RestoreIcon />
+                </button>
+                <button
+                  type="button"
+                  className="trash-action-btn purge"
+                  disabled={busy}
+                  onClick={() => void purge(entry)}
+                  title="永久删除"
+                >
+                  <PurgeIcon />
+                </button>
+              </div>
             </div>
-            <div className="trash-actions">
-              <button
-                type="button"
-                className="trash-action-btn restore"
-                disabled={busyKey === resultKey(entry)}
-                onClick={() => void restore(entry)}
-              >
-                <RestoreIcon />
-                恢复
-              </button>
-              <button
-                type="button"
-                className="trash-action-btn purge"
-                disabled={busyKey === resultKey(entry)}
-                onClick={() => void purge(entry)}
-              >
-                <PurgeIcon />
-                永久删除
-              </button>
-            </div>
-          </article>
-        ))}
-        {!status && filteredItems.length === 0 ? <div className="empty-state">没有匹配的已删除项目</div> : null}
+          );
+        })}
+        {status && <div className="trash-empty"><span>{status}</span></div>}
+        {!status && filteredItems.length === 0 && <div className="trash-empty"><span>没有匹配的已删除项目</span></div>}
       </div>
 
       {confirmDialog}
@@ -220,40 +288,39 @@ function resultKey(entry: TrashResult): string {
 
 function renderMeta(entry: TrashResult) {
   if (entry.type === "todo") {
+    const todo = entry.item as TodoItem;
     return (
       <>
-        {entry.item.planned_at ? <span>计划 {formatShortDateTime(entry.item.planned_at)}</span> : null}
-        {entry.item.due_at ? <span>截止 {formatShortDateTime(entry.item.due_at)}</span> : null}
-        {entry.item.tag ? <span>{entry.item.tag}</span> : null}
-        <span>{entry.item.completed ? "已完成" : "未完成"}</span>
+        {todo.due_at ? <span>截止 {formatShortDate(todo.due_at)}</span> : null}
+        {todo.tag ? <span>{todo.tag}</span> : null}
       </>
     );
   }
-  return (
-    <>
-      <span>{formatShortDateTime(entry.item.start_at)} - {formatShortDateTime(entry.item.end_at)}</span>
-      {entry.item.category ? <span>{entry.item.category}</span> : null}
-      {entry.item.location ? <span>{entry.item.location}</span> : null}
-    </>
-  );
+  if (entry.type === "schedule") {
+    const sch = entry.item as ScheduleItem;
+    return <span>{formatShortDate(sch.start_at)} - {formatShortDate(sch.end_at)}</span>;
+  }
+  const n = entry.item as NotificationItem;
+  return <span>触发 {formatShortDate(n.trigger_at)}</span>;
 }
 
 function formatDeletedAt(epoch?: number | null): string {
-  if (!epoch) return "未知时间";
+  if (!epoch) return "";
+  const now = Math.floor(Date.now() / 1000);
+  const diff = Math.max(0, now - epoch);
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  const days = Math.floor(diff / 86400);
+  if (days <= 30) return `${days} 天前`;
   return formatDateTime(epoch);
 }
 
-function formatShortDateTime(epoch: number): string {
+function formatShortDate(epoch: number): string {
   const d = new Date(epoch * 1000);
-  const nowYear = new Date().getFullYear();
-  const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  const hm = formatTime(epoch);
-  if (year === nowYear) {
-    return `${month}-${day} ${hm}`;
-  }
-  return `${year}-${month}-${day} ${hm}`;
+  return `${month}-${day} ${formatTime(epoch)}`;
 }
 
 function formatDateTime(epoch: number): string {

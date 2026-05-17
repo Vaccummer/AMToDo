@@ -51,6 +51,7 @@ type Props = {
 
 export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [serverUrl, setServerUrl] = useState(initial.server_url);
+  const [lanAddress, setLanAddress] = useState(initial.lan_address);
   const [accessToken, setAccessToken] = useState(initial.access_token);
   const [language, setLanguage] = useState(initial.language);
   const [timezone, setTimezone] = useState(initial.timezone);
@@ -65,6 +66,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [testingUrl, setTestingUrl] = useState(false);
   const [urlTestResult, setUrlTestResult] = useState<{ ok: boolean; version?: string; message: string } | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  // LAN address load
+  const [loadingLan, setLoadingLan] = useState(false);
+  const [lanLoadResult, setLanLoadResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Token verification
   const [verifyingToken, setVerifyingToken] = useState(false);
@@ -98,6 +103,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
 
   useEffect(() => {
     setServerUrl(initial.server_url);
+    setLanAddress(initial.lan_address);
     setAccessToken(initial.access_token);
     setLanguage(initial.language);
     setTimezone(initial.timezone);
@@ -120,6 +126,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const dirty = useMemo(() => {
     return (
       serverUrl !== initial.server_url ||
+      lanAddress !== initial.lan_address ||
       accessToken !== initial.access_token ||
       language !== initial.language ||
       timezone !== initial.timezone ||
@@ -132,6 +139,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     );
   }, [
     serverUrl,
+    lanAddress,
     accessToken,
     language,
     timezone,
@@ -149,6 +157,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const urlInputClass = [
     "settings-modal-input",
     urlTestResult ? (urlTestResult.ok ? "valid" : "invalid") : ""
+  ].filter(Boolean).join(" ");
+  const lanInputClass = [
+    "settings-modal-input",
+    lanLoadResult ? (lanLoadResult.ok ? "valid" : "invalid") : ""
   ].filter(Boolean).join(" ");
   const tokenInputClass = [
     "settings-modal-input",
@@ -181,6 +193,45 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       setUrlTestResult({ ok: false, message: err instanceof Error ? err.message : "连接失败" });
     } finally {
       setTestingUrl(false);
+    }
+  }
+
+  async function handleLoadFromLan() {
+    if (!lanAddress) return;
+    setLoadingLan(true);
+    setLanLoadResult(null);
+    try {
+      const api = new AMToDoApi(lanAddress, null);
+      const result = await api.health();
+      if (!result.ipv4 && !result.ipv6) {
+        setLanLoadResult({ ok: false, message: "服务器未返回公网地址" });
+        return;
+      }
+      // Verify addresses with short timeout, prefer IPv6
+      const url = new URL(lanAddress);
+      const port = url.port;
+      const candidates: string[] = [];
+      if (result.ipv6) candidates.push(`${url.protocol}//${result.ipv6}:${port}`);
+      if (result.ipv4) candidates.push(`${url.protocol}//${result.ipv4}:${port}`);
+      for (const candidate of candidates) {
+        try {
+          const verifyApi = new AMToDoApi(candidate, null);
+          await Promise.race([
+            verifyApi.health(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))
+          ]);
+          setServerUrl(candidate);
+          setLanLoadResult({ ok: true, message: `已获取并验证公网地址: ${candidate}` });
+          return;
+        } catch {
+          continue;
+        }
+      }
+      setLanLoadResult({ ok: false, message: "获取的公网地址均不可达" });
+    } catch (err: unknown) {
+      setLanLoadResult({ ok: false, message: err instanceof Error ? err.message : "连接失败" });
+    } finally {
+      setLoadingLan(false);
     }
   }
 
@@ -239,6 +290,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     const updated: UISettings = {
       ...initial,
       server_url: serverUrl,
+      lan_address: lanAddress,
       access_token: accessToken,
       language,
       timezone,
@@ -316,6 +368,33 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
         <div className="settings-modal-body">
           {/* Server Connection */}
           <div className="settings-modal-section-label">服务器连接</div>
+
+          <div className="settings-modal-field">
+            <label className="settings-modal-label" htmlFor="lan-addr">内网地址</label>
+            <div className="settings-modal-input-row">
+              <input
+                id="lan-addr"
+                type="text"
+                className={lanInputClass}
+                value={lanAddress}
+                onChange={(e) => { setLanAddress(e.target.value); setLanLoadResult(null); }}
+                placeholder="http://192.168.x.x:8000"
+              />
+              <button
+                type="button"
+                className="settings-modal-inline-btn"
+                disabled={loadingLan || !lanAddress}
+                onClick={handleLoadFromLan}
+              >
+                {loadingLan ? "加载中..." : "加载"}
+              </button>
+            </div>
+            {lanLoadResult ? (
+              <span className={`settings-modal-field-msg ${lanLoadResult.ok ? "ok" : "err"}`}>
+                {lanLoadResult.message}
+              </span>
+            ) : null}
+          </div>
 
           <div className="settings-modal-field">
             <label className="settings-modal-label" htmlFor="srv-url">服务器地址</label>
