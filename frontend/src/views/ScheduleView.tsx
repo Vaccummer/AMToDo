@@ -18,6 +18,8 @@ import { useConfirm } from "./ConfirmDialog";
 import { ScheduleCreateModal } from "./ScheduleCreateModal";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { NotifyFormModal } from "./NotifyFormModal";
+import { getEventColors, getNotifyEventColors } from "../themes";
+import { useGlassTooltip, GlassTooltip } from "../hooks/useGlassTooltip";
 import scheduleNormalIcon from "../assets/schedule-normal.svg";
 import scheduleFullIcon from "../assets/schedule-full.svg";
 
@@ -36,7 +38,6 @@ type Props = {
 };
 
 const HOUR_HEIGHT = 64;
-const EVENT_COLOR_COUNT = 5;
 const SLOT_MINUTE_OPTIONS = [15, 30, 45, 60];
 
 type ScheduleTextMode = "tiny" | "mini" | "mid" | "full";
@@ -51,7 +52,7 @@ type RenderedScheduleBlock = {
   item: ScheduleItem;
   top: number;
   height: number;
-  colorClass: string;
+  backgroundColor: string;
   textMode: ScheduleTextMode;
   titleLines: number;
 };
@@ -221,7 +222,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   );
 
   const notifyBlocksByDay = useMemo(
-    () => buildNotifyBlocks(notifyRenderItems, days, visibleStartHour, visibleEndHour),
+    () => buildNotifyBlocks(notifyRenderItems, days, visibleStartHour, visibleEndHour, getNotifyEventColors()),
     [notifyRenderItems, days, visibleStartHour, visibleEndHour]
   );
   const gridStyle = {
@@ -935,6 +936,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                     key={`notify-${nb.item.id}`}
                     item={nb.item}
                     top={nb.top}
+                    backgroundColor={nb.backgroundColor}
                     ref={(node) => { notifyEventRefs.current[nb.item.id] = node; }}
                     selected={editingNotify?.id === nb.item.id}
                     saving={editingNotify?.id === nb.item.id && editingNotify.saving}
@@ -1166,14 +1168,15 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
   onResizePointerDown?: (e: React.PointerEvent, mode: ScheduleEditPointerMode) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }>(function ScheduleEventBlock({ block, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onResizePointerDown, onContextMenu }, ref) {
+  const tooltip = useGlassTooltip();
   const style = {
     top: `${block.top}px`,
     height: `${block.height}px`,
+    backgroundColor: block.backgroundColor,
     "--title-lines": block.titleLines
   } as CSSProperties & Record<"--title-lines", number>;
   const className = [
     "schedule-event",
-    block.colorClass,
     block.textMode,
     selected ? "selected" : "",
     saving ? "saving" : ""
@@ -1181,51 +1184,70 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
   const timeText = `${formatTime(block.item.start_at)}-${formatTime(block.item.end_at)}`;
 
   return (
-    <button
-      type="button"
-      className={className}
-      ref={ref}
-      style={style}
-      title={`${timeText} ${block.item.title}`}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={onKeyDown}
-      onPointerDown={onPointerDown}
-      onContextMenu={onContextMenu}
-      aria-pressed={selected}
-    >
-      {selected ? (
-        <span
-          className="schedule-resize-handle top"
-          onPointerDown={(event) => onResizePointerDown?.(event, "resize-start")}
-          aria-hidden="true"
-        />
-      ) : null}
-      {block.textMode === "tiny" ? null : (
-        <>
-          {(block.textMode === "mid" || block.textMode === "full") ? (
-            <span className="schedule-event-time">{timeText}</span>
-          ) : null}
-          <strong className="schedule-event-title">{block.item.title}</strong>
-          {block.textMode === "full" ? (
-            <span className="schedule-event-id">id:{block.item.id}</span>
-          ) : null}
-        </>
-      )}
-      {selected ? (
-        <span
-          className="schedule-resize-handle bottom"
-          onPointerDown={(event) => onResizePointerDown?.(event, "resize-end")}
-          aria-hidden="true"
-        />
-      ) : null}
-    </button>
+    <>
+      <button
+        type="button"
+        className={className}
+        ref={ref}
+        style={style}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        onContextMenu={onContextMenu}
+        onMouseEnter={(e) => tooltip.show(e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={tooltip.hide}
+        aria-pressed={selected}
+      >
+        {selected ? (
+          <span
+            className="schedule-resize-handle top"
+            onPointerDown={(event) => onResizePointerDown?.(event, "resize-start")}
+            aria-hidden="true"
+          />
+        ) : null}
+        {block.textMode === "tiny" ? null : (
+          <>
+            {(block.textMode === "mid" || block.textMode === "full") ? (
+              <span className="schedule-event-time">{timeText}</span>
+            ) : null}
+            <strong className="schedule-event-title">{block.item.title}</strong>
+          </>
+        )}
+        {selected ? (
+          <span
+            className="schedule-resize-handle bottom"
+            onPointerDown={(event) => onResizePointerDown?.(event, "resize-end")}
+            aria-hidden="true"
+          />
+        ) : null}
+      </button>
+      <GlassTooltip
+        visible={tooltip.visible}
+        pos={tooltip.pos}
+        content={{
+          dotColor: block.backgroundColor,
+          title: block.item.title,
+          id: block.item.id,
+          fields: [
+            { icon: "\u{1F552}", label: "时长", value: formatDuration(block.item.duration) },
+            { icon: "\u{1F4DD}", label: "描述", value: block.item.description || "-" },
+            { icon: "\u{1F4C2}", label: "分类", value: block.item.category || "-" },
+            { icon: "\u{1F4CD}", label: "地点", value: block.item.location || "-" },
+          ],
+        }}
+        onMouseEnter={tooltip.keepVisible}
+        onMouseLeave={tooltip.hide}
+        onMeasure={tooltip.adjustPos}
+      />
+    </>
   );
 });
 
 const NotifyEventBlock = forwardRef<HTMLButtonElement, {
   item: NotificationItem;
   top: number;
+  backgroundColor: string;
   selected?: boolean;
   saving?: boolean;
   onClick?: () => void;
@@ -1233,7 +1255,8 @@ const NotifyEventBlock = forwardRef<HTMLButtonElement, {
   onKeyDown?: (e: React.KeyboardEvent) => void;
   onPointerDown?: (e: React.PointerEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
-}>(function NotifyEventBlock({ item, top, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onContextMenu }, ref) {
+}>(function NotifyEventBlock({ item, top, backgroundColor, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onContextMenu }, ref) {
+  const tooltip = useGlassTooltip();
   const timeText = formatTime(item.trigger_at);
   const className = [
     "notify-event",
@@ -1241,23 +1264,42 @@ const NotifyEventBlock = forwardRef<HTMLButtonElement, {
     saving ? "saving" : ""
   ].filter(Boolean).join(" ");
   return (
-    <button
-      type="button"
-      className={className}
-      ref={ref}
-      style={{ top: `${top}px` }}
-      title={`${item.title} ${timeText}`}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={onKeyDown}
-      onPointerDown={onPointerDown}
-      onContextMenu={onContextMenu}
-      aria-pressed={selected}
-    >
-      <span className="notify-icon">🔔</span>
-      <span className="notify-title">{item.title}</span>
-      <span className="notify-time">{timeText}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        className={className}
+        ref={ref}
+        style={{ top: `${top}px`, backgroundColor }}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        onContextMenu={onContextMenu}
+        onMouseEnter={(e) => tooltip.show(e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={tooltip.hide}
+        aria-pressed={selected}
+      >
+        <span className="notify-icon">🔔</span>
+        <span className="notify-title">{item.title}</span>
+        <span className="notify-time">{timeText}</span>
+      </button>
+      <GlassTooltip
+        visible={tooltip.visible}
+        pos={tooltip.pos}
+        content={{
+          dotColor: backgroundColor,
+          title: item.title,
+          id: item.id,
+          fields: [
+            { icon: "\u{1F552}", label: "触发时间", value: timeText },
+            { icon: "\u{1F4DD}", label: "描述", value: item.description || "-" },
+          ],
+        }}
+        onMouseEnter={tooltip.keepVisible}
+        onMouseLeave={tooltip.hide}
+        onMeasure={tooltip.adjustPos}
+      />
+    </>
   );
 });
 
@@ -1265,8 +1307,9 @@ function buildNotifyBlocks(
   notifications: NotificationItem[],
   days: string[],
   visibleStartHour: number,
-  visibleEndHour: number
-): Record<string, { item: NotificationItem; top: number }[]> {
+  visibleEndHour: number,
+  eventColors: string[]
+): Record<string, { item: NotificationItem; top: number; backgroundColor: string }[]> {
   return Object.fromEntries(
     days.map((dayKey) => {
       const dayStart = startOfDateKeyEpoch(dayKey);
@@ -1275,9 +1318,10 @@ function buildNotifyBlocks(
       const blocks = notifications
         .filter((n) => n.trigger_at >= visibleStart && n.trigger_at < visibleEnd)
         .sort((a, b) => a.trigger_at - b.trigger_at || a.id - b.id)
-        .map((item) => ({
+        .map((item, index) => ({
           item,
           top: ((item.trigger_at - visibleStart) / 3600) * HOUR_HEIGHT,
+          backgroundColor: eventColors[index % eventColors.length],
         }));
       return [dayKey, blocks];
     })
@@ -1359,12 +1403,22 @@ function focusScheduleEvent(target: EventTarget) {
   button?.focus();
 }
 
+function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "-";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 function buildScheduleBlocks(
   items: ScheduleItem[],
   days: string[],
   visibleStartHour: number,
   visibleEndHour: number
 ): Record<string, RenderedScheduleBlock[]> {
+  const eventColors = getEventColors();
   return Object.fromEntries(
     days.map((dayKey) => {
       const dayStart = startOfDateKeyEpoch(dayKey);
@@ -1382,7 +1436,7 @@ function buildScheduleBlocks(
             item,
             top,
             height,
-            colorClass: `event-color-${index % EVENT_COLOR_COUNT}`,
+            backgroundColor: eventColors[index % eventColors.length],
             textMode: textModeForHeight(height),
             titleLines: titleLinesForHeight(height)
           };
