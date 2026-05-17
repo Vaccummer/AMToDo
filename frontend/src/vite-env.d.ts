@@ -2,12 +2,14 @@
 
 interface SettingsData {
   server_url?: string;
+  lan_address?: string;
   access_token?: string;
   admin_token?: string;
   language?: string;
   timezone?: string;
   font_family?: string;
   font_size?: string;
+  theme?: string;
   calendar_days?: string;
   week_start?: string;
   scheduler_start_hour?: string;

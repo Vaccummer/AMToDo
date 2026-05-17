@@ -22,6 +22,8 @@ type Props = {
   weekStart?: number;
   cachedDateKey?: string;
   onDateChange?: (dateKey: string) => void;
+  pendingAction?: { type: "todo" | "schedule"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
+  onPendingActionConsumed?: () => void;
 };
 
 function EditIcon() {
@@ -68,7 +70,7 @@ function overdueDurationLabel(fromEpoch: number, toEpoch = Math.floor(Date.now()
   return `${minutes} 分钟`;
 }
 
-export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange }: Props) {
+export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const [selectedDayKey, setSelectedDayKey] = useState(cachedDateKey ?? todayKey);
@@ -82,6 +84,24 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    if (cachedDateKey) setSelectedDayKey(cachedDateKey);
+  }, [cachedDateKey]);
+
+  useEffect(() => {
+    if (!pendingAction) return;
+    if (pendingAction.dateKey) {
+      setSelectedDayKey(pendingAction.dateKey);
+    }
+    if (pendingAction.action === "edit") {
+      const item = todos.find((t) => t.id === pendingAction.id);
+      if (item) {
+        setDetailId(pendingAction.id);
+      }
+    }
+    onPendingActionConsumed?.();
+  }, [pendingAction, todos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const weekStartKey = useMemo(
     () => startOfWeekDateKey(selectedDayKey, normalizedWeekStart),

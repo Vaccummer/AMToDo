@@ -378,7 +378,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">日程详情</h2>
+            <h2 className="schedule-modal-title">日程详情<span className="schedule-modal-id-badge">#{schedule.id}</span></h2>
           </div>
           <button
             type="button"
@@ -640,11 +640,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
           {/* Read-only fields */}
           <div className="schedule-modal-section-label">只读信息</div>
-
-          <div className="schedule-modal-ro-field">
-            <span className="schedule-modal-ro-label">ID</span>
-            <span className="schedule-modal-ro-value">{schedule.id}</span>
-          </div>
 
           <div className="schedule-modal-ro-field">
             <span className="schedule-modal-ro-label">创建时间</span>

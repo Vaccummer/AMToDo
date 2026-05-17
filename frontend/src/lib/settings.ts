@@ -1,11 +1,13 @@
 export interface UISettings {
   server_url: string;
+  lan_address: string;
   access_token: string;
   admin_token: string;
   language: string;
   timezone: string;
   font_family: string;
   font_size: number;
+  theme: string;
   calendar_days: number;
   week_start: number;
   scheduler_start_hour: number;
@@ -19,12 +21,14 @@ export interface UISettings {
 
 export const DEFAULT_SETTINGS: UISettings = {
   server_url: "http://127.0.0.1:8000",
+  lan_address: "",
   access_token: "",
   admin_token: "",
   language: "zh-CN",
   timezone: "Asia/Shanghai",
   font_family: "JetBrainsMono Nerd Font, Microsoft YaHei UI, Segoe UI, sans-serif",
   font_size: 28,
+  theme: "warm-light",
   calendar_days: 7,
   week_start: 0,
   scheduler_start_hour: 6,
@@ -53,12 +57,14 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
 
   return {
     server_url: raw.server_url ?? DEFAULT_SETTINGS.server_url,
+    lan_address: raw.lan_address ?? DEFAULT_SETTINGS.lan_address,
     access_token: raw.access_token ?? DEFAULT_SETTINGS.access_token,
     admin_token: raw.admin_token ?? DEFAULT_SETTINGS.admin_token,
     language: raw.language ?? DEFAULT_SETTINGS.language,
     timezone: raw.timezone ?? DEFAULT_SETTINGS.timezone,
     font_family: raw.font_family ?? DEFAULT_SETTINGS.font_family,
     font_size: Number(raw.font_size) || DEFAULT_SETTINGS.font_size,
+    theme: raw.theme ?? DEFAULT_SETTINGS.theme,
     calendar_days: Number(raw.calendar_days) || DEFAULT_SETTINGS.calendar_days,
     week_start: raw.week_start !== undefined ? Number(raw.week_start) : DEFAULT_SETTINGS.week_start,
     scheduler_start_hour: clampHour(schedulerStartHour, 0, 23),

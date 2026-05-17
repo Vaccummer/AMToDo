@@ -70,9 +70,10 @@ function formatDateTime(epoch: number, timezone: string): string {
 type Props = {
   api: AMToDoApi;
   settings: UISettings;
+  onNavigate?: (type: "todo" | "schedule", id: number, action: "jump" | "edit") => void;
 };
 
-export function NotifyView({ api, settings }: Props) {
+export function NotifyView({ api, settings, onNavigate }: Props) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -243,6 +244,7 @@ export function NotifyView({ api, settings }: Props) {
             setEditId(null);
             void load();
           }}
+          onNavigate={onNavigate}
         />
       )}
 

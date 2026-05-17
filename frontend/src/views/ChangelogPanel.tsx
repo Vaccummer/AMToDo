@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AMToDoApi, ChangelogEntry } from "../api/client";
 import { Dropdown } from "./Dropdown";
 
-type EntityKind = "todo" | "schedule";
+type EntityKind = "todo" | "schedule" | "notification";
 
 type Props = {
   api: AMToDoApi;
@@ -59,7 +59,7 @@ export function ChangelogPanel({ api, entityId, kind }: Props) {
     setStatus("加载中");
     setExpanded({});
     const params = { entity_id: entityId, action: action || null, limit: 50, offset: 0 };
-    const request = kind === "todo" ? api.todoChangelog(params) : api.scheduleChangelog(params);
+    const request = kind === "todo" ? api.todoChangelog(params) : kind === "schedule" ? api.scheduleChangelog(params) : api.notificationChangelog(params);
     request
       .then((result) => {
         if (cancelled) return;

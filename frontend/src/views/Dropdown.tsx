@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-type Option = { value: string; label: string };
+type Option = { value: string; label: string; hasValue?: boolean };
 
 type Props = {
   value: string;
@@ -67,12 +67,13 @@ export function Dropdown({ value, options, onChange, id }: Props) {
             <button
               key={opt.value}
               type="button"
-              className={`dropdown-option${opt.value === value ? " selected" : ""}`}
+              className={`dropdown-option${opt.value === value ? " selected" : ""}${opt.hasValue ? " has-value" : ""}`}
               onClick={() => {
                 onChange(opt.value);
                 setOpen(false);
               }}
             >
+              {opt.hasValue && <span className="dropdown-option-dot" />}
               {opt.label}
             </button>
           ))}
