@@ -1,5 +1,5 @@
-/** A theme node is either a color string or a nested group of nodes. */
-export type ThemeNode = string | { [key: string]: ThemeNode };
+/** A theme node is a color string, a nested group, or an array of colors. */
+export type ThemeNode = string | string[] | { [key: string]: ThemeNode };
 
 export interface Theme {
   name: string;

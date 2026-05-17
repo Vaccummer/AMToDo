@@ -5,7 +5,7 @@
   min-width: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  background: #faf7f2;
+  background: var(--global-surface-bg);
   overflow: hidden;
 }
 
@@ -15,12 +15,12 @@
   gap: 12px;
   padding: 10px 14px;
   background: var(--components-nav-bg);
-  border-bottom: 1px solid #d9d0c4;
+  border-bottom: 1px solid var(--global-surface-border-warm);
 }
 
 .filter-tabs {
   display: inline-flex;
-  border: 1px solid #d0c8ba;
+  border: 1px solid var(--global-surface-warm-4);
   border-radius: var(--radius-md);
   padding: 2px;
   background: rgba(255, 255, 255, 0.5);
@@ -48,7 +48,7 @@
 }
 
 .filter-tabs button.active {
-  background: #1a7f72;
+  background: var(--status-primary-base);
   color: #fff;
 }
 
@@ -76,11 +76,11 @@
 }
 
 .ft-dot.todo {
-  background: #4a8f7a;
+  background: var(--views-notify-mention-green);
 }
 
 .ft-dot.sch {
-  background: #7a6fc4;
+  background: var(--views-notify-mention-purple);
 }
 
 .ft-dot.notify {
@@ -88,15 +88,15 @@
 }
 
 .filter-tabs button.active .ft-dot.todo {
-  background: #bde8dc;
+  background: var(--status-primary-surface);
 }
 
 .filter-tabs button.active .ft-dot.sch {
-  background: #d4cff0;
+  background: var(--components-calendar-purple-light);
 }
 
 .filter-tabs button.active .ft-dot.notify {
-  background: #f5d4b8;
+  background: var(--components-calendar-orange-surface);
 }
 
 .trash-search-wrap {
@@ -104,16 +104,16 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #fff;
-  border: 1px solid var(--global-surface-line);
+  background: var(--components-input-bg);
+  border: 1px solid var(--components-input-border);
   border-radius: var(--radius-md);
   padding: 6px 10px;
   transition: border-color 0.12s;
 }
 
 .trash-search-wrap:focus-within {
-  border-color: var(--status-primary-base);
-  box-shadow: 0 0 0 2px rgba(26, 127, 114, 0.1);
+  border-color: var(--components-input-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-primary-base) 10%, transparent);
 }
 
 .trash-search-wrap svg {
@@ -164,17 +164,17 @@
 }
 
 .trash-type-icon.todo {
-  background: rgba(74, 143, 122, 0.1);
-  color: #4a8f7a;
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+  color: var(--views-notify-mention-green);
 }
 
 .trash-type-icon.schedule {
-  background: rgba(122, 111, 196, 0.1);
-  color: #7a6fc4;
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 10%, transparent);
+  color: var(--views-notify-mention-purple);
 }
 
 .trash-type-icon.notify {
-  background: rgba(224, 123, 60, 0.1);
+  background: color-mix(in srgb, var(--views-notify-event-bg) 10%, transparent);
   color: var(--views-notify-event-bg);
 }
 
@@ -209,17 +209,17 @@
 }
 
 .trash-item-type-tag.todo {
-  background: rgba(74, 143, 122, 0.08);
-  color: #4a8f7a;
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  color: var(--views-notify-mention-green);
 }
 
 .trash-item-type-tag.schedule {
-  background: rgba(122, 111, 196, 0.08);
-  color: #7a6fc4;
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 8%, transparent);
+  color: var(--views-notify-mention-purple);
 }
 
 .trash-item-type-tag.notify {
-  background: rgba(224, 123, 60, 0.08);
+  background: color-mix(in srgb, var(--views-notify-event-bg) 8%, transparent);
   color: var(--views-notify-event-bg);
 }
 
@@ -260,7 +260,7 @@
   height: 28px;
   border: 1px solid var(--global-surface-line);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--components-input-bg);
   color: var(--global-surface-muted);
   cursor: pointer;
   transition: all var(--duration-fast);
@@ -276,13 +276,13 @@
 .trash-action-btn.restore:hover:not(:disabled) {
   border-color: var(--status-primary-base);
   color: var(--status-primary-base);
-  background: rgba(26, 127, 114, 0.04);
+  background: color-mix(in srgb, var(--status-primary-base) 4%, transparent);
 }
 
 .trash-action-btn.purge:hover:not(:disabled) {
-  border-color: #c62f2f;
-  color: #c62f2f;
-  background: rgba(198, 47, 47, 0.04);
+  border-color: var(--status-danger-base);
+  color: var(--status-danger-base);
+  background: color-mix(in srgb, var(--status-danger-base) 4%, transparent);
 }
 
 .trash-empty {

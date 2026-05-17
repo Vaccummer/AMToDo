@@ -18,15 +18,33 @@ export function getTheme(name: string): Theme {
   return themes[name] ?? themes[DEFAULT_THEME];
 }
 
+export function getEventColors(themeName?: string): string[] {
+  const theme = getTheme(themeName ?? DEFAULT_THEME);
+  const schedule = (theme.views as Record<string, ThemeNode>)?.schedule as Record<string, ThemeNode> | undefined;
+  const colors = schedule?.["event-colors"];
+  return Array.isArray(colors) ? colors : [];
+}
+
+export function getNotifyEventColors(themeName?: string): string[] {
+  const theme = getTheme(themeName ?? DEFAULT_THEME);
+  const notify = (theme.views as Record<string, ThemeNode>)?.notify as Record<string, ThemeNode> | undefined;
+  const colors = notify?.["event-colors"];
+  return Array.isArray(colors) ? colors : [];
+}
+
 /**
  * Flatten a nested theme object into CSS variable entries.
  * Keys named "_comment" are skipped.
- * Example: { global: { shell: { bg: "#f3f0eb" } } } → [ ["--global-shell-bg", "#f3f0eb"] ]
+ * Arrays are expanded: { "event-colors": ["#a", "#b"] } → --event-colors-0: #a; --event-colors-1: #b
  */
 function flattenTheme(node: ThemeNode, prefix: string): [string, string][] {
   const entries: [string, string][] = [];
   if (typeof node === "string") {
     entries.push([prefix, node]);
+  } else if (Array.isArray(node)) {
+    node.forEach((value, index) => {
+      entries.push([`${prefix}-${index}`, value]);
+    });
   } else {
     for (const [key, value] of Object.entries(node)) {
       if (key === "_comment") continue;

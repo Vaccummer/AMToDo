@@ -28,8 +28,8 @@
   font: inherit;
   font-size: var(--font-lg);
   color: var(--global-text-primary);
-  background: #fff;
-  border: 1px solid var(--global-surface-line);
+  background: var(--components-input-bg);
+  border: 1px solid var(--components-input-border);
   border-radius: var(--radius-md);
   padding: 8px 10px;
   cursor: pointer;
@@ -39,12 +39,12 @@
 }
 
 .date-picker-field:hover {
-  border-color: #b0a590;
+  border-color: var(--global-surface-warm-5);
 }
 
 .date-picker-field.open {
-  border-color: var(--status-primary-base);
-  box-shadow: 0 0 0 3px rgba(26, 127, 114, 0.1);
+  border-color: var(--components-input-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-primary-base) 10%, transparent);
 }
 
 .date-picker-field.theme-gold {
@@ -58,26 +58,26 @@
 
 .date-picker-field.theme-gold.open {
   border-color: var(--components-calendar-gold-selected);
-  box-shadow: 0 0 0 3px rgba(196, 163, 58, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--components-calendar-gold-selected) 12%, transparent);
 }
 
 .date-picker-field.error {
   border-color: var(--status-danger-hover);
-  box-shadow: 0 0 0 3px rgba(217, 68, 46, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-hover) 12%, transparent);
 }
 
 .date-picker-icon {
   flex-shrink: 0;
-  color: #a09888;
+  color: var(--global-surface-muted-warm);
   transition: color var(--duration-slow);
 }
 
 .date-picker-field:hover .date-picker-icon {
-  color: #6b6254;
+  color: var(--global-text-warm);
 }
 
 .date-picker-field.theme-gold .date-picker-icon {
-  color: #b0a060;
+  color: var(--components-calendar-gold-dark);
 }
 
 .date-picker-text {
@@ -89,11 +89,11 @@
 }
 
 .date-picker-text.placeholder {
-  color: #c4bbb0;
+  color: var(--views-search-placeholder);
 }
 
 .date-picker-field.theme-gold .date-picker-text.placeholder {
-  color: #c8c0a0;
+  color: var(--components-calendar-gold-light);
 }
 
 .date-picker-clear {
@@ -103,7 +103,7 @@
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: #a09888;
+  color: var(--global-surface-muted-warm);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -112,13 +112,13 @@
 }
 
 .date-picker-clear:hover {
-  background: rgba(198, 47, 47, 0.08);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
   color: var(--status-danger-base);
 }
 
 .date-picker-chevron {
   flex-shrink: 0;
-  color: #a09888;
+  color: var(--global-surface-muted-warm);
   transition: transform var(--duration-slow);
 }
 
@@ -127,7 +127,7 @@
 }
 
 .date-picker-field.theme-gold .date-picker-chevron {
-  color: #b0a060;
+  color: var(--components-calendar-gold-dark);
 }
 
 /* Panel */
@@ -141,9 +141,9 @@
   background: var(--global-surface-bg);
   border-radius: 12px;
   box-shadow:
-    0 8px 32px rgba(26, 127, 114, 0.15),
+    0 8px 32px color-mix(in srgb, var(--status-primary-base) 15%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.08),
-    inset 0 0 0 1px rgba(26, 127, 114, 0.1);
+    inset 0 0 0 1px color-mix(in srgb, var(--status-primary-base) 10%, transparent);
   overflow: hidden;
   animation: dp-panel-in 0.18s ease-out;
 }
@@ -157,11 +157,11 @@
 }
 
 .date-picker-panel.theme-gold {
-  background: #fefcf5;
+  background: var(--components-calendar-gold-bg);
   box-shadow:
-    0 8px 32px rgba(180, 150, 30, 0.14),
+    0 8px 32px color-mix(in srgb, var(--modals-schedule-save-btn) 14%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.08),
-    inset 0 0 0 1px rgba(196, 163, 58, 0.12);
+    inset 0 0 0 1px color-mix(in srgb, var(--components-calendar-gold-selected) 12%, transparent);
 }
 
 @keyframes dp-panel-in {
@@ -195,7 +195,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #f7f3ee;
+  color: var(--views-search-bg-alt);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -210,7 +210,7 @@
 .dp-panel-label {
   flex: 1;
   text-align: center;
-  color: #f7f3ee;
+  color: var(--views-search-bg-alt);
   font-size: var(--font-xl);
   font-weight: 700;
   letter-spacing: 1px;
@@ -233,7 +233,7 @@
 }
 
 .date-picker-panel.theme-gold .dp-weekdays span {
-  color: #9e8b5e;
+  color: var(--modals-schedule-label-light);
 }
 
 .dp-grid {
@@ -260,17 +260,17 @@
 }
 
 .dp-day:hover {
-  background: rgba(26, 127, 114, 0.07);
-  color: #1a4a44;
+  background: color-mix(in srgb, var(--status-primary-base) 7%, transparent);
+  color: var(--status-primary-darkest);
 }
 
 .date-picker-panel.theme-gold .dp-day:hover {
-  background: rgba(196, 163, 58, 0.08);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
   color: var(--components-calendar-gold-text);
 }
 
 .dp-day.other-month {
-  color: #c8c1b6;
+  color: var(--components-scrollbar-thumb);
 }
 
 .dp-day.other-month:hover {
@@ -293,7 +293,7 @@
 }
 
 .dp-day.selected:hover {
-  background: #d0622a;
+  background: var(--status-danger-orange);
   color: var(--global-text-on-primary);
 }
 
@@ -374,7 +374,7 @@
 }
 
 .context-menu-item.danger:hover {
-  background: rgba(198, 47, 47, 0.07);
+  background: color-mix(in srgb, var(--status-danger-base) 7%, transparent);
 }
 
 .context-menu-item.disabled {
@@ -417,7 +417,7 @@
   gap: 6px;
   font: inherit;
   font-size: var(--font-lg);
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   background: var(--modals-settings-input-bg);
   border: 1px solid var(--modals-settings-border);
   border-radius: var(--radius-md);
@@ -428,13 +428,13 @@
 }
 
 .dropdown-trigger:hover {
-  border-color: #9bafc7;
-  background: #f4f7fb;
+  border-color: var(--components-dropdown-text);
+  background: var(--components-dropdown-bg-alt);
 }
 
 .dropdown-trigger:focus {
   border-color: var(--modals-settings-save-btn);
-  box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--modals-settings-save-btn) 12%, transparent);
 }
 
 .dropdown-trigger-text {
@@ -447,7 +447,7 @@
 
 .dropdown-chevron {
   flex-shrink: 0;
-  color: #6b7d95;
+  color: var(--modals-schedule-text-light);
   transition: transform 0.18s;
 }
 
@@ -477,7 +477,7 @@
   text-align: left;
   font: inherit;
   font-size: var(--font-lg);
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   background: transparent;
   border: 0;
   border-radius: var(--radius-sm);
@@ -487,13 +487,13 @@
 }
 
 .dropdown-option:hover {
-  background: rgba(74, 111, 165, 0.08);
-  color: #3a5a80;
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 8%, transparent);
+  color: var(--modals-schedule-text-dark);
 }
 
 .dropdown-option.selected {
-  background: rgba(74, 111, 165, 0.12);
-  color: #3a5a80;
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 12%, transparent);
+  color: var(--modals-schedule-text-dark);
   font-weight: 600;
 }
 
@@ -547,7 +547,7 @@
 .dp-today-btn:hover {
   border-color: var(--status-primary-base);
   color: var(--status-primary-base);
-  background: rgba(26, 127, 114, 0.06);
+  background: color-mix(in srgb, var(--status-primary-base) 6%, transparent);
 }
 
 .dp-today-btn:hover img {
@@ -556,12 +556,12 @@
 
 .date-picker-panel.theme-gold .dp-today-btn {
   border-color: var(--modals-schedule-border);
-  color: #a09060;
+  color: var(--components-calendar-gold-muted);
 }
 
 .date-picker-panel.theme-gold .dp-today-btn:hover {
   border-color: var(--components-calendar-gold-selected);
   color: var(--components-calendar-gold-selected);
-  background: rgba(196, 163, 58, 0.08);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
 }
 

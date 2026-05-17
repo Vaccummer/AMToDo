@@ -24,7 +24,7 @@
 }
 
 .changelog-entry {
-  border: 1px solid #e1d9cf;
+  border: 1px solid var(--global-surface-warm-2);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.52);
   overflow: hidden;
@@ -56,7 +56,7 @@
 
 .changelog-action {
   border-radius: var(--radius-pill);
-  background: #eee6da;
+  background: var(--global-surface-warm-1);
   color: var(--global-text-secondary);
   font-size: var(--font-sm);
   font-weight: 800;
@@ -67,14 +67,14 @@
 .action-delete .changelog-action,
 .action-purge .changelog-action,
 .action-attachment_remove .changelog-action {
-  background: rgba(198, 47, 47, 0.08);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
   color: var(--status-danger-base);
 }
 
 .action-restore .changelog-action,
 .action-create .changelog-action,
 .action-attachment_add .changelog-action {
-  background: rgba(26, 127, 114, 0.09);
+  background: color-mix(in srgb, var(--status-primary-base) 9%, transparent);
   color: var(--status-primary-base);
 }
 
@@ -94,7 +94,7 @@
 }
 
 .schedule-modal-card .changelog-copy strong {
-  color: #4a3710;
+  color: var(--modals-schedule-amber-darkest);
 }
 
 .changelog-copy span {

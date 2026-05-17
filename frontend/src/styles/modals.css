@@ -28,7 +28,7 @@
   border-radius: 16px;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.06),
-    0 8px 40px rgba(26, 127, 114, 0.12),
+    0 8px 40px color-mix(in srgb, var(--status-primary-base) 12%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.08);
   display: grid;
   grid-template-rows: auto 1fr auto auto;
@@ -73,9 +73,9 @@
   font-size: var(--font-sm);
   font-weight: 700;
   font-family: var(--font-mono);
-  color: #c62f2f;
-  background: rgba(198, 47, 47, 0.08);
-  border: 1px solid rgba(198, 47, 47, 0.18);
+  color: var(--status-danger-base);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 18%, transparent);
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
@@ -97,7 +97,7 @@
 }
 
 .modal-close:hover {
-  background: rgba(198, 47, 47, 0.08);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
   color: var(--status-danger-base);
 }
 
@@ -155,8 +155,8 @@
   font: inherit;
   font-size: var(--font-lg);
   color: var(--global-text-primary);
-  background: #fff;
-  border: 1px solid var(--global-surface-line);
+  background: var(--components-input-bg);
+  border: 1px solid var(--components-input-border);
   border-radius: var(--radius-md);
   padding: 8px 10px;
   outline: none;
@@ -165,19 +165,19 @@
 
 .modal-input:focus,
 .modal-textarea:focus {
-  border-color: var(--status-primary-base);
-  box-shadow: 0 0 0 3px rgba(26, 127, 114, 0.1);
+  border-color: var(--components-input-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-primary-base) 10%, transparent);
 }
 
 .modal-input::selection,
 .modal-textarea::selection {
-  color: #0f5c52;
-  background: rgba(26, 127, 114, 0.18);
+  color: var(--status-primary-hover);
+  background: color-mix(in srgb, var(--status-primary-base) 18%, transparent);
 }
 
 .modal-input.invalid {
   border-color: var(--status-danger-hover);
-  box-shadow: 0 0 0 3px rgba(217, 68, 46, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-hover) 12%, transparent);
 }
 
 .modal-field-hint {
@@ -211,12 +211,12 @@
 }
 
 .modal-datetime-time::placeholder {
-  color: #c4bbb0;
+  color: var(--views-search-placeholder);
 }
 
 .modal-datetime-time::selection {
-  color: #0f5c52;
-  background: rgba(26, 127, 114, 0.18);
+  color: var(--status-primary-hover);
+  background: color-mix(in srgb, var(--status-primary-base) 18%, transparent);
 }
 
 .modal-divider {
@@ -227,9 +227,9 @@
 
 .attachment-dropzone {
   min-height: 68px;
-  border: 1px dashed rgba(26, 127, 114, 0.36);
+  border: 1px dashed color-mix(in srgb, var(--status-primary-base) 36%, transparent);
   border-radius: var(--radius-lg);
-  background: rgba(26, 127, 114, 0.04);
+  background: color-mix(in srgb, var(--status-primary-base) 4%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -240,7 +240,7 @@
 }
 
 .attachment-dropzone.active {
-  background: rgba(26, 127, 114, 0.1);
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
   border-color: var(--status-primary-base);
 }
 
@@ -248,8 +248,8 @@
 .modal-save-progress {
   height: 4px;
   width: 100%;
-  --progress-color: #1a7f72;
-  --progress-track: #cfe8e4;
+  --progress-color: var(--status-primary-base);
+  --progress-track: var(--status-primary-surface);
   --progress-gradient: no-repeat linear-gradient(var(--progress-color) 0 0);
   background: var(--progress-gradient), var(--progress-gradient), var(--progress-track);
   background-size: 60% 100%;
@@ -266,7 +266,7 @@
 
 .schedule-modal-card .modal-save-progress {
   --progress-color: var(--modals-schedule-save-btn);
-  --progress-track: #efe3b4;
+  --progress-track: var(--modals-schedule-progress-track);
 }
 
 @keyframes attachment-progress {
@@ -343,8 +343,8 @@
   padding: 4px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #1a7f72;
-  --spinner-mask: conic-gradient(#0000 10%, #000), linear-gradient(#000 0 0) content-box;
+  background: var(--status-primary-base);
+  --spinner-mask: conic-gradient(transparent 10%, #000), linear-gradient(#000 0 0) content-box;
   -webkit-mask: var(--spinner-mask);
   mask: var(--spinner-mask);
   -webkit-mask-composite: source-out;
@@ -401,7 +401,7 @@
   justify-content: center;
   border: 0;
   border-radius: 7px;
-  background: rgba(198, 47, 47, 0.06);
+  background: color-mix(in srgb, var(--status-danger-base) 6%, transparent);
   color: var(--status-danger-base);
   cursor: pointer;
   font: inherit;
@@ -424,9 +424,9 @@
 }
 
 .attachment-row.failed {
-  border-color: rgba(198, 47, 47, 0.6);
-  background: rgba(198, 47, 47, 0.045);
-  box-shadow: 0 0 0 2px rgba(198, 47, 47, 0.08);
+  border-color: color-mix(in srgb, var(--status-danger-base) 60%, transparent);
+  background: color-mix(in srgb, var(--status-danger-base) 4.5%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-danger-base) 8%, transparent);
 }
 
 .attachment-row.orphaned .attachment-filename {
@@ -465,7 +465,7 @@
   z-index: 2100;
   display: grid;
   place-items: center;
-  background: rgba(20, 18, 16, 0.72);
+  background: color-mix(in srgb, var(--modals-backdrop-confirm) 131%, transparent);
 }
 
 .attachment-preview-panel {
@@ -510,7 +510,7 @@
   width: 40px;
   height: 22px;
   border-radius: var(--radius-pill);
-  background: #d4cdc2;
+  background: var(--global-surface-warm-3);
   position: relative;
   transition: background var(--duration-slow);
 }
@@ -547,8 +547,8 @@
 .modal-error {
   margin: 0 22px;
   padding: 8px 14px;
-  background: rgba(198, 47, 47, 0.06);
-  border: 1px solid rgba(198, 47, 47, 0.18);
+  background: color-mix(in srgb, var(--status-danger-base) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 18%, transparent);
   border-radius: var(--radius-md);
   color: var(--status-danger-base);
   font-size: var(--font-md);
@@ -596,11 +596,11 @@
 .modal-btn-delete {
   background: transparent;
   color: var(--status-danger-base);
-  border: 1px solid rgba(198, 47, 47, 0.25);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 25%, transparent);
 }
 
 .modal-btn-delete:hover:not(:disabled) {
-  background: rgba(198, 47, 47, 0.06);
+  background: color-mix(in srgb, var(--status-danger-base) 6%, transparent);
 }
 
 /* ── Schedule Detail Modal (warm gold theme) ── */
@@ -630,12 +630,12 @@
 .schedule-modal-card {
   width: min(500px, 92vw);
   max-height: 88vh;
-  background: #fefcf5;
+  background: var(--components-calendar-gold-bg);
   border: 1px solid var(--modals-schedule-border);
   border-radius: 16px;
   box-shadow:
-    0 0 0 1px rgba(180, 150, 30, 0.06),
-    0 8px 40px rgba(180, 150, 30, 0.12),
+    0 0 0 1px color-mix(in srgb, var(--modals-schedule-save-btn) 6%, transparent),
+    0 8px 40px color-mix(in srgb, var(--modals-schedule-save-btn) 12%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.08);
   display: grid;
   grid-template-rows: auto 1fr auto auto;
@@ -681,7 +681,7 @@
   margin: 0;
   font-size: 17px;
   font-weight: 700;
-  color: #3d2f0a;
+  color: var(--modals-schedule-amber-darkest);
   letter-spacing: 0.5px;
   display: inline-flex;
   align-items: center;
@@ -695,8 +695,8 @@
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--components-calendar-gold-selected);
-  background: rgba(196, 163, 58, 0.08);
-  border: 1px solid rgba(196, 163, 58, 0.18);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--components-calendar-gold-selected) 18%, transparent);
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
@@ -711,8 +711,8 @@
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--views-notify-event-bg);
-  background: rgba(224, 123, 60, 0.08);
-  border: 1px solid rgba(224, 123, 60, 0.18);
+  background: color-mix(in srgb, var(--views-notify-event-bg) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--views-notify-event-bg) 18%, transparent);
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
@@ -726,7 +726,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #9e8b5e;
+  color: var(--modals-schedule-label-light);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -734,7 +734,7 @@
 }
 
 .schedule-modal-close:hover {
-  background: rgba(198, 47, 47, 0.08);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
   color: var(--status-danger-base);
 }
 
@@ -751,7 +751,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #9e8b5e;
+  color: var(--modals-schedule-label-light);
   margin-bottom: -4px;
 }
 
@@ -791,18 +791,18 @@
 .schedule-modal-input:focus,
 .schedule-modal-textarea:focus {
   border-color: var(--components-calendar-gold-selected);
-  box-shadow: 0 0 0 3px rgba(196, 163, 58, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--components-calendar-gold-selected) 12%, transparent);
 }
 
 .schedule-modal-input::placeholder,
 .schedule-modal-textarea::placeholder {
-  color: #c4bbb0;
+  color: var(--views-search-placeholder);
 }
 
 .schedule-modal-input::selection,
 .schedule-modal-textarea::selection {
-  color: #5f4510;
-  background: rgba(196, 163, 58, 0.24);
+  color: var(--modals-schedule-amber-dark);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 24%, transparent);
 }
 
 .schedule-modal-textarea {
@@ -812,7 +812,7 @@
 
 .schedule-modal-input.invalid {
   border-color: var(--status-danger-hover);
-  box-shadow: 0 0 0 3px rgba(217, 68, 46, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-hover) 12%, transparent);
 }
 
 .schedule-modal-datetime-row {
@@ -835,16 +835,16 @@
 }
 
 .schedule-modal-datetime-time::placeholder {
-  color: #c4bbb0;
+  color: var(--views-search-placeholder);
 }
 
 .schedule-modal-datetime-time::selection {
-  color: #5f4510;
-  background: rgba(196, 163, 58, 0.24);
+  color: var(--modals-schedule-amber-dark);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 24%, transparent);
 }
 
 .schedule-modal-timeline {
-  background: #faf4dd;
+  background: var(--modals-schedule-cream-light);
   border: 1px solid var(--modals-schedule-border);
   border-radius: var(--radius-md);
   padding: 8px 12px;
@@ -868,13 +868,13 @@
 .schedule-modal-timeline-bar {
   flex: 1;
   height: 5px;
-  background: linear-gradient(to right, var(--components-calendar-gold-selected), #d4b860, var(--components-calendar-gold-selected));
+  background: linear-gradient(to right, var(--components-calendar-gold-selected), var(--components-calendar-gold-bright), var(--components-calendar-gold-selected));
   border-radius: 3px;
 }
 
 .schedule-modal-timeline-dur {
   font-size: var(--font-base);
-  color: #8a6d1b;
+  color: var(--modals-schedule-amber-deep);
   background: var(--components-calendar-gold-bg);
   padding: 2px 8px;
   border-radius: var(--radius-xs);
@@ -898,12 +898,12 @@
 
 .schedule-modal-ro-label {
   font-weight: 600;
-  color: #8a7a4e;
+  color: var(--components-calendar-gold-deep);
   font-size: var(--font-base);
 }
 
 .schedule-modal-ro-value {
-  color: #9e8b5e;
+  color: var(--modals-schedule-label-light);
   font-size: var(--font-md);
   user-select: all;
 }
@@ -911,8 +911,8 @@
 .schedule-modal-error {
   margin: 0 22px;
   padding: 8px 14px;
-  background: rgba(198, 47, 47, 0.05);
-  border: 1px solid rgba(198, 47, 47, 0.15);
+  background: color-mix(in srgb, var(--status-danger-base) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 15%, transparent);
   border-radius: var(--radius-md);
   color: var(--status-danger-base);
   font-size: var(--font-base);
@@ -958,11 +958,11 @@
 .schedule-modal-btn-delete {
   background: transparent;
   color: var(--status-danger-base);
-  border: 1px solid rgba(198, 47, 47, 0.25);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 25%, transparent);
 }
 
 .schedule-modal-btn-delete:hover:not(:disabled) {
-  background: rgba(198, 47, 47, 0.06);
+  background: color-mix(in srgb, var(--status-danger-base) 6%, transparent);
 }
 
 /* ── Settings modal ── */
@@ -982,11 +982,11 @@
 .settings-modal-card {
   width: min(520px, 94vw);
   max-height: 90vh;
-  background: #f8fafd;
+  background: var(--modals-card-bg);
   border-radius: 16px;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.05),
-    0 8px 40px rgba(74, 111, 165, 0.1),
+    0 8px 40px color-mix(in srgb, var(--modals-settings-save-btn) 10%, transparent),
     0 2px 8px rgba(0, 0, 0, 0.06);
   display: grid;
   grid-template-rows: auto 1fr auto auto;
@@ -1020,7 +1020,7 @@
   margin: 0;
   font-size: var(--font-2xl);
   font-weight: 700;
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   letter-spacing: 0.5px;
 }
 
@@ -1030,7 +1030,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #7a8ea5;
+  color: var(--components-dropdown-text);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1038,7 +1038,7 @@
 }
 
 .settings-modal-close:hover {
-  background: rgba(74, 111, 165, 0.08);
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 8%, transparent);
   color: var(--modals-settings-save-btn);
 }
 
@@ -1055,7 +1055,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #6b7d95;
+  color: var(--modals-schedule-text-light);
   margin-bottom: -6px;
 }
 
@@ -1078,14 +1078,14 @@
 .settings-modal-label {
   font-size: var(--font-md);
   font-weight: 600;
-  color: #4a5568;
+  color: var(--components-dropdown-text-dark);
   letter-spacing: 0.3px;
 }
 
 .settings-modal-input {
   font: inherit;
   font-size: var(--font-lg);
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   background: var(--modals-settings-input-bg);
   border: 1px solid var(--modals-settings-border);
   border-radius: var(--radius-md);
@@ -1096,21 +1096,21 @@
 
 .settings-modal-input:focus {
   border-color: var(--modals-settings-save-btn);
-  box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--modals-settings-save-btn) 12%, transparent);
 }
 
 .settings-modal-input::selection {
-  color: #1a3a5c;
-  background: rgba(74, 111, 165, 0.2);
+  color: var(--modals-schedule-text-darkest);
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 20%, transparent);
 }
 
 .settings-modal-input.invalid {
   border-color: var(--status-danger-hover);
-  box-shadow: 0 0 0 3px rgba(217, 68, 46, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-hover) 12%, transparent);
 }
 
 .settings-modal-input.valid {
-  border-color: #2a9b72;
+  border-color: var(--status-primary-light);
   box-shadow: 0 0 0 3px rgba(42, 155, 114, 0.14);
 }
 
@@ -1129,7 +1129,7 @@
   gap: 6px;
   font: inherit;
   font-size: var(--font-lg);
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   background: var(--modals-settings-input-bg);
   border: 1px solid var(--modals-settings-border);
   border-radius: var(--radius-md);
@@ -1140,13 +1140,13 @@
 }
 
 .dropdown-trigger:hover {
-  border-color: #9bafc7;
-  background: #f4f7fb;
+  border-color: var(--components-dropdown-text);
+  background: var(--components-dropdown-bg-alt);
 }
 
 .dropdown-trigger:focus {
   border-color: var(--modals-settings-save-btn);
-  box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--modals-settings-save-btn) 12%, transparent);
 }
 
 .dropdown-trigger-text {
@@ -1159,7 +1159,7 @@
 
 .dropdown-chevron {
   flex-shrink: 0;
-  color: #6b7d95;
+  color: var(--modals-schedule-text-light);
   transition: transform 0.18s;
 }
 
@@ -1189,7 +1189,7 @@
   text-align: left;
   font: inherit;
   font-size: var(--font-lg);
-  color: #2a3a50;
+  color: var(--modals-schedule-text);
   background: transparent;
   border: 0;
   border-radius: var(--radius-sm);
@@ -1199,13 +1199,13 @@
 }
 
 .dropdown-option:hover {
-  background: rgba(74, 111, 165, 0.08);
-  color: #3a5a80;
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 8%, transparent);
+  color: var(--modals-schedule-text-dark);
 }
 
 .dropdown-option.selected {
-  background: rgba(74, 111, 165, 0.12);
-  color: #3a5a80;
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 12%, transparent);
+  color: var(--modals-schedule-text-dark);
   font-weight: 600;
 }
 
@@ -1258,7 +1258,7 @@
 .dp-today-btn:hover {
   border-color: var(--status-primary-base);
   color: var(--status-primary-base);
-  background: rgba(26, 127, 114, 0.06);
+  background: color-mix(in srgb, var(--status-primary-base) 6%, transparent);
 }
 
 .dp-today-btn:hover img {
@@ -1267,13 +1267,13 @@
 
 .date-picker-panel.theme-gold .dp-today-btn {
   border-color: var(--modals-schedule-border);
-  color: #a09060;
+  color: var(--components-calendar-gold-muted);
 }
 
 .date-picker-panel.theme-gold .dp-today-btn:hover {
   border-color: var(--components-calendar-gold-selected);
   color: var(--components-calendar-gold-selected);
-  background: rgba(196, 163, 58, 0.08);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
 }
 
 .settings-modal-input-row {
@@ -1306,7 +1306,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #7a8ea5;
+  color: var(--components-dropdown-text);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1315,7 +1315,7 @@
 }
 
 .settings-modal-input-eye:hover {
-  background: rgba(74, 111, 165, 0.06);
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 6%, transparent);
   color: var(--modals-settings-save-btn);
 }
 
@@ -1336,7 +1336,7 @@
 }
 
 .settings-modal-inline-btn:hover:not(:disabled) {
-  background: rgba(74, 111, 165, 0.06);
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 6%, transparent);
   border-color: var(--modals-settings-save-btn);
 }
 
@@ -1359,7 +1359,7 @@
 }
 
 .toggle-switch.on {
-  background: #1a7f72;
+  background: var(--status-primary-base);
 }
 
 .toggle-thumb {
@@ -1385,7 +1385,7 @@
 }
 
 .settings-modal-field-msg.ok {
-  color: #2a7d5f;
+  color: var(--status-primary-dark);
 }
 
 .settings-modal-field-msg.err {
@@ -1394,7 +1394,7 @@
 
 .settings-modal-hint {
   display: block;
-  color: #6b7d95;
+  color: var(--modals-schedule-text-light);
   font-size: var(--font-base);
   margin-top: 2px;
 }
@@ -1427,7 +1427,7 @@
   font-size: var(--font-md);
   font-weight: 500;
   padding: 10px 22px;
-  background: rgba(217, 68, 46, 0.06);
+  background: color-mix(in srgb, var(--status-danger-hover) 6%, transparent);
   margin: 0;
 }
 
@@ -1461,17 +1461,17 @@
 }
 
 .settings-modal-btn-save:hover:not(:disabled) {
-  background: #3d5d8a;
+  background: var(--components-dropdown-accent-dark);
 }
 
 .settings-modal-btn-cancel {
   background: transparent;
-  color: #4a5568;
+  color: var(--components-dropdown-text-dark);
   border: 1px solid var(--modals-settings-border);
 }
 
 .settings-modal-btn-cancel:hover:not(:disabled) {
-  background: rgba(74, 111, 165, 0.05);
+  background: color-mix(in srgb, var(--modals-settings-save-btn) 5%, transparent);
 }
 
 /* ── Confirm Dialog ── */
@@ -1482,7 +1482,7 @@
   z-index: 4000;
   display: grid;
   place-items: center;
-  background: rgba(20, 18, 16, 0.55);
+  background: var(--modals-backdrop-confirm);
   backdrop-filter: blur(4px);
   animation: confirm-backdrop-in 0.18s ease-out;
 }
@@ -1536,11 +1536,11 @@
 }
 
 .confirm-card .confirm-icon-wrap {
-  background: rgba(198, 47, 47, 0.07);
+  background: color-mix(in srgb, var(--status-danger-base) 7%, transparent);
 }
 
-.confirm-card .confirm-icon-wrap:has(svg[stroke="#f0a030"]) {
-  background: rgba(240, 160, 48, 0.07);
+.confirm-card .confirm-icon-wrap:has(svg[stroke="var(--components-calendar-orange)"]) {
+  background: color-mix(in srgb, var(--components-calendar-orange) 7%, transparent);
 }
 
 .confirm-title {
@@ -1554,7 +1554,7 @@
 .confirm-message {
   margin: 0;
   font-size: var(--font-lg);
-  color: #6b625a;
+  color: var(--global-text-warm);
   line-height: 1.5;
 }
 
@@ -1587,12 +1587,12 @@
 }
 
 .confirm-btn-cancel {
-  background: #f0ede8;
+  background: var(--global-surface-warm-0);
   color: var(--global-text-secondary);
 }
 
 .confirm-btn-cancel:hover:not(:disabled) {
-  background: #e5e1db;
+  background: var(--global-surface-warm-1);
 }
 
 .confirm-btn-primary {
@@ -1610,7 +1610,7 @@
 }
 
 .confirm-btn-danger:hover:not(:disabled) {
-  background: #a82323;
+  background: var(--status-danger-hover);
 }
 
 /* ── Notify Form Modal — mention buttons ── */
@@ -1626,7 +1626,7 @@
   border: 1px solid #d9d5c9;
   border-radius: var(--radius-md);
   background: var(--views-search-bg);
-  color: #6b6560;
+  color: var(--modals-schedule-brown);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.12s, color 0.12s;
@@ -1652,7 +1652,7 @@
 
 .notify-mention-type-select .dropdown-trigger:focus {
   border-color: var(--components-calendar-gold-selected);
-  box-shadow: 0 0 0 3px rgba(196, 163, 58, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--components-calendar-gold-selected) 12%, transparent);
 }
 
 .notify-mention-type-select .dropdown-panel {
@@ -1666,12 +1666,12 @@
 }
 
 .notify-mention-type-select .dropdown-option.selected {
-  background: rgba(196, 163, 58, 0.15);
-  color: #5f4510;
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 15%, transparent);
+  color: var(--modals-schedule-amber-dark);
 }
 
 .notify-mention-type-select .dropdown-option:hover {
-  background: rgba(196, 163, 58, 0.08);
+  background: color-mix(in srgb, var(--components-calendar-gold-selected) 8%, transparent);
 }
 
 .notify-mention-id-input {
@@ -1683,8 +1683,8 @@
 }
 
 .notify-mention-icon-btn:hover:not(:disabled) {
-  background: #ece8df;
-  color: #3d3a36;
+  background: var(--global-surface-warm-2);
+  color: var(--global-text-warm-darkest);
 }
 
 .notify-mention-icon-btn:disabled {
@@ -1693,9 +1693,9 @@
 }
 
 .notify-mention-icon-btn-delete:hover:not(:disabled) {
-  background: #f5e0df;
-  color: #b34040;
-  border-color: #e0b4b4;
+  background: var(--status-danger-surface);
+  color: var(--status-danger-hover);
+  border-color: var(--status-danger-light);
 }
 
 .notify-mention-add-group {
@@ -1710,7 +1710,7 @@
   padding: 5px 10px;
   border: 1px solid var(--global-surface-line);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--components-input-bg);
   color: var(--global-surface-muted);
   font-size: var(--font-sm);
   font-weight: 700;
@@ -1728,18 +1728,18 @@
 }
 
 .notify-mention-add-btn .add-btn-icon.todo-icon {
-  background: rgba(74, 143, 122, 0.12);
-  color: #4a8f7a;
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
+  color: var(--views-notify-mention-green);
 }
 
 .notify-mention-add-btn .add-btn-icon.sch-icon {
-  background: rgba(122, 111, 196, 0.12);
-  color: #7a6fc4;
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 12%, transparent);
+  color: var(--views-notify-mention-purple);
 }
 
 .notify-mention-add-btn:hover {
   border-color: var(--status-primary-base);
-  box-shadow: 0 1px 4px rgba(26, 127, 114, 0.12);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--status-primary-base) 12%, transparent);
 }
 
 .notify-mention-error {
