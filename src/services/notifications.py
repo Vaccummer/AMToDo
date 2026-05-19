@@ -227,6 +227,10 @@ class NotificationService:
     def get_mentions(self, notification_id: int) -> list[object]:
         return self._mention_repo.list_for_notification(notification_id)
 
+    def get_mentions_batch(self, notification_ids: list[int]) -> dict[int, list[object]]:
+        """Return mentions grouped by notification_id for a batch of IDs."""
+        return self._mention_repo.list_for_notifications(notification_ids)
+
     def _replace_mentions(
         self, notification_id: int, mentions: list[dict[str, int | str]]
     ) -> None:

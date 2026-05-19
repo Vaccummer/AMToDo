@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
 STANDALONE_USER_ID = 0
+_MAX_CACHE_SIZE = 64
 
-_cache: dict[int, tuple[type, ...]] = {}
+_cache: OrderedDict[int, tuple[type, ...]] = OrderedDict()
 
 
 def get_standalone_tables() -> tuple[type, type, type, type, type, type, type, type, type, type]:
     """Return concrete model classes for standalone (non-multi-user) usage."""
     if STANDALONE_USER_ID in _cache:
+        _cache.move_to_end(STANDALONE_USER_ID)
         return _cache[STANDALONE_USER_ID]
 
     from models.attachment import TodoAttachment
@@ -169,6 +173,7 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, t
     """Return per-user table model classes."""
 
     if user_id in _cache:
+        _cache.move_to_end(user_id)
         return _cache[user_id]
 
     from models.attachment import TodoAttachment
@@ -326,4 +331,16 @@ def get_user_tables(user_id: int) -> tuple[type, type, type, type, type, type, t
         NotificationMentionModel,
     )
     _cache[user_id] = result
+    # Evict oldest non-standalone entries when cache is full
+    while len(_cache) > _MAX_CACHE_SIZE:
+        oldest_key, _ = next(iter(_cache.items()))
+        if oldest_key == STANDALONE_USER_ID:
+            # Skip standalone; try next
+            _cache.move_to_end(oldest_key)
+            if len(_cache) <= _MAX_CACHE_SIZE:
+                break
+            oldest_key, _ = next(iter(_cache.items()))
+            if oldest_key == STANDALONE_USER_ID:
+                break
+        del _cache[oldest_key]
     return result

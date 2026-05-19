@@ -50,8 +50,10 @@ async def get_ws_session_key(request: Request) -> dict[str, object]:
     """
     key_mgr = request.app.state.ws_key_manager
 
-    # Re-use the auth dependency logic to get user_id from body
-    body = await _read_body_cached(request)
+    body_bytes = getattr(request, "_body", None)
+    if body_bytes is None:
+        body_bytes = await request.body()
+    body = _json.loads(body_bytes)
     access_token = body.get("access_token", "")
     token_map: dict[str, int] = request.app.state.token_map
     user_id = token_map.get(access_token)
@@ -77,21 +79,6 @@ async def get_ws_session_key(request: Request) -> dict[str, object]:
         "session_key": _b64url_encode(key),
         "expires_at": int(expires_at),
     }
-
-
-async def _read_body_cached(request) -> dict:
-    """Return parsed JSON body, reusing the cached parse when available."""
-    import json
-
-    cached = getattr(request.state, "_parsed_body", None)
-    if cached is not None:
-        return cached
-    body_bytes = getattr(request, "_body", None)
-    if body_bytes is None:
-        body_bytes = await request.body()
-    parsed = json.loads(body_bytes)
-    request.state._parsed_body = parsed
-    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -213,12 +200,22 @@ async def _notification_watcher(
     interval = int(config.get("watcher_interval", 10))
     _watermarks: dict[int, int] = {}  # user_id → last_check_ts
     _cache = NotificationResultCache(ttl_seconds=interval * 0.8)
+    _last_watermark_gc: float = time.monotonic()
 
     while True:
         await asyncio.sleep(interval)
         now_ts = int(time.time())
+        active_users = set(ws_mgr.active_users)
 
-        for user_id in list(ws_mgr.active_users):
+        # Periodic GC: remove watermarks for users no longer connected
+        if time.monotonic() - _last_watermark_gc > 300:
+            stale = [uid for uid in _watermarks if uid not in active_users]
+            for uid in stale:
+                del _watermarks[uid]
+                _cache.evict(uid)
+            _last_watermark_gc = time.monotonic()
+
+        for user_id in active_users:
             # --- key validity check --------------------------------------
             if key_mgr.get(user_id) is None:
                 await ws_mgr.disconnect_all(user_id)
@@ -289,18 +286,9 @@ def _query_notifications(
     now: int,
 ) -> list[object]:
     """Run a ``list_triggered`` query inside a per-user unit-of-work."""
-    from clock import SystemClock
-    from services import NotificationService
+    from server.notifications import make_notification_service
     from services.uow import UnitOfWork
 
     with UnitOfWork(db, user_id) as uow:
-        clock = SystemClock()
-        svc = NotificationService(
-            uow.notifications,
-            uow.notification_mentions,
-            clock,
-            uow.notification_model,
-            uow.notification_mention_model,
-            changelog_service=uow.notification_changelog_service,
-        )
+        svc = make_notification_service(uow)
         return svc.list_triggered(after=after, now=now)

@@ -33,7 +33,10 @@ UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 
 
-def _make_service(uow: UnitOfWork, clock: Clock) -> NotificationService:
+def make_notification_service(uow: UnitOfWork, clock: Clock | None = None) -> NotificationService:
+    if clock is None:
+        from clock import SystemClock
+        clock = SystemClock()
     return NotificationService(
         uow.notifications,
         uow.notification_mentions,
@@ -51,7 +54,7 @@ def create_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     draft = NotificationDraft(
         title=body.title,
         trigger_at=body.trigger_at,
@@ -70,7 +73,7 @@ def get_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     notification = service.show(body.notification_id)
     mentions = service.get_mentions(notification.id)
     return {"ok": True, "notification": notification_to_dict(notification, mentions)}
@@ -83,7 +86,7 @@ def update_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     fields_set: set[str] = set()
     if body.title is not None:
         fields_set.add("title")
@@ -112,7 +115,7 @@ def remove_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     service.remove(body.notification_id)
     return {"ok": True}
 
@@ -124,12 +127,10 @@ def list_notifications(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     notifications = service.list_between(body.start_at, body.end_at)
-    result = []
-    for n in notifications:
-        mentions = service.get_mentions(n.id)
-        result.append(notification_to_dict(n, mentions))
+    mentions_map = service.get_mentions_batch([n.id for n in notifications])
+    result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
     return {"ok": True, "count": len(result), "notifications": result}
 
 
@@ -139,13 +140,11 @@ def list_triggered_notifications(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     now = int(time.time())
     notifications = service.list_triggered(body.after, now)
-    result = []
-    for n in notifications:
-        mentions = service.get_mentions(n.id)
-        result.append(notification_to_dict(n, mentions))
+    mentions_map = service.get_mentions_batch([n.id for n in notifications])
+    result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
     return {"ok": True, "count": len(result), "notifications": result}
 
 
@@ -156,12 +155,10 @@ def list_deleted_notifications(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     notifications = service.list_deleted()
-    result = []
-    for n in notifications:
-        mentions = service.get_mentions(n.id)
-        result.append(notification_to_dict(n, mentions))
+    mentions_map = service.get_mentions_batch([n.id for n in notifications])
+    result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
     return {"ok": True, "count": len(result), "notifications": result}
 
 
@@ -172,7 +169,7 @@ def restore_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     service.restore(body.notification_id)
     return {"ok": True}
 
@@ -184,7 +181,7 @@ def purge_notification(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    service = _make_service(uow, clock)
+    service = make_notification_service(uow, clock)
     service.purge(body.notification_id)
     return {"ok": True}
 
