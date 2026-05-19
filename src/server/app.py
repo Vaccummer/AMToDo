@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 import json
 
-from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, __version__, AppSettings, amtodo_root
+from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, __version__, AppSettings, server_root
 from amtodo_crypto import ReplayProtector, is_envelope, open_envelope_with_key, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
@@ -188,7 +188,7 @@ def _build_replay_protector(settings: AppSettings) -> ReplayProtector:
 
 def _load_private_keys(settings: AppSettings) -> dict[str, bytes]:
     """Load the P-256 private key, validate it, return key_id → PEM bytes."""
-    root = amtodo_root()
+    root = server_root()
     key_path = root / settings.server_private_key_path
     if not key_path.is_file():
         print(f"FATAL: private key not found: {key_path}", file=sys.stderr)
@@ -372,7 +372,7 @@ def create_app(settings: AppSettings) -> FastAPI:
     app.state.settings = settings
     app.state.replay_protector = _build_replay_protector(settings)
 
-    resolved_attachment_root = amtodo_root() / settings.attachment_root
+    resolved_attachment_root = server_root() / settings.attachment_root
     resolved_attachment_root.mkdir(parents=True, exist_ok=True)
     app.state.attachment_root = resolved_attachment_root
 
@@ -424,7 +424,7 @@ def create_app(settings: AppSettings) -> FastAPI:
 
 def main() -> None:
     """Run the AMToDo HTTP server."""
-    root = amtodo_root()
+    root = server_root()
     raw = _load_raw_config(str(root / "config" / "server.toml"))
 
     server = raw.get("server", {})
@@ -471,7 +471,7 @@ def main() -> None:
     print(f"AMToDo Server v{__version__}")
     print(f"  Log:       {log_path}")
     print(f"  Database:  {database_url}")
-    listen_display = "[::]:port (dual-stack)" if host is None else f"{host}:{port}"
+    listen_display = f"[::]:{port} (dual-stack)" if host is None else f"{host}:{port}"
     print(f"  Listen:    {listen_display}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
     print(f"  Rate limit: {rate_limit_requests} req / {rate_limit_window_seconds}s per IP (public endpoints)")
