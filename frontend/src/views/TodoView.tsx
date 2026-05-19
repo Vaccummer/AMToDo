@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMToDoApi, TodoItem } from "../api/client";
+import { API_NETWORK_STATUS_EVENT } from "../api/client";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
@@ -86,6 +87,20 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [todoRefreshKey, setTodoRefreshKey] = useState(0);
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    function onNetworkStatus(e: Event) {
+      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
+      if (!online) {
+        setStatus("连接已断开");
+      } else if (status === "连接已断开") {
+        setStatus("");
+        setTodoRefreshKey((k) => k + 1);
+      }
+    }
+    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+  }, [status]);
 
   useEffect(() => {
     if (cachedDateKey) setSelectedDayKey(cachedDateKey);
@@ -317,8 +332,90 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       ) : null}
 
       <div className="todo-list">
-        {status ? <div className="empty-state">{status}</div> : null}
-        {!status && todos.length === 0 ? <div className="empty-state">这一天还没有 ToDo</div> : null}
+        {(() => {
+          const completedTodos = todos.filter((t) => t.completed);
+          const lateCompleted = completedTodos.filter(
+            (t) => t.due_at !== null && t.completed_at !== null && t.completed_at > t.due_at
+          );
+          const onTimeCompleted = completedTodos.length - lateCompleted.length;
+          if (!hideCompleted || completedTodos.length === 0) return null;
+          const total = completedTodos.length;
+          const circumference = 2 * Math.PI * 20;
+          const onTimeRatio = onTimeCompleted / total;
+          const lateRatio = lateCompleted.length / total;
+          return (
+            <div className="todo-summary-bar">
+              <div className="ring-wrap">
+                <svg viewBox="0 0 52 52">
+                  <circle className="ring-bg" cx="26" cy="26" r="20" />
+                  {onTimeCompleted > 0 && (
+                    <circle
+                      className="ring-on-time"
+                      cx="26" cy="26" r="20"
+                      strokeDasharray={`${circumference * onTimeRatio} ${circumference}`}
+                      strokeDashoffset="0"
+                    />
+                  )}
+                  {lateCompleted.length > 0 && (
+                    <circle
+                      className="ring-late"
+                      cx="26" cy="26" r="20"
+                      strokeDasharray={`${circumference * lateRatio} ${circumference}`}
+                      strokeDashoffset={`${-circumference * onTimeRatio}`}
+                    />
+                  )}
+                </svg>
+                <div className="ring-center">
+                  {total}
+                </div>
+              </div>
+              <div className="stats-col">
+                <div className="stat-row">
+                  <div className="stat-dot green" />
+                  <span className="stat-label">按时完成</span>
+                  <span className="stat-value">{onTimeCompleted}</span>
+                </div>
+                <div className="stat-row">
+                  <div className="stat-dot amber" />
+                  <span className="stat-label">逾期完成</span>
+                  <span className="stat-value">{lateCompleted.length}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        {status ? (
+          <div className="empty-state-error">
+            <div className="error-illustration">
+              <div className="error-cloud" />
+              <div className="error-bolt">⚡</div>
+            </div>
+            <p className="error-title">连接中断</p>
+            <p className="error-subtitle">无法与服务器通信</p>
+            <button type="button" className="error-retry-btn" onClick={() => { setStatus(""); setTodoRefreshKey((k) => k + 1); }}>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z"/>
+                <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z"/>
+              </svg>
+              重新连接
+            </button>
+          </div>
+        ) : todos.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-illustration">
+              <div className="paper">
+                <div className="paper-line" />
+                <div className="paper-line" />
+                <div className="paper-line" />
+              </div>
+              <div className="check">
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <p className="empty-state-title">今天很清爽</p>
+            <p className="empty-state-subtitle">还没有待办事项</p>
+          </div>
+        ) : null}
         {todos
           .filter((t) => !hideCompleted || !t.completed)
           .map((todo) => {
@@ -400,9 +497,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             onClick={() => setTodoRefreshKey((k) => k + 1)}
             title="刷新当天"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            <svg width="18" height="18" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor"/>
+              <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z" fill="currentColor"/>
             </svg>
           </button>
           <button

@@ -50,9 +50,9 @@ function NotifyIcon() {
 
 function RestoreIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M3 7v6h6" />
-      <path d="M5.5 13A7 7 0 1 0 7 5.3L3 9" />
+    <svg width="14" height="14" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+      <path d="M876.89 535.11c3.22-107.02-35.43-208.89-108.85-286.85-139.4-148.03-365.98-166.35-526.67-50.07l-5.56-57.66c-2.36-24.48-24.16-42.41-48.61-40.07-24.48 2.36-42.43 24.12-40.07 48.61l17.92 185.8a44.52 44.52 0 0 0 17.77 31.48c1.51 1.13 3.07 2.13 4.68 3.04a44.528 44.528 0 0 0 30.61 4.89l178.1-35.47c24.11-4.8 39.77-28.25 34.96-52.39-4.78-24.15-28.22-39.78-52.39-34.96l-81.37 16.2c124.67-87.44 298.4-72.49 405.79 41.7 57.09 60.62 87.16 139.85 84.68 223.08-2.51 83.24-37.26 160.52-97.91 217.62C564.83 867.92 367 862.07 249.25 736.82c-16.83-17.92-45.05-18.76-62.97-1.88-17.89 16.87-18.74 45.06-1.88 62.97 28.36 30.1 60.28 54.83 94.56 74.18 148.83 83.98 341.29 66 472.1-57.18C829 741.5 873.69 642.14 876.89 535.11z" fill="currentColor"/>
+      <path d="M423.44 378.04c-24.59 0.46-44.16 20.78-43.7 45.37l3.34 178.13c0.46 24.59 20.78 44.16 45.37 43.7l178.13-3.34c24.59-0.46 44.16-20.78 43.7-45.37s-20.78-44.16-45.37-43.7l-133.6 2.51-2.51-133.6c-0.46-24.59-20.77-44.16-45.36-43.7z" fill="currentColor"/>
     </svg>
   );
 }
@@ -201,6 +201,42 @@ export function TrashView({ api }: Props) {
     }
   }
 
+  async function purgeAll() {
+    if (filteredItems.length === 0) return;
+    const counts = { todo: 0, schedule: 0, notify: 0 };
+    for (const entry of filteredItems) counts[entry.type]++;
+    const parts: string[] = [];
+    if (counts.todo) parts.push(`${counts.todo} 个待办`);
+    if (counts.schedule) parts.push(`${counts.schedule} 个日程`);
+    if (counts.notify) parts.push(`${counts.notify} 个通知`);
+    const ok = await ask({
+      title: "永久删除筛选结果",
+      message: `即将永久删除 ${parts.join("、")}，共 ${filteredItems.length} 项。此操作不可撤销，相关附件也会被清除。`,
+      confirmLabel: "永久删除",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setBusyKey("purge-all");
+    try {
+      const todoIds = filteredItems.filter((e) => e.type === "todo").map((e) => e.item.id);
+      const scheduleIds = filteredItems.filter((e) => e.type === "schedule").map((e) => e.item.id);
+      const notifyEntries = filteredItems.filter((e) => e.type === "notify");
+      const promises: Promise<unknown>[] = [];
+      if (todoIds.length) promises.push(api.purgeTodos(todoIds));
+      if (scheduleIds.length) promises.push(api.purgeSchedules(scheduleIds));
+      for (const ne of notifyEntries) promises.push(api.purgeNotification(ne.item.id));
+      await Promise.all(promises);
+      const deletedKeys = new Set(filteredItems.map(resultKey));
+      setItems((prev) => prev.filter((item) => !deletedKeys.has(resultKey(item))));
+      setStatus(`已永久删除 ${filteredItems.length} 项`);
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : "批量删除失败");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <div className="trash-view">
       <div className="trash-filter-bar">
@@ -229,6 +265,19 @@ export function TrashView({ api }: Props) {
             placeholder="搜索回收站..."
           />
         </div>
+        <button
+          type="button"
+          className="trash-clear-btn"
+          disabled={filteredItems.length === 0 || busyKey === "purge-all"}
+          onClick={() => void purgeAll()}
+          title="清除全部筛选结果"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          {filteredItems.length > 0 && <span className="count-dot">{filteredItems.length}</span>}
+        </button>
       </div>
 
       <div className="trash-list">

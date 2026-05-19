@@ -99,6 +99,53 @@
   background: var(--components-calendar-orange-surface);
 }
 
+.trash-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid var(--global-surface-border-warm);
+  border-radius: var(--radius-md);
+  background: var(--components-input-bg);
+  color: var(--global-text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  padding: 0;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.trash-clear-btn:hover {
+  border-color: var(--status-danger-base);
+  color: var(--status-danger-base);
+  background: color-mix(in srgb, var(--status-danger-base) 4%, transparent);
+}
+
+.trash-clear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  border-color: var(--global-surface-border-warm);
+  color: var(--global-text-muted);
+  background: var(--components-input-bg);
+}
+
+.trash-clear-btn .count-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--status-danger-base);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+
 .trash-search-wrap {
   margin-left: auto;
   display: flex;
