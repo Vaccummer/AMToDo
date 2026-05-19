@@ -36,4 +36,5 @@ keys/
 .omc/
 docs/
 demo/
+frontend/*.html
 db/
