@@ -16,13 +16,21 @@ if TYPE_CHECKING:
 
 
 class RateLimiter:
-    """Sliding window rate limiter keyed by client IP."""
+    """Sliding window rate limiter keyed by client IP.
+
+    Stale IPs (no requests for ``3 * window_seconds``) are cleaned up inline
+    during ``is_allowed`` calls so the records dict never grows unboundedly.
+    """
+
+    _STALE_MULTIPLIER = 3  # evict IPs silent for this many windows
 
     def __init__(self, max_requests: int, window_seconds: int) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         # ip -> list of request timestamps
         self._records: dict[str, list[float]] = defaultdict(list)
+        self._last_access: dict[str, float] = {}
+        self._last_gc: float = time.monotonic()
 
     def is_allowed(self, ip: str) -> bool:
         """Check and record a request. Return True if allowed, False if over limit."""
@@ -30,7 +38,7 @@ class RateLimiter:
         cutoff = now - self.window_seconds
         timestamps = self._records[ip]
 
-        # Prune expired entries
+        # Prune expired entries for this IP
         while timestamps and timestamps[0] <= cutoff:
             timestamps.pop(0)
 
@@ -38,19 +46,25 @@ class RateLimiter:
             return False
 
         timestamps.append(now)
+        self._last_access[ip] = now
+
+        # Periodic GC: evict IPs that have been silent too long
+        if len(self._records) > 100 and now - self._last_gc > self.window_seconds:
+            self._gc_stale_ips(now)
+
         return True
 
-    def prune(self) -> None:
-        """Remove all expired entries from every IP (call periodically)."""
-        cutoff = time.monotonic() - self.window_seconds
-        empty_ips: list[str] = []
-        for ip, timestamps in self._records.items():
-            while timestamps and timestamps[0] <= cutoff:
-                timestamps.pop(0)
-            if not timestamps:
-                empty_ips.append(ip)
-        for ip in empty_ips:
+    def _gc_stale_ips(self, now: float) -> None:
+        """Remove entries for IPs that haven't been seen recently."""
+        self._last_gc = now
+        stale_cutoff = now - self.window_seconds * self._STALE_MULTIPLIER
+        stale_ips = [
+            ip for ip, last in self._last_access.items()
+            if last < stale_cutoff
+        ]
+        for ip in stale_ips:
             del self._records[ip]
+            del self._last_access[ip]
 
 
 class RateLimitMiddleware:
