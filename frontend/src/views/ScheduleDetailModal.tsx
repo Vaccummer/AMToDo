@@ -337,6 +337,24 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       onUpdate(result.schedule);
       onClose();
     } catch (err: unknown) {
+      // Re-query to get the latest server state on failure
+      try {
+        const fresh = await api.getSchedule(schedule.id);
+        const s = fresh.schedule;
+        setSchedule(s);
+        setTitle(s.title);
+        setDescription(s.description ?? "");
+        setStartDate(splitDatetime(datetimeLocalFromEpoch(s.start_at)).date);
+        setStartTime(splitDatetime(datetimeLocalFromEpoch(s.start_at)).time);
+        setEndDate(splitDatetime(datetimeLocalFromEpoch(s.end_at)).date);
+        setEndTime(splitDatetime(datetimeLocalFromEpoch(s.end_at)).time);
+        setLocation(s.location ?? "");
+        setCategory(s.category ?? "");
+        setAttachmentsChanged(false);
+        onUpdate(fresh.schedule);
+      } catch {
+        // Can't reach server either, keep current state
+      }
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);

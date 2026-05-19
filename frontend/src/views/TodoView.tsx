@@ -22,7 +22,7 @@ type Props = {
   weekStart?: number;
   cachedDateKey?: string;
   onDateChange?: (dateKey: string) => void;
-  pendingAction?: { type: "todo" | "schedule"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
+  pendingAction?: { type: "todo" | "schedule" | "notify"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
   onPendingActionConsumed?: () => void;
 };
 
@@ -82,6 +82,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [hideCompleted, setHideCompleted] = useState(false);
+  const [todoRefreshKey, setTodoRefreshKey] = useState(0);
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
 
@@ -163,7 +165,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     return () => {
       cancelled = true;
     };
-  }, [api, selectedDayKey]);
+  }, [api, selectedDayKey, todoRefreshKey]);
 
   async function toggle(todo: TodoItem) {
     const completed = !todo.completed;
@@ -317,7 +319,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       <div className="todo-list">
         {status ? <div className="empty-state">{status}</div> : null}
         {!status && todos.length === 0 ? <div className="empty-state">这一天还没有 ToDo</div> : null}
-        {todos.map((todo) => {
+        {todos
+          .filter((t) => !hideCompleted || !t.completed)
+          .map((todo) => {
           const isEditing = editingId === todo.id;
           const overdue = isOverdueTodo(todo);
           const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
@@ -385,10 +389,34 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           </div>
           );
         })}
-        <button type="button" className="add-todo-button" onClick={() => void addTodo()}>
-          <img src={addIcon} alt="" />
-          添加待办
-        </button>
+        <div className="todo-bottom-bar">
+          <button type="button" className="add-todo-button todo-bottom-primary" onClick={() => void addTodo()}>
+            <img src={addIcon} alt="" />
+            添加待办
+          </button>
+          <button
+            type="button"
+            className="todo-bottom-icon-btn"
+            onClick={() => setTodoRefreshKey((k) => k + 1)}
+            title="刷新当天"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`todo-bottom-icon-btn${hideCompleted ? " active" : ""}`}
+            onClick={() => setHideCompleted((v) => !v)}
+            title={hideCompleted ? "显示已完成" : "隐藏已完成"}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {detailId != null ? (
