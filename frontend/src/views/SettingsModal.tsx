@@ -29,10 +29,23 @@ type Props = {
   settings: UISettings;
   onSave: (settings: UISettings) => void;
   onClose: () => void;
+  focusTarget?: "url" | "token";
 };
 
-export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
+export function SettingsModal({ settings: initial, onSave, onClose, focusTarget }: Props) {
   const [serverUrl, setServerUrl] = useState(initial.server_url);
+
+  useEffect(() => {
+    if (!focusTarget) return;
+    const id = focusTarget === "url" ? "srv-url" : "srv-token";
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    });
+  }, [focusTarget]);
   const [lanAddress, setLanAddress] = useState(initial.lan_address);
   const [accessToken, setAccessToken] = useState(initial.access_token);
   const [language, setLanguage] = useState(initial.language);

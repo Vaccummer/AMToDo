@@ -383,6 +383,10 @@ export class AMToDoApi {
     this.maxAttachmentsPerTodo = maxAttachmentsPerTodo;
   }
 
+  get serverUrl(): string {
+    return this.baseUrl;
+  }
+
   async health(): Promise<HealthResponse> {
     const response = await fetchWithNetworkStatus(`${this.baseUrl}/api/v1/health`);
     const payload = await response.json();

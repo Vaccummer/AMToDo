@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../api/client";
+import { API_NETWORK_STATUS_EVENT } from "../api/client";
+import lockIcon from "../assets/lock.svg";
 import { addDaysToDateKey, dateKeyFromEpoch, formatDueTime, formatTime, isOverdueTodo, startOfDateKeyEpoch } from "../lib/time";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
 import { NotifyFormModal } from "./NotifyFormModal";
@@ -9,9 +11,12 @@ import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { TodoDetailModal } from "./TodoDetailModal";
 import { useConfirm } from "./ConfirmDialog";
 
+type ErrorKind = "network" | "token";
+
 type Props = {
   api: AMToDoApi;
   onNavigate: (target: "todo" | "schedule", dateKey?: string) => void;
+  onOpenSettings?: (focusTarget?: "url" | "token") => void;
 };
 
 type SearchMode = "todo" | "schedule" | "notify";
@@ -271,7 +276,7 @@ function updateFields(fields: string[], value: string, checked: boolean): string
   return next.length ? next : fields;
 }
 
-export function SearchView({ api, onNavigate }: Props) {
+export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
   const initialConfig = useMemo(() => cloneSearchConfig(searchSessionConfig), []);
   const [mode, setMode] = useState<SearchMode>(initialConfig.mode);
   const [query, setQuery] = useState(initialConfig.query);
@@ -302,12 +307,32 @@ export function SearchView({ api, onNavigate }: Props) {
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState("尚未搜索");
   const [busy, setBusy] = useState(false);
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [connectionUrl, setConnectionUrl] = useState<string>("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [detail, setDetail] = useState<ResultItem | null>(null);
   const [editingNotifyId, setEditingNotifyId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    function onNetworkStatus(e: Event) {
+      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
+      if (!online) {
+        setErrorKind("network");
+        setErrorMessage("无法与服务器通信");
+        setConnectionUrl(api.serverUrl);
+      } else if (errorKind === "network") {
+        setErrorKind(null);
+        setErrorMessage("");
+        setConnectionUrl("");
+      }
+    }
+    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+  }, [errorKind, api.serverUrl]);
 
   const currentFields = mode === "todo" ? todoFields : mode === "schedule" ? scheduleFields : notifyFields;
   const currentSortOptions = mode === "todo" ? TODO_SORT_OPTIONS : mode === "schedule" ? SCHEDULE_SORT_OPTIONS : NOTIFY_SORT_OPTIONS;
@@ -448,6 +473,8 @@ export function SearchView({ api, onNavigate }: Props) {
         const response = await api.searchTodos(query, params);
         setResults(response.todos.map((item) => ({ type: "todo", item })));
         setTotal(response.total);
+        setErrorKind(null);
+        setErrorMessage("");
         setStatus(response.total ? "" : "没有匹配结果");
       } else if (mode === "schedule") {
         const params: Parameters<AMToDoApi["searchSchedules"]>[1] = {
@@ -473,6 +500,8 @@ export function SearchView({ api, onNavigate }: Props) {
         const response = await api.searchSchedules(query, params);
         setResults(response.schedules.map((item) => ({ type: "schedule", item })));
         setTotal(response.total);
+        setErrorKind(null);
+        setErrorMessage("");
         setStatus(response.total ? "" : "没有匹配结果");
       } else {
         // Notify mode: fetch all and client-side filter
@@ -522,7 +551,17 @@ export function SearchView({ api, onNavigate }: Props) {
     } catch (error: unknown) {
       setResults([]);
       setTotal(0);
-      setStatus(error instanceof Error ? error.message : "搜索失败");
+      if (error instanceof TypeError) {
+        setErrorKind("network");
+        setErrorMessage("无法与服务器通信");
+        setConnectionUrl(api.serverUrl);
+        setStatus("连接失败");
+      } else {
+        setErrorKind("token");
+        setErrorMessage(error instanceof Error ? error.message : "搜索失败");
+        setConnectionUrl("");
+        setStatus(error instanceof Error ? error.message : "搜索失败");
+      }
     } finally {
       setBusy(false);
     }
@@ -974,7 +1013,7 @@ export function SearchView({ api, onNavigate }: Props) {
 
         <section className="search-results">
           <div className="search-results-toolbar">
-            <span>{status || `${results.length}/${total} 项`}</span>
+            <span>{errorKind ? (errorKind === "network" ? "连接失败" : "认证失败") : status || `${results.length}/${total} 项`}</span>
             <div className="search-sort-controls">
               <Dropdown
                 value={currentSortBy}
@@ -998,7 +1037,39 @@ export function SearchView({ api, onNavigate }: Props) {
           </div>
 
           <div className="search-result-list">
-            {results.map((result) => {
+            {errorKind ? (
+              <div className={`search-error-state${errorKind === "token" ? " token-error" : ""}`}>
+                <div className="search-error-illustration">
+                  {errorKind === "network" ? (
+                    <>
+                      <div className="error-cloud" />
+                      <div className="error-bolt">⚡</div>
+                    </>
+                  ) : (
+                    <img className="error-lock-icon" src={lockIcon} alt="" />
+                  )}
+                </div>
+                <p className="search-error-title">{errorKind === "network" ? "连接中断" : "身份验证失败"}</p>
+                <p className="search-error-subtitle">{errorMessage}</p>
+                {errorKind === "network" && connectionUrl && (
+                  <p className="search-error-url">{connectionUrl}</p>
+                )}
+                <button
+                  type="button"
+                  className="search-error-btn"
+                  onClick={() => {
+                    if (onOpenSettings) {
+                      onOpenSettings(errorKind === "network" ? "url" : "token");
+                    } else {
+                      setErrorKind(null);
+                      setErrorMessage("");
+                    }
+                  }}
+                >
+                  {errorKind === "network" ? "检查连接设置" : "更新访问令牌"}
+                </button>
+              </div>
+            ) : results.map((result) => {
               const key = resultKey(result);
               const isEditing = editingKey === key;
               if (result.type === "todo") {

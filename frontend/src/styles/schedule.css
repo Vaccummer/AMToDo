@@ -186,6 +186,107 @@
   padding-top: 18px;
 }
 
+/* ── Schedule Error Bar (Variant 6: Inline Status Row) ── */
+
+.schedule-error-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #fef2f2, #fde8e8);
+  border-top: 1px solid #f5c6c6;
+  flex-shrink: 0;
+  animation: schedule-error-slide-up 0.25s ease-out;
+}
+
+@keyframes schedule-error-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.schedule-error-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(201, 68, 68, 0.12);
+}
+
+.schedule-error-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: #c94444;
+}
+
+.schedule-error-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.schedule-error-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b2020;
+}
+
+.schedule-error-desc {
+  font-size: 11px;
+  color: #b05050;
+}
+
+.schedule-error-retry {
+  padding: 6px 16px;
+  background: #c94444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.schedule-error-retry:hover {
+  background: #a83838;
+}
+
+/* ── Token error variant ── */
+.schedule-error-bar.token-error {
+  background: linear-gradient(135deg, #fef9f0, #fef3e2);
+  border-top-color: #f5d0a0;
+}
+
+.token-error .schedule-error-icon {
+  box-shadow: 0 1px 4px rgba(180, 83, 9, 0.12);
+}
+
+.token-error .schedule-error-icon img {
+  width: 18px;
+  height: 18px;
+}
+
+.token-error .schedule-error-title {
+  color: #92400e;
+}
+
+.token-error .schedule-error-desc {
+  color: #b45309;
+}
+
+.token-error .schedule-error-retry {
+  background: #b45309;
+}
+
+.token-error .schedule-error-retry:hover {
+  background: #92400e;
+}
+
 /* ── Notify Event (rendered inside schedule grid) ── */
 
 .notify-event {
