@@ -33,7 +33,7 @@ type Props = {
   cachedDateKey?: string;
   onDateChange?: (dateKey: string) => void;
   onNavigate?: (type: "todo" | "schedule", id: number, action: "jump" | "edit") => void;
-  pendingAction?: { type: "todo" | "schedule"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
+  pendingAction?: { type: "todo" | "schedule" | "notify"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
   onPendingActionConsumed?: () => void;
 };
 
@@ -140,9 +140,13 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
       setSelectedDateKey(pendingAction.dateKey);
     }
     if (pendingAction.action === "edit") {
-      const item = items.find((s) => s.id === pendingAction.id);
-      if (item) {
-        setDetailId(pendingAction.id);
+      if (pendingAction.type === "notify") {
+        setNotifyEditId(pendingAction.id);
+      } else {
+        const item = items.find((s: any) => s.id === pendingAction.id);
+        if (item) {
+          setDetailId(pendingAction.id);
+        }
       }
     }
     onPendingActionConsumed?.();
@@ -163,6 +167,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const notifyEventRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const [notifyFormOpen, setNotifyFormOpen] = useState(false);
   const [notifyFormTriggerAt, setNotifyFormTriggerAt] = useState<number | undefined>(undefined);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!cachedDateKey) return;
@@ -264,7 +269,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
         setItems([]);
         setStatus(error instanceof Error ? error.message : "无法加载日程");
       });
-  }, [api, days]);
+  }, [api, days, refreshKey]);
 
   // Fetch notifications for the displayed week
   useEffect(() => {
@@ -274,7 +279,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
       .listNotifications({ start_at: start, end_at: end })
       .then((result) => setNotifications(result.notifications))
       .catch(() => setNotifications([]));
-  }, [api, days]);
+  }, [api, days, refreshKey]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -404,12 +409,19 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   async function deleteSchedule(id: number) {
     try {
       await api.deleteSchedule(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
     } catch {
-      // keep going
+      // Re-query to check if delete actually succeeded on the server
+      try {
+        const fresh = await api.getSchedule(id);
+        replaceScheduleItem(fresh.schedule);
+      } catch {
+        // Item not found on server, remove locally
+        setItems((prev) => prev.filter((item) => item.id !== id));
+      }
     }
     if (detailId === id) setDetailId(null);
     if (contextMenu?.id === id) setContextMenu(null);
-    setItems((prev) => prev.filter((item) => item.id !== id));
   }
 
   async function askDeleteSchedule(id: number) {
@@ -891,8 +903,19 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                 event.preventDefault();
                 setSelectedDateKey(dayKey);
                 setContextMenu(null);
+
+                // Calculate precise minute from click position within the cell
+                const cellHeight = (HOUR_HEIGHT * normalizedSlotMinutes) / 60;
+                const offsetY = (event.nativeEvent as MouseEvent).offsetY;
+                const ratio = Math.max(0, Math.min(1, offsetY / cellHeight));
+                const exactMinute = currentSlot.minutes + Math.round(ratio * normalizedSlotMinutes);
+                const dayStart = startOfDateKeyEpoch(dayKey);
+                const exactStartAt = dayStart + exactMinute * 60;
+                const exactEndAt = exactStartAt + normalizedSlotMinutes * 60;
+
                 setEmptyContextMenu({
-                  ...scheduleWindowForSlot(dayKey, currentSlot),
+                  startAt: exactStartAt,
+                  endAt: exactEndAt,
                   x: event.clientX,
                   y: event.clientY
                 });
@@ -966,8 +989,16 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           onDelete={(id) => deleteSchedule(id)}
           onUpdate={(updated) => {
             setItems((prev) =>
-              prev.map((item) => (item.id === updated.id ? updated : item))
+              prev
+                .map((item) => (item.id === updated.id ? updated : item))
+                .sort((a, b) => a.start_at - b.start_at || a.end_at - b.end_at || a.id - b.id)
             );
+            // If the updated item is currently being edited, clear editing state
+            // so the fresh data from the detail modal is reflected on the grid
+            if (editing?.id === updated.id) {
+              setEditing(null);
+              pointerEditRef.current = null;
+            }
           }}
         />
       ) : null}
@@ -1066,6 +1097,13 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                 setEmptyContextMenu(null);
                 setNotifyFormOpen(true);
               }
+            },
+            {
+              label: "刷新",
+              icon: <RefreshIcon />,
+              action: () => {
+                setRefreshKey((k) => k + 1);
+              }
             }
           ]}
           onClose={() => setEmptyContextMenu(null)}
@@ -1141,6 +1179,15 @@ function buildScheduleSlots(startHour: number, endHour: number, slotMinutes: num
       label: formatSlotLabel(minutes)
     };
   });
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  );
 }
 
 function PlusIcon() {
