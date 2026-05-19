@@ -1,7 +1,3 @@
-[build-system]
-requires = ["hatchling>=1.26"]
-build-backend = "hatchling.build"
-
 [project]
 name = "amtodo"
 version = "0.1.0"
@@ -18,7 +14,6 @@ dependencies = [
   "fastapi>=0.115",
   "httpx>=0.28",
   "python-multipart>=0.0.20",
-  "pyside6>=6.8",
   "sqlalchemy>=2.0",
   "typer>=0.15",
   "tzdata>=2025.2; platform_system == 'Windows'",
@@ -29,18 +24,23 @@ dependencies = [
 amtodo = "cli:main"
 amtodo-server = "server.app:main"
 
-[project.gui-scripts]
-amtodo-ui = "ui.app:main"
-
 [dependency-groups]
 dev = [
   "pytest>=8.0",
   "ruff>=0.8",
 ]
 
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
 [tool.hatch.build.targets.wheel]
 only-include = []
-force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/amtodo_crypto" = "amtodo_crypto", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "src/ui" = "ui", "alembic" = "alembic", "alembic.ini" = "alembic.ini" }
+force-include = { "src/cli.py" = "cli.py", "src/clock.py" = "clock.py", "src/config.py" = "config.py", "src/dates.py" = "dates.py", "src/exceptions.py" = "exceptions.py", "src/serialization.py" = "serialization.py", "src/amtodo_crypto" = "amtodo_crypto", "src/client" = "client", "src/db" = "db", "src/models" = "models", "src/repositories" = "repositories", "src/server" = "server", "src/services" = "services", "alembic" = "alembic", "alembic.ini" = "alembic.ini" }
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
@@ -49,10 +49,6 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ANN", "RUF"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
 
 [[tool.uv.index]]
 url = "https://repo.huaweicloud.com/repository/pypi/simple"
