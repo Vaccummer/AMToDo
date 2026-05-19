@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +20,8 @@ DEFAULT_MAX_ATTACHMENTS_PER_TODO = 20
 DEFAULT_RATE_LIMIT_REQUESTS = 30
 DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_IP_CACHE_TTL_SECONDS = 300
-AMTODO_ROOT_ENV_VAR = Path()
+_AMTODO_SERVER_ROOT_CACHE = Path()
+_AMTODO_CLI_ROOT_CACHE = Path()
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,30 +48,51 @@ class AppSettings:
     ip_cache_ttl_seconds: int = DEFAULT_IP_CACHE_TTL_SECONDS
 
 
-def amtodo_root() -> Path:
-    """Return the AMTODO_ROOT directory.
+def _resolve_root(
+    env_var: str,
+    cache_attr: str,
+    *,
+    fatal_handler: Callable[[str], None] | None = None,
+) -> Path:
+    """Resolve a root directory from an environment variable with caching.
 
-    Requires the AMTODO_ROOT environment variable to be set to an existing
-    directory.  Exits with an error message if the variable is missing or the
-    path is invalid.
+    *fatal_handler* is called with an error message instead of the default
+    stderr print + sys.exit(1) when provided.
     """
-    global AMTODO_ROOT_ENV_VAR
+    cache: Path = globals()[cache_attr]
+    _die = fatal_handler or (lambda msg: (print(f"FATAL: {msg}", file=sys.stderr), sys.exit(1)))
 
-    raw = os.environ.get("AMTODO_ROOT")
+    raw = os.environ.get(env_var)
     if not raw:
-        if AMTODO_ROOT_ENV_VAR:
-            return AMTODO_ROOT_ENV_VAR
-        print("FATAL: AMTODO_ROOT environment variable is not set", file=sys.stderr)
-        sys.exit(1)
+        if cache:
+            return cache
+        _die(f"{env_var} environment variable is not set")
+        sys.exit(1)  # unreachable if handler exits, keeps type-checker happy
 
     root = Path(raw)
-    if AMTODO_ROOT_ENV_VAR == root:
-        return AMTODO_ROOT_ENV_VAR
+    if cache == root:
+        return cache
     if not root.is_dir():
-        print(f"FATAL: AMTODO_ROOT is not a directory: {root}", file=sys.stderr)
+        _die(f"{env_var} is not a directory: {root}")
         sys.exit(1)
-    AMTODO_ROOT_ENV_VAR = root
+    globals()[cache_attr] = root
     return root
+
+
+def server_root() -> Path:
+    """Return the server root directory from AMTODO_SERVER_ROOT."""
+    return _resolve_root("AMTODO_SERVER_ROOT", "_AMTODO_SERVER_ROOT_CACHE")
+
+
+def cli_root() -> Path:
+    """Return the CLI root directory from AMTODO_CLI_ROOT."""
+    import json as _json
+
+    def _json_fatal(msg: str) -> None:
+        print(_json.dumps({"ok": False, "error": msg}, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
+
+    return _resolve_root("AMTODO_CLI_ROOT", "_AMTODO_CLI_ROOT_CACHE", fatal_handler=_json_fatal)
 
 
 
@@ -92,7 +115,7 @@ def _int_env(name: str, default: int) -> int:
 def load_settings() -> AppSettings:
     """Load settings from environment variables (used by server / UI)."""
 
-    root = amtodo_root()
+    root = server_root()
     return AppSettings(
         database_url=os.environ.get("AMTODO_DATABASE_URL", _default_database_url(root)),
         language=os.environ.get("AMTODO_LANGUAGE", DEFAULT_LANGUAGE),
@@ -113,13 +136,13 @@ def load_settings() -> AppSettings:
 
 
 def load_cli_settings() -> AppSettings:
-    """Load CLI settings from $AMTODO_ROOT/config/cli.toml.
+    """Load CLI settings from $AMTODO_CLI_ROOT/config/cli.toml.
 
     database_url in cli.toml takes priority over server_url.  When neither
-    is set a local SQLite database under AMTODO_ROOT is used.
+    is set a local SQLite database under AMTODO_CLI_ROOT is used.
     """
 
-    root = amtodo_root()
+    root = cli_root()
     config_path = root / "config" / "cli.toml"
 
     database_url = ""
@@ -149,9 +172,9 @@ def load_cli_settings() -> AppSettings:
 
 
 def load_ui_settings() -> AppSettings:
-    """Load UI settings from $AMTODO_ROOT/config/ui.toml."""
+    """Load UI settings from $AMTODO_SERVER_ROOT/config/ui.toml."""
 
-    root = amtodo_root()
+    root = server_root()
     config_path = root / "config" / "ui.toml"
 
     server_url = ""

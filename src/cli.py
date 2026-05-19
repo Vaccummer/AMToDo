@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 
 from client.attachment_cache import AttachmentCache
 from clock import Clock, SystemClock
-from config import AppSettings, __version__, amtodo_root, load_cli_settings
+from config import AppSettings, __version__, cli_root, load_cli_settings
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.factory import get_user_tables
 from models.user import User
@@ -540,7 +540,7 @@ def todo_attachment_get(
     """Fetch an attachment into the local decrypted cache."""
 
     settings = load_cli_settings()
-    root = amtodo_root()
+    root = cli_root()
     cache = AttachmentCache(root)
     if settings.server_url:
         from client.http import AMTodoClient
@@ -633,7 +633,7 @@ def todo_attachment_download(
     """Download and decrypt an attachment to a local file."""
 
     settings = load_cli_settings()
-    root = amtodo_root()
+    root = cli_root()
     cache = AttachmentCache(root)
     if settings.server_url:
         from client.http import AMTodoClient
@@ -1101,7 +1101,7 @@ def schedule_attachment_get(
     """Fetch a schedule attachment into the local decrypted cache."""
 
     settings = load_cli_settings()
-    root = amtodo_root()
+    root = cli_root()
     cache = AttachmentCache(root)
     if settings.server_url:
         from client.http import AMTodoClient
@@ -1175,7 +1175,7 @@ def schedule_attachment_download(
     """Download and decrypt a schedule attachment to a local file."""
 
     settings = load_cli_settings()
-    root = amtodo_root()
+    root = cli_root()
     cache = AttachmentCache(root)
     if settings.server_url:
         from client.http import AMTodoClient
@@ -1483,7 +1483,7 @@ def user_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> Non
 def attachment_cache_clear() -> None:
     """Clear the local attachment cache."""
 
-    cache = AttachmentCache(amtodo_root())
+    cache = AttachmentCache(cli_root())
     cache.clear()
     _echo_json({"ok": True})
 
@@ -1566,7 +1566,7 @@ def _attachment_service(uow: UnitOfWork, clock: Clock) -> AttachmentService:
         uow.todos,
         clock,
         uow.attachment_model,
-        amtodo_root(),
+        cli_root(),
         uow.user_id,
     )
 
@@ -1590,12 +1590,21 @@ def _resolve_download_path(
 
 
 @app.command("gen-keys")
-def gen_keys() -> None:
+def gen_keys(
+    output_dir: Annotated[
+        Path,
+        typer.Argument(
+            file_okay=False,
+            dir_okay=True,
+            writable=True,
+            help="Directory to write generated key pair into.",
+        ),
+    ] = ...,
+) -> None:
     """Generate a P-256 key pair for request encryption."""
     from amtodo_crypto import generate_keypair
 
-    root = amtodo_root()
-    keys_dir = root / "config" / "keys"
+    keys_dir = output_dir.resolve()
     keys_dir.mkdir(parents=True, exist_ok=True)
 
     private_pem, public_pem = generate_keypair()

@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from config import AppSettings, amtodo_root
+from config import AppSettings, cli_root
 
 
 class AMTodoClient:
@@ -27,7 +27,7 @@ class AMTodoClient:
         if self._public_key_path:
             key_path = Path(self._public_key_path)
             if not key_path.is_absolute():
-                key_path = amtodo_root() / self._public_key_path
+                key_path = cli_root() / self._public_key_path
             if key_path.is_file():
                 self._public_key_pem = key_path.read_bytes()
 

@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 
-from config import __version__, amtodo_root
+from config import __version__, server_root
 from db.base import Base
 from models.user import User
 from serialization import user_to_dict, user_to_dict_with_token
@@ -71,7 +71,7 @@ async def health(request: Request) -> dict[str, object]:
         try:
             from amtodo_crypto.keys import public_key_spki
 
-            root = amtodo_root()
+            root = server_root()
             pub_path = root / settings.server_public_key_path
             if pub_path.is_file():
                 raw = public_key_spki(pub_path.read_bytes())

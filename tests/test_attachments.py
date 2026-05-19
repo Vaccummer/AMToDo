@@ -81,7 +81,7 @@ def test_attachment_http_upload_metadata_and_download(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(config, "AMTODO_ROOT_ENV_VAR", tmp_path)
+    monkeypatch.setattr(config, "_AMTODO_SERVER_ROOT_CACHE", tmp_path)
     att_root = tmp_path / "attachments"
     att_root.mkdir(parents=True, exist_ok=True)
     app = create_app(
