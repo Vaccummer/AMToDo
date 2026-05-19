@@ -1,3 +1,6 @@
+import { initShell } from "./shell";
+initShell();
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
