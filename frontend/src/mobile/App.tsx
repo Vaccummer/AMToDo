@@ -1,41 +1,62 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AMToDoApi, API_NETWORK_STATUS_EVENT, type HealthResponse, type TodoItem } from "../api/client";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
 import { importP256PublicKey } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
+import { SettingsModal } from "../views/SettingsModal";
+import { ScheduleView } from "../views/ScheduleView";
+import { SearchView } from "../views/SearchView";
+import { TodoView } from "../views/TodoView";
+import { TrashView } from "../views/TrashView";
+import { NotifyView } from "../views/NotifyView";
+import { TodoDetailModal } from "../views/TodoDetailModal";
+import gearIcon from "../assets/gear.svg";
+import todoIcon from "../assets/todo.svg";
+import scheduleIcon from "../assets/schedule.svg";
+import searchIcon from "../assets/search.svg";
+import trashIcon from "../assets/trash.svg";
+import notifyIcon from "../assets/notify.svg";
 
-export type Tab = "todo" | "schedule" | "search" | "trash" | "notify";
-export type ConnectionStatus = "checking" | "online" | "offline";
-export type PendingAction = {
-  type: "todo" | "schedule" | "notify";
-  id: number;
-  action: "jump" | "edit";
-  dateKey?: string;
+type Tab = "todo" | "schedule" | "search" | "trash" | "notify";
+type ConnectionStatus = "checking" | "online" | "offline";
+
+const tabIcons: Record<Tab, string> = {
+  todo: todoIcon,
+  schedule: scheduleIcon,
+  search: searchIcon,
+  trash: trashIcon,
+  notify: notifyIcon,
 };
 
-export function useAppCore() {
+const tabLabels: Record<Tab, string> = {
+  todo: "待办",
+  schedule: "日程",
+  search: "搜索",
+  trash: "回收站",
+  notify: "通知",
+};
+
+const shell = window.amtodoShell!;
+
+export function App() {
   applyTheme(getTheme(DEFAULT_THEME));
 
-  const shell = window.amtodoShell!;
-
   const [activeTab, setActiveTab] = useState<Tab>("todo");
-  const visitedTabs = useRef<Set<Tab>>(new Set(["todo"])).current;
-  const [visitedTick, setVisitedTick] = useState(0);
-  const tabHistory = useRef<{ stack: Tab[]; index: number }>({ stack: ["todo"], index: 0 });
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
-  const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [username, setUsername] = useState("");
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [selectedDateCache, setSelectedDateCache] = useState<Record<string, string>>({});
-  const [crossTypeEdit, setCrossTypeEdit] = useState<{
-    type: "todo";
-    item: TodoItem;
+  const [pendingAction, setPendingAction] = useState<{
+    type: "todo" | "schedule" | "notify";
+    id: number;
+    action: "jump" | "edit";
+    dateKey?: string;
   } | null>(null);
+  const [selectedDateCache, setSelectedDateCache] = useState<Record<string, string>>({});
+  const [crossTypeEdit, setCrossTypeEdit] = useState<{ type: "todo"; item: TodoItem } | null>(null);
 
   const [settings, setSettings] = useState<UISettings>(() => ({
     ...DEFAULT_SETTINGS,
@@ -55,31 +76,7 @@ export function useAppCore() {
   }, []);
 
   function navigateTab(tab: Tab) {
-    const h = tabHistory.current;
-    h.stack = h.stack.slice(0, h.index + 1);
-    h.stack.push(tab);
-    h.index = h.stack.length - 1;
-    if (!visitedTabs.has(tab)) {
-      visitedTabs.add(tab);
-      setVisitedTick((t) => t + 1);
-    }
     setActiveTab(tab);
-  }
-
-  function goBack() {
-    const h = tabHistory.current;
-    if (h.index > 0) {
-      h.index--;
-      setActiveTab(h.stack[h.index]);
-    }
-  }
-
-  function goForward() {
-    const h = tabHistory.current;
-    if (h.index < h.stack.length - 1) {
-      h.index++;
-      setActiveTab(h.stack[h.index]);
-    }
   }
 
   async function handleMentionNavigate(type: "todo" | "schedule", id: number, action: "jump" | "edit") {
@@ -90,7 +87,7 @@ export function useAppCore() {
           setCrossTypeEdit({ type: "todo", item: r.todo });
           return;
         }
-      } catch { /* fall through to normal navigation */ }
+      } catch { /* fall through */ }
     }
 
     let dateKey: string | undefined;
@@ -107,7 +104,15 @@ export function useAppCore() {
     setPendingAction({ type, id, action, dateKey });
   }
 
-  // Load settings from disk on mount
+  // Configure status bar
+  useEffect(() => {
+    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#1a1a1a" }).catch(() => {});
+    }).catch(() => {});
+  }, []);
+
+  // Load settings
   useEffect(() => {
     shell.readSettings()
       .then((raw) => {
@@ -121,68 +126,7 @@ export function useAppCore() {
       .catch(() => { /* keep defaults */ });
   }, []);
 
-  // Parallel startup: detect server_url and lan_address simultaneously
-  useEffect(() => {
-    if (!settings.lan_address) return;
-    let cancelled = false;
-
-    const healthWithTimeout = async (url: string, timeoutMs: number): Promise<HealthResponse> => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const api = new AMToDoApi(url, null);
-        const result = await api.health();
-        return result;
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-
-    const verifyAddress = async (baseUrl: string, lanResult: HealthResponse): Promise<string | null> => {
-      const url = new URL(baseUrl);
-      const port = url.port;
-      const candidates: string[] = [];
-      if (lanResult.ipv6) candidates.push(`${url.protocol}//${lanResult.ipv6}:${port}`);
-      if (lanResult.ipv4) candidates.push(`${url.protocol}//${lanResult.ipv4}:${port}`);
-      for (const candidate of candidates) {
-        try {
-          await healthWithTimeout(candidate, 3000);
-          return candidate;
-        } catch {
-          continue;
-        }
-      }
-      return null;
-    };
-
-    const detect = async () => {
-      const directPromise = healthWithTimeout(settings.server_url, 5000)
-        .then((result) => ({ type: "direct" as const, result, url: settings.server_url }))
-        .catch(() => null);
-
-      const lanPromise = healthWithTimeout(settings.lan_address, 5000)
-        .then((result) => ({ type: "lan" as const, result, url: settings.lan_address }))
-        .catch(() => null);
-
-      const winner = await Promise.race([directPromise, lanPromise]);
-      if (cancelled || !winner) return;
-
-      if (winner.type === "direct") {
-        return;
-      }
-
-      const verified = await verifyAddress(settings.lan_address, winner.result);
-      if (cancelled || !verified) return;
-
-      setSettings((prev) => ({ ...prev, server_url: verified }));
-      shell.writeSettings({ server_url: verified }).catch(() => {});
-    };
-
-    void detect();
-    return () => { cancelled = true; };
-  }, [settings.lan_address]);
-
-  // Bootstrap API client with health check + encryption
+  // Bootstrap API
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
@@ -214,12 +158,6 @@ export function useAppCore() {
       setConnectionStatus("online");
     };
 
-    const scheduleRetry = () => {
-      retryTimer = window.setTimeout(() => {
-        void runBootstrap();
-      }, 2000);
-    };
-
     const runBootstrap = async () => {
       if (cancelled) return;
       setConnectionStatus("checking");
@@ -230,19 +168,18 @@ export function useAppCore() {
         setHealth(null);
         setHealthError(error instanceof Error ? error.message : "无法连接后端");
         setConnectionStatus("offline");
-        scheduleRetry();
+        retryTimer = window.setTimeout(() => void runBootstrap(), 2000);
       }
     };
 
     void runBootstrap();
     return () => {
       cancelled = true;
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
-      }
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [settings.server_url, settings.access_token]);
 
+  // Network status
   useEffect(() => {
     function handleNetworkStatus(event: Event) {
       const detail = (event as CustomEvent<{ online: boolean; message?: string }>).detail;
@@ -254,19 +191,18 @@ export function useAppCore() {
         setHealthError(detail.message ?? "网络错误");
       }
     }
-
     window.addEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
     return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
   }, []);
 
-  // Fetch current user display name
+  // Fetch username
   useEffect(() => {
     api.user()
       .then((result) => setUsername(result.user.name))
       .catch(() => setUsername(""));
   }, [api]);
 
-  // Listen for notification clicks -> navigate to schedule & open edit
+  // Notification click handler
   useEffect(() => {
     return shell.onNotificationClicked?.((data: { id: number; trigger_at: number }) => {
       const { id, trigger_at } = data;
@@ -299,14 +235,7 @@ export function useAppCore() {
       global_hotkey: newSettings.global_hotkey,
       notification_silent: String(newSettings.notification_silent),
       notification_timeout: newSettings.notification_timeout,
-    }).then(() => {
-      shell.startNotificationPolling?.({
-        server_url: newSettings.server_url,
-        access_token: newSettings.access_token,
-        notification_poll_interval: String(newSettings.notification_poll_interval),
-        notification_query_window: String(newSettings.notification_query_window),
-      });
-    }).catch(() => { /* keep going */ });
+    }).catch(() => {});
     setSettings(newSettings);
     setDefaultTimezone(newSettings.timezone);
     applyTheme(getTheme(newSettings.theme));
@@ -315,32 +244,102 @@ export function useAppCore() {
     setShowSettings(false);
   }, []);
 
-  return {
-    activeTab,
-    health,
-    healthError,
-    connectionStatus,
-    maximized,
-    setMaximized,
-    showSettings,
-    setShowSettings,
-    username,
-    pendingAction,
-    setPendingAction,
-    selectedDateCache,
-    setSelectedDateCache,
-    crossTypeEdit,
-    setCrossTypeEdit,
-    settings,
-    api,
-    visitedTabs,
-    visitedTick,
-    navigateTab,
-    goBack,
-    goForward,
-    handleMentionNavigate,
-    handleTodoDateChange,
-    handleScheduleDateChange,
-    handleSettingsSave,
-  };
+  const connectionOk = connectionStatus === "online";
+
+  return (
+    <div className="mobile-shell">
+      <header className="mobile-header">
+        <div className="mobile-header-left">
+          <div className={connectionOk ? "brand-dot ok" : "brand-dot"} />
+          <span className="brand-title">AMToDo</span>
+          <span className={connectionOk ? "server-pill ok" : "server-pill"}>
+            {connectionOk ? (health ? `v${health.version}` : "在线") : healthError ? "离线" : "..."}
+          </span>
+        </div>
+        <div className="mobile-header-right">
+          {username && <span className="mobile-username">{username}</span>}
+          <button
+            type="button"
+            className="mobile-settings-btn"
+            onClick={() => setShowSettings(true)}
+            aria-label="设置"
+          >
+            <img src={gearIcon} alt="" />
+          </button>
+        </div>
+      </header>
+
+      <main className="mobile-content">
+        {activeTab === "todo" && (
+          <TodoView
+            api={api}
+            calendarDays={settings.calendar_days}
+            weekStart={settings.week_start}
+            cachedDateKey={selectedDateCache.todo}
+            onDateChange={handleTodoDateChange}
+            pendingAction={pendingAction?.type === "todo" ? pendingAction : null}
+            onPendingActionConsumed={() => setPendingAction(null)}
+          />
+        )}
+        {activeTab === "schedule" && (
+          <ScheduleView
+            api={api}
+            settings={settings}
+            startHour={settings.scheduler_start_hour}
+            endHour={settings.scheduler_end_hour}
+            slotMinutes={settings.scheduler_slot_minutes}
+            weekStart={settings.week_start}
+            cachedDateKey={selectedDateCache.schedule}
+            onDateChange={handleScheduleDateChange}
+            onNavigate={handleMentionNavigate}
+            pendingAction={pendingAction?.type === "schedule" || pendingAction?.type === "notify" ? pendingAction : null}
+            onPendingActionConsumed={() => setPendingAction(null)}
+          />
+        )}
+        {activeTab === "search" && (
+          <SearchView api={api} onNavigate={(target, dateKey) => {
+            if (dateKey) navigateTab(target as Tab);
+          }} />
+        )}
+        {activeTab === "notify" && (
+          <NotifyView api={api} settings={settings} onNavigate={handleMentionNavigate} />
+        )}
+        {activeTab === "trash" && (
+          <TrashView api={api} />
+        )}
+      </main>
+
+      <nav className="mobile-tab-bar">
+        {(["todo", "schedule", "search", "notify", "trash"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={activeTab === tab ? "active" : ""}
+            onClick={() => navigateTab(tab)}
+          >
+            <img src={tabIcons[tab]} alt="" />
+            <span>{tabLabels[tab]}</span>
+          </button>
+        ))}
+      </nav>
+
+      {showSettings && (
+        <SettingsModal
+          settings={settings}
+          onSave={handleSettingsSave}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {crossTypeEdit && (
+        <TodoDetailModal
+          todo={crossTypeEdit.item}
+          api={api}
+          onClose={() => setCrossTypeEdit(null)}
+          onDelete={() => setCrossTypeEdit(null)}
+          onUpdate={(updated) => setCrossTypeEdit((prev) => prev ? { ...prev, item: updated } : null)}
+        />
+      )}
+    </div>
+  );
 }

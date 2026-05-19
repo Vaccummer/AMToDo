@@ -1,9 +1,9 @@
+import { CapacitorShell } from "./capacitor";
+
 export function initShell(): void {
   if (window.amtodoShell) return;
   if (isCapacitorNative()) {
-    import("./capacitor").then(({ CapacitorShell }) => {
-      window.amtodoShell = new CapacitorShell();
-    });
+    window.amtodoShell = new CapacitorShell();
   }
 }
 

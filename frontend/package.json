@@ -9,9 +9,10 @@
     "build": "tsc --noEmit && vite build",
     "start": "electron electron/main.cjs",
     "preview": "vite preview --host 127.0.0.1",
-    "cap:sync": "vite build && npx cap sync android",
+    "build:mobile": "vite build --mode mobile",
+    "cap:sync": "vite build --mode mobile && npx cap sync android",
     "cap:open": "npx cap open android",
-    "build:android": "vite build && npx cap sync android && cd android && .\\gradlew.bat assembleDebug"
+    "build:android": "vite build --mode mobile && npx cap sync android && cd android && .\\gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
