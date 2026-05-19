@@ -44,3 +44,4 @@ frontend/*.html
 !frontend/index.html
 !frontend/mobile.html
 db/
+tmp/
