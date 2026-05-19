@@ -1,0 +1,169 @@
+/* ── Mobile Shell ── */
+
+.mobile-shell {
+  width: 100vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--global-shell-bg);
+  padding-top: env(safe-area-inset-top);
+}
+
+/* ── Mobile Header ── */
+
+.mobile-header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--components-titlebar-bg);
+  flex-shrink: 0;
+}
+
+.mobile-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mobile-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-username {
+  color: var(--global-surface-blue-gray);
+  font-size: var(--font-md);
+  font-weight: 500;
+}
+
+.mobile-settings-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-settings-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-settings-btn img {
+  width: 20px;
+  height: 20px;
+  opacity: 0.82;
+}
+
+/* ── Mobile Content ── */
+
+.mobile-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mobile-content > * {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Bottom Tab Bar ── */
+
+.mobile-tab-bar {
+  display: flex;
+  height: calc(56px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--components-nav-bg);
+  border-top: 1px solid var(--global-surface-line);
+  flex-shrink: 0;
+}
+
+.mobile-tab-bar button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--global-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+}
+
+.mobile-tab-bar button.active {
+  color: var(--global-text-primary);
+}
+
+.mobile-tab-bar button:active {
+  opacity: 0.7;
+}
+
+.mobile-tab-bar img {
+  width: 22px;
+  height: 22px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.mobile-tab-bar button.active img {
+  opacity: 1;
+}
+
+/* ── Full-screen modals on mobile ── */
+
+.mobile-shell .modal-backdrop {
+  place-items: stretch;
+}
+
+.mobile-shell .modal-card {
+  width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  animation: mobile-modal-in 0.2s ease-out;
+}
+
+.mobile-shell .settings-modal-backdrop {
+  place-items: stretch;
+}
+
+.mobile-shell .settings-modal-card {
+  width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  animation: mobile-modal-in 0.2s ease-out;
+}
+
+@keyframes mobile-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Mobile overrides for existing views ── */
+
+.mobile-shell .todo-view,
+.mobile-shell .schedule-view,
+.mobile-shell .search-view,
+.mobile-shell .trash-view,
+.mobile-shell .notify-view {
+  height: 100%;
+}
