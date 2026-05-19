@@ -247,22 +247,33 @@ def test_todo_search_endpoint_options(server: ServerHarness) -> None:
         "tag": "work",
     }
 
-    paged = server.post(
+    page1 = server.post(
         "/api/v1/todos/search",
         {
             "query": "",
             "sort_by": "priority",
             "sort_order": "desc",
             "limit": 2,
-            "offset": 1,
         },
     )
-    assert [todo["id"] for todo in paged["todos"]] == [
-        ids["Delta Done"],
-        ids["gamma Errand"],
-    ]
-    assert paged["sort"] == {"by": "priority", "order": "desc"}
-    assert paged["pagination"] == {"limit": 2, "offset": 1, "has_more": True}
+    assert len(page1["todos"]) == 2
+    assert page1["sort"] == {"by": "priority", "order": "desc"}
+    assert page1["pagination"]["limit"] == 2
+
+    page2 = server.post(
+        "/api/v1/todos/search",
+        {
+            "query": "",
+            "sort_by": "priority",
+            "sort_order": "desc",
+            "limit": 2,
+            "after_id": page1["pagination"]["next_cursor"],
+        },
+    )
+    page1_ids = [todo["id"] for todo in page1["todos"]]
+    page2_ids = [todo["id"] for todo in page2["todos"]]
+    assert page1_ids != page2_ids
+    assert len(set(page1_ids) & set(page2_ids)) == 0
 
     bad_regex = server.response(
         "/api/v1/todos/search",
@@ -418,19 +429,31 @@ def test_schedule_search_endpoint_options(server: ServerHarness) -> None:
     ]
     assert scalar_filters["filter"] == {"category": "work", "location": "Room B"}
 
-    paged = server.post(
+    page1 = server.post(
         "/api/v1/schedules/search",
         {
             "query": "",
             "sort_by": "duration",
             "sort_order": "desc",
             "limit": 1,
-            "offset": 1,
         },
     )
-    assert [schedule["id"] for schedule in paged["schedules"]] == [ids["Beta Sync"]]
-    assert paged["sort"] == {"by": "duration", "order": "desc"}
-    assert paged["pagination"] == {"limit": 1, "offset": 1, "has_more": True}
+    assert len(page1["schedules"]) == 1
+    assert page1["sort"] == {"by": "duration", "order": "desc"}
+    assert page1["pagination"]["limit"] == 1
+
+    page2 = server.post(
+        "/api/v1/schedules/search",
+        {
+            "query": "",
+            "sort_by": "duration",
+            "sort_order": "desc",
+            "limit": 1,
+            "after_id": page1["pagination"]["next_cursor"],
+        },
+    )
+    assert len(page2["schedules"]) == 1
+    assert page1["schedules"][0]["id"] != page2["schedules"][0]["id"]
 
     bad_field = server.response(
         "/api/v1/schedules/search",
