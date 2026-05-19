@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.amtodo.app',
   appName: 'AMToDo',
-  webDir: 'dist',
+  webDir: 'dist-mobile',
   plugins: {
     StatusBar: {
       style: 'DARK',
