@@ -26,6 +26,10 @@ interface SettingsData {
 
 
 interface Window {
+  Capacitor?: {
+    isNativePlatform: (() => boolean) | boolean;
+    getPlatform: () => string;
+  };
   amtodoShell?: {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;

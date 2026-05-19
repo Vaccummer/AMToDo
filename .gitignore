@@ -17,6 +17,9 @@ build/
 *.egg-info/
 frontend/dist/
 frontend/node_modules/
+node_modules/
+android/
+frontend/android/
 
 .env
 .env.*
