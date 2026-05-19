@@ -54,6 +54,16 @@
   box-shadow: 0 0 8px rgba(78, 201, 160, 0.3);
 }
 
+.brand-dot.network-error {
+  background: #e05252;
+  box-shadow: 0 0 8px rgba(224, 82, 82, 0.35);
+}
+
+.brand-dot.token-error {
+  background: #d4a030;
+  box-shadow: 0 0 8px rgba(212, 160, 48, 0.35);
+}
+
 .brand-title {
   font-size: 17px;
   font-weight: 700;
@@ -71,6 +81,16 @@
 .server-pill.ok {
   color: var(--components-dropdown-accent);
   border-color: var(--components-dropdown-border-alt);
+}
+
+.server-pill.network-error {
+  color: #e05252;
+  border-color: rgba(224, 82, 82, 0.3);
+}
+
+.server-pill.token-error {
+  color: #d4a030;
+  border-color: rgba(212, 160, 48, 0.3);
 }
 
 .titlebar-user {
@@ -141,6 +161,8 @@
   padding: 18px 12px;
   background: var(--components-nav-bg);
   border-bottom-left-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
 }
 
 .side-nav button {
@@ -206,4 +228,73 @@
 
 .window-controls .settings-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── WebSocket disconnect banner ── */
+
+.ws-banner {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-sm);
+  animation: wsBannerSlideIn 0.25s ease;
+  margin-top: auto;
+}
+
+.ws-banner.ws-disconnected {
+  background: color-mix(in srgb, var(--status-danger-base) 10%, var(--components-nav-bg));
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 25%, transparent);
+}
+
+.ws-banner.ws-reconnecting {
+  background: color-mix(in srgb, #d4a030 10%, var(--components-nav-bg));
+  border: 1px solid color-mix(in srgb, #d4a030 25%, transparent);
+}
+
+.ws-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ws-disconnected .ws-dot { background: var(--status-danger-base); }
+.ws-reconnecting .ws-dot { background: #d4a030; animation: wsPulseDot 1.2s ease-in-out infinite; }
+
+.ws-text {
+  flex: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-disconnected .ws-text { color: var(--status-danger-base); }
+.ws-reconnecting .ws-text { color: #8a6d1b; }
+
+.ws-reconnect-btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--status-danger-base);
+  color: #fff;
+}
+
+.ws-reconnect-btn:hover { background: #b03030; }
+
+@keyframes wsBannerSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes wsPulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
 }

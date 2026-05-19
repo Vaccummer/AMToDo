@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AMToDoApi, API_NETWORK_STATUS_EVENT, type HealthResponse, type TodoItem } from "../api/client";
+import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "../api/client";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
 import { importP256PublicKey } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
@@ -130,6 +130,7 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
+    let wasOffline = false;
 
     const bootstrap = async () => {
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
@@ -156,6 +157,10 @@ export function App() {
       setHealthError(null);
       setApi(readyApi);
       setConnectionStatus("online");
+      if (wasOffline) {
+        notifyNetworkStatus(true);
+      }
+      wasOffline = false;
     };
 
     const runBootstrap = async () => {
@@ -165,6 +170,7 @@ export function App() {
         await bootstrap();
       } catch (error: unknown) {
         if (cancelled) return;
+        wasOffline = true;
         setHealth(null);
         setHealthError(error instanceof Error ? error.message : "无法连接后端");
         setConnectionStatus("offline");
@@ -178,22 +184,6 @@ export function App() {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [settings.server_url, settings.access_token]);
-
-  // Network status
-  useEffect(() => {
-    function handleNetworkStatus(event: Event) {
-      const detail = (event as CustomEvent<{ online: boolean; message?: string }>).detail;
-      if (detail.online) {
-        setConnectionStatus("online");
-        setHealthError(null);
-      } else {
-        setConnectionStatus("offline");
-        setHealthError(detail.message ?? "网络错误");
-      }
-    }
-    window.addEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
-    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
-  }, []);
 
   // Fetch username
   useEffect(() => {

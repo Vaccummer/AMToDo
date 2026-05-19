@@ -212,6 +212,11 @@ let wsSessionKeyExpiry = 0;    // Unix seconds
 let wsConnection = null;       // WebSocket instance
 let wsServerUrl = null;        // current server URL
 let wsAccessToken = null;      // current access_token
+let wsReconnectAttempt = 0;
+let wsReconnectTimer = null;
+let wsReconnectMax = 3;
+let wsReconnectInterval = 3000;
+let wsIntentionalClose = false;
 
 // --- Crypto helpers for WebSocket ---
 
@@ -342,6 +347,15 @@ function decryptWebSocketMessage(base64Data) {
   return aes256GcmDecrypt(wsSessionKey, nonce, ciphertext);
 }
 
+function pushWsStatus(status, attempt, maxRetries) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const data = { status };
+    if (attempt !== undefined) data.attempt = attempt;
+    if (maxRetries !== undefined) data.maxRetries = maxRetries;
+    mainWindow.webContents.send("notification:ws-status", data);
+  }
+}
+
 function connectWebSocket(serverUrl, accessToken) {
   // Clean up old connection
   disconnectWebSocket();
@@ -388,6 +402,8 @@ function connectWebSocket(serverUrl, accessToken) {
       switch (msg.type) {
         case "auth_ok":
           console.log("WebSocket authenticated");
+          wsReconnectAttempt = 0;
+          pushWsStatus("connected");
           break;
 
         case "auth_failed":
@@ -442,7 +458,37 @@ function connectWebSocket(serverUrl, accessToken) {
   ws.on("close", (code, reason) => {
     console.log("WebSocket closed:", code, reason?.toString() || "");
     wsConnection = null;
-    // Do NOT auto-reconnect; client controls reconnection
+
+    // Don't reconnect on auth rejection or intentional close
+    if (code === 4004 || code === 4005 || wsIntentionalClose) {
+      wsIntentionalClose = false;
+      if (code === 4004 || code === 4005) pushWsStatus("disconnected");
+      return;
+    }
+
+    if (wsReconnectAttempt < wsReconnectMax) {
+      wsReconnectAttempt++;
+      console.log(`WebSocket reconnecting (${wsReconnectAttempt}/${wsReconnectMax})...`);
+      pushWsStatus("reconnecting", wsReconnectAttempt, wsReconnectMax);
+      wsReconnectTimer = setTimeout(() => {
+        wsReconnectTimer = null;
+        try {
+          const s = readUiToml();
+          if (s.server_url && s.access_token) {
+            wsReconnectMax = Number(s.ws_reconnect_retries) || 3;
+            wsReconnectInterval = Number(s.ws_reconnect_interval_ms) || 3000;
+            connectWebSocket(s.server_url, s.access_token);
+          } else {
+            pushWsStatus("disconnected");
+          }
+        } catch {
+          pushWsStatus("disconnected");
+        }
+      }, wsReconnectInterval);
+    } else {
+      console.log("WebSocket reconnect exhausted");
+      pushWsStatus("disconnected");
+    }
   });
 
   ws.on("error", (error) => {
@@ -451,7 +497,13 @@ function connectWebSocket(serverUrl, accessToken) {
 }
 
 function disconnectWebSocket() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  wsReconnectAttempt = 0;
   if (wsConnection) {
+    wsIntentionalClose = true;
     try { wsConnection.close(); } catch (_) {}
     wsConnection = null;
   }
@@ -478,25 +530,6 @@ function getNotifSetting(key) {
     try { _cachedNotifSettings = readUiToml(); } catch (_) { _cachedNotifSettings = {}; }
   }
   return _cachedNotifSettings[key] || "";
-}
-
-async function tryReconnectWebSocket() {
-  if (!wsServerUrl || !wsAccessToken) return false;
-
-  try {
-    const healthUrl = wsServerUrl.replace(/\/+$/, "") + "/api/v1/health";
-    const healthRes = await fetch(healthUrl, {
-      method: "HEAD",
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!healthRes.ok) return false;
-
-    connectWebSocket(wsServerUrl, wsAccessToken);
-    return true;
-  } catch (_) {
-    return false;
-  }
 }
 
 function createWindow() {
@@ -667,6 +700,8 @@ app.whenReady().then(() => {
     stopNotificationPolling();
     disconnectWebSocket();
     try {
+      wsReconnectMax = Number(settings.ws_reconnect_retries) || 3;
+      wsReconnectInterval = Number(settings.ws_reconnect_interval_ms) || 3000;
       connectWebSocket(settings.server_url, settings.access_token);
       return { ok: true };
     } catch (err) {
@@ -691,6 +726,8 @@ app.whenReady().then(() => {
     // Start notification push (WebSocket preferred, polling as fallback)
     if (settings.server_url && settings.access_token) {
       try {
+        wsReconnectMax = Number(settings.ws_reconnect_retries) || 3;
+        wsReconnectInterval = Number(settings.ws_reconnect_interval_ms) || 3000;
         connectWebSocket(settings.server_url, settings.access_token);
         console.log("Notification mode: websocket");
       } catch {

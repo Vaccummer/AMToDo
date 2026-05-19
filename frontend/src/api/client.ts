@@ -339,7 +339,7 @@ const DEFAULT_BASE_URL = SERVER_URL;
 const KEY_ID = "server-key-v1";
 export const API_NETWORK_STATUS_EVENT = "amtodo:api-network-status";
 
-function notifyNetworkStatus(online: boolean, message?: string) {
+export function notifyNetworkStatus(online: boolean, message?: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(API_NETWORK_STATUS_EVENT, {
@@ -354,7 +354,6 @@ async function fetchWithNetworkStatus(
 ): Promise<Response> {
   try {
     const response = await fetch(input, init);
-    notifyNetworkStatus(true);
     return response;
   } catch (error: unknown) {
     notifyNetworkStatus(false, error instanceof Error ? error.message : "网络错误");

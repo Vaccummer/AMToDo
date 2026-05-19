@@ -20,6 +20,8 @@ export interface UISettings {
   notification_query_window: number;
   notification_silent: boolean;
   notification_timeout: "default" | "never";
+  ws_reconnect_retries: number;
+  ws_reconnect_interval_ms: number;
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -44,6 +46,8 @@ export const DEFAULT_SETTINGS: UISettings = {
   notification_query_window: 60,
   notification_silent: false,
   notification_timeout: "default",
+  ws_reconnect_retries: 3,
+  ws_reconnect_interval_ms: 3000,
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
@@ -86,6 +90,8 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     notification_query_window: notificationQueryWindow,
     notification_silent: raw.notification_silent === "true",
     notification_timeout: (raw.notification_timeout === "never" ? "never" : "default") as "default" | "never",
+    ws_reconnect_retries: parseNumberSetting(raw.ws_reconnect_retries, DEFAULT_SETTINGS.ws_reconnect_retries),
+    ws_reconnect_interval_ms: parseNumberSetting(raw.ws_reconnect_interval_ms, DEFAULT_SETTINGS.ws_reconnect_interval_ms),
   };
 }
 
