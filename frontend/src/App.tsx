@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, API_NETWORK_STATUS_EVENT, type HealthResponse, type TodoItem } from "./api/client";
+import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "./api/client";
 import { ACCESS_TOKEN, SERVER_URL } from "./config";
 import { importP256PublicKey } from "./crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "./lib/settings";
@@ -55,6 +55,7 @@ const shell = window.amtodoShell ?? {
   onNotificationClicked: () => () => {},
   connectNotificationWebSocket: async () => ({ ok: true }),
   disconnectNotificationWebSocket: async () => ({ ok: true }),
+  onWsStatusChanged: () => () => {},
 };
 
 export function App() {
@@ -67,6 +68,7 @@ export function App() {
   const tabHistory = useRef<{ stack: Tab[]; index: number }>({ stack: ["todo"], index: 0 });
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [healthErrorKind, setHealthErrorKind] = useState<"network" | "token" | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -85,6 +87,8 @@ export function App() {
     type: "todo";
     item: TodoItem;
   } | null>(null);
+
+  const [wsStatus, setWsStatus] = useState<"connected" | "disconnected" | "reconnecting">("connected");
 
   const [settings, setSettings] = useState<UISettings>(() => ({
     ...DEFAULT_SETTINGS,
@@ -139,6 +143,14 @@ export function App() {
     } catch { /* navigate without date */ }
     navigateTab(type);
     setPendingAction({ type, id, action, dateKey });
+  }
+
+  async function handleManualReconnect() {
+    setWsStatus("reconnecting");
+    const result = await shell.connectNotificationWebSocket?.(settings as never);
+    if (result && !result.ok) {
+      setWsStatus("disconnected");
+    }
   }
 
   useEffect(() => {
@@ -242,6 +254,7 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
+    let wasOffline = false;
 
     const bootstrap = async () => {
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
@@ -266,8 +279,13 @@ export function App() {
       if (cancelled) return;
       setHealth(result);
       setHealthError(null);
+      setHealthErrorKind(null);
       setApi(readyApi);
       setConnectionStatus("online");
+      if (wasOffline) {
+        notifyNetworkStatus(true);
+      }
+      wasOffline = false;
     };
 
     const scheduleRetry = () => {
@@ -283,8 +301,10 @@ export function App() {
         await bootstrap();
       } catch (error: unknown) {
         if (cancelled) return;
+        wasOffline = true;
         setHealth(null);
         setHealthError(error instanceof Error ? error.message : "无法连接后端");
+        setHealthErrorKind(error instanceof TypeError ? "network" : "token");
         setConnectionStatus("offline");
         scheduleRetry();
       }
@@ -299,20 +319,11 @@ export function App() {
     };
   }, [settings.server_url, settings.access_token]);
 
+  // Listen for WebSocket status changes from main process
   useEffect(() => {
-    function handleNetworkStatus(event: Event) {
-      const detail = (event as CustomEvent<{ online: boolean; message?: string }>).detail;
-      if (detail.online) {
-        setConnectionStatus("online");
-        setHealthError(null);
-      } else {
-        setConnectionStatus("offline");
-        setHealthError(detail.message ?? "网络错误");
-      }
-    }
-
-    window.addEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
-    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, handleNetworkStatus);
+    return shell.onWsStatusChanged?.((data) => {
+      setWsStatus(data.status);
+    });
   }, []);
 
   // Fetch current user display name
@@ -383,9 +394,9 @@ export function App() {
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar-drag">
-          <div className={connectionOk ? "brand-dot ok" : "brand-dot"} />
+          <div className={`brand-dot${connectionOk ? " ok" : healthErrorKind === "token" ? " token-error" : healthError ? " network-error" : ""}`} />
           <span className="brand-title">AMToDo</span>
-          <span className={connectionOk ? "server-pill ok" : "server-pill"}>
+          <span className={`server-pill${connectionOk ? " ok" : healthErrorKind === "token" ? " token-error" : healthError ? " network-error" : ""}`}>
             {connectionOk ? (health ? `API ${health.version}` : "API 在线") : healthError ? "API 离线" : "API 检查中"}
           </span>
         </div>
@@ -438,6 +449,17 @@ export function App() {
               {tabLabels[tab]}
             </button>
           ))}
+          {wsStatus !== "connected" && (
+            <div className={`ws-banner ${wsStatus === "reconnecting" ? "ws-reconnecting" : "ws-disconnected"}`}>
+              <div className="ws-dot" />
+              <span className="ws-text">
+                {wsStatus === "reconnecting" ? "正在重连..." : "通知服务断开"}
+              </span>
+              {wsStatus === "disconnected" && (
+                <button className="ws-reconnect-btn" onClick={handleManualReconnect}>重连</button>
+              )}
+            </div>
+          )}
         </nav>
         <section className="content-panel">
           {visitedTabs.has("todo") && (

@@ -45,5 +45,6 @@ interface Window {
     onNotificationClicked?: (callback: (data: { id: number; trigger_at: number }) => void) => () => void;
     connectNotificationWebSocket?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string; mode?: string }>;
     disconnectNotificationWebSocket?: () => Promise<{ ok: boolean; error?: string }>;
+    onWsStatusChanged?: (callback: (data: { status: "connected" | "disconnected" | "reconnecting"; attempt?: number; maxRetries?: number }) => void) => () => void;
   };
 }

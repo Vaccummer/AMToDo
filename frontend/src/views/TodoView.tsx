@@ -415,12 +415,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             </div>
           );
         })()}
-        {isLoading ? (
-          <div className="empty-state-loading">
-            <div className="loading-spinner" />
-            <p className="loading-text">加载中...</p>
-          </div>
-        ) : errorKind ? (
+        {errorKind ? (
           <div className={`empty-state-error${errorKind === "token" ? " token-error" : ""}`}>
             <div className="error-illustration">
               {errorKind === "network" ? (
@@ -464,6 +459,11 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
               {errorKind === "network" ? "检查连接设置" : "更新访问令牌"}
             </button>
           </div>
+        ) : isLoading ? (
+          <div className="empty-state-loading">
+            <div className="loading-spinner" />
+            <p className="loading-text">加载中...</p>
+          </div>
         ) : todos.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-illustration">
@@ -480,7 +480,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             <p className="empty-state-subtitle">还没有待办事项</p>
           </div>
         ) : null}
-        {todos
+        {!errorKind && todos
           .filter((t) => !hideCompleted || !t.completed)
           .map((todo) => {
           const isEditing = editingId === todo.id;

@@ -22,5 +22,10 @@ contextBridge.exposeInMainWorld("amtodoShell", {
     const listener = (_event, notificationId) => callback(notificationId);
     ipcRenderer.on("notification:clicked", listener);
     return () => ipcRenderer.removeListener("notification:clicked", listener);
+  },
+  onWsStatusChanged: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on("notification:ws-status", listener);
+    return () => ipcRenderer.removeListener("notification:ws-status", listener);
   }
 });

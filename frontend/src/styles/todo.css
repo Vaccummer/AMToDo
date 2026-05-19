@@ -241,17 +241,17 @@
   border-top-right-radius: 10px;
 }
 
-.todo-row:nth-last-child(2) {
+.todo-row:last-of-type {
   border-bottom: 1px solid var(--global-surface-line);
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
 }
 
-.todo-row.completed:nth-last-child(2) {
+.todo-row.completed:last-of-type {
   border-bottom-color: var(--status-completed-border);
 }
 
-.todo-row.late-done:nth-last-child(2) {
+.todo-row.late-done:last-of-type {
   border-bottom-color: var(--modals-schedule-cream-dark);
 }
 
