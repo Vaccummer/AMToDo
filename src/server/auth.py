@@ -66,9 +66,16 @@ async def _read_body(request: Request) -> dict:
     """Return the parsed JSON body without affecting FastAPI body resolution.
 
     Uses ``request._body`` when available (set by the decryption middleware),
-    otherwise reads and caches via ``request.body()``.
+    otherwise reads and caches via ``request.body()``.  The parsed dict is
+    cached on ``request.state`` so that repeated calls (e.g. from both
+    ``require_admin`` and FastAPI body resolution) do not re-parse.
     """
+    cached = getattr(request.state, "_parsed_body", None)
+    if cached is not None:
+        return cached
     body_bytes = getattr(request, "_body", None)
     if body_bytes is None:
         body_bytes = await request.body()
-    return json.loads(body_bytes)
+    parsed = json.loads(body_bytes)
+    request.state._parsed_body = parsed
+    return parsed
