@@ -16,6 +16,7 @@ dist/
 build/
 *.egg-info/
 frontend/dist/
+frontend/dist-mobile/
 frontend/node_modules/
 node_modules/
 android/
@@ -40,4 +41,6 @@ keys/
 docs/
 demo/
 frontend/*.html
+!frontend/index.html
+!frontend/mobile.html
 db/
