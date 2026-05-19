@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../api/client";
+import { API_NETWORK_STATUS_EVENT } from "../api/client";
 import { formatTime } from "../lib/time";
 import { useConfirm } from "./ConfirmDialog";
+import lockIcon from "../assets/lock.svg";
+
+type ErrorKind = "network" | "token";
 
 type Props = {
   api: AMToDoApi;
+  onOpenSettings?: (focusTarget?: "url" | "token") => void;
 };
 
 type TrashMode = "all" | "todo" | "schedule" | "notify";
@@ -75,13 +80,33 @@ function SearchIcon() {
   );
 }
 
-export function TrashView({ api }: Props) {
+export function TrashView({ api, onOpenSettings }: Props) {
   const [mode, setMode] = useState<TrashMode>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<TrashResult[]>([]);
   const [status, setStatus] = useState("加载中");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [connectionUrl, setConnectionUrl] = useState<string>("");
   const { ask, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    function onNetworkStatus(e: Event) {
+      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
+      if (!online) {
+        setErrorKind("network");
+        setErrorMessage("无法与服务器通信");
+        setConnectionUrl(api.serverUrl);
+      } else if (errorKind === "network") {
+        setErrorKind(null);
+        setErrorMessage("");
+        setConnectionUrl("");
+      }
+    }
+    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+  }, [errorKind, api.serverUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,12 +133,24 @@ export function TrashView({ api }: Props) {
           return db - da;
         });
         setItems(merged);
+        setErrorKind(null);
+        setErrorMessage("");
         setStatus(merged.length ? "" : "回收站为空");
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         setItems([]);
-        setStatus(error instanceof Error ? error.message : "回收站加载失败");
+        if (error instanceof TypeError) {
+          setErrorKind("network");
+          setErrorMessage("无法与服务器通信");
+          setConnectionUrl(api.serverUrl);
+          setStatus("连接失败");
+        } else {
+          setErrorKind("token");
+          setErrorMessage(error instanceof Error ? error.message : "回收站加载失败");
+          setConnectionUrl("");
+          setStatus(error instanceof Error ? error.message : "回收站加载失败");
+        }
       });
     return () => {
       cancelled = true;
@@ -322,8 +359,43 @@ export function TrashView({ api }: Props) {
             </div>
           );
         })}
-        {status && <div className="trash-empty"><span>{status}</span></div>}
-        {!status && filteredItems.length === 0 && <div className="trash-empty"><span>没有匹配的已删除项目</span></div>}
+        {errorKind ? (
+          <div className={`trash-error-state${errorKind === "token" ? " token-error" : ""}`}>
+            <div className="trash-error-illustration">
+              {errorKind === "network" ? (
+                <>
+                  <div className="error-cloud" />
+                  <div className="error-bolt">⚡</div>
+                </>
+              ) : (
+                <img className="error-lock-icon" src={lockIcon} alt="" />
+              )}
+            </div>
+            <p className="trash-error-title">{errorKind === "network" ? "连接中断" : "身份验证失败"}</p>
+            <p className="trash-error-subtitle">{errorMessage}</p>
+            {errorKind === "network" && connectionUrl && (
+              <p className="trash-error-url">{connectionUrl}</p>
+            )}
+            <button
+              type="button"
+              className="trash-error-btn"
+              onClick={() => {
+                if (onOpenSettings) {
+                  onOpenSettings(errorKind === "network" ? "url" : "token");
+                } else {
+                  setErrorKind(null);
+                  setErrorMessage("");
+                }
+              }}
+            >
+              {errorKind === "network" ? "检查连接设置" : "更新访问令牌"}
+            </button>
+          </div>
+        ) : status ? (
+          <div className="trash-empty"><span>{status}</span></div>
+        ) : filteredItems.length === 0 ? (
+          <div className="trash-empty"><span>没有匹配的已删除项目</span></div>
+        ) : null}
       </div>
 
       {confirmDialog}

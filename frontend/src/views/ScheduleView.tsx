@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { AMToDoApi, ScheduleItem, NotificationItem } from "../api/client";
+import { API_NETWORK_STATUS_EVENT } from "../api/client";
 import type { UISettings } from "../lib/settings";
 import {
   addDaysToDateKey,
@@ -22,6 +23,9 @@ import { getEventColors, getNotifyEventColors } from "../themes";
 import { useGlassTooltip, GlassTooltip } from "../hooks/useGlassTooltip";
 import scheduleNormalIcon from "../assets/schedule-normal.svg";
 import scheduleFullIcon from "../assets/schedule-full.svg";
+import lockIcon from "../assets/lock.svg";
+
+type ErrorKind = "network" | "token";
 
 type Props = {
   api: AMToDoApi;
@@ -35,6 +39,7 @@ type Props = {
   onNavigate?: (type: "todo" | "schedule", id: number, action: "jump" | "edit") => void;
   pendingAction?: { type: "todo" | "schedule" | "notify"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
   onPendingActionConsumed?: () => void;
+  onOpenSettings?: (focusTarget?: "url" | "token") => void;
 };
 
 const HOUR_HEIGHT = 64;
@@ -100,7 +105,7 @@ type NotifyPointerEditState = {
 
 const MIN_DURATION_SECONDS = 60;
 
-export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange, onNavigate, pendingAction, onPendingActionConsumed }: Props) {
+export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange, onNavigate, pendingAction, onPendingActionConsumed, onOpenSettings }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const naturalWeekStartKey = useMemo(
@@ -115,7 +120,10 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const [selectedDateKey, setSelectedDateKey] = useState<string>(initDateKey);
   const [showCalendar, setShowCalendar] = useState(false);
   const [items, setItems] = useState<ScheduleItem[]>([]);
-  const [status, setStatus] = useState<string>("加载中");
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [connectionUrl, setConnectionUrl] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
   const [fullHours, setFullHours] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditingSchedule | null>(null);
@@ -168,6 +176,24 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const [notifyFormOpen, setNotifyFormOpen] = useState(false);
   const [notifyFormTriggerAt, setNotifyFormTriggerAt] = useState<number | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    function onNetworkStatus(e: Event) {
+      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
+      if (!online) {
+        setErrorKind("network");
+        setErrorMessage("无法与服务器通信");
+        setConnectionUrl(api.serverUrl);
+      } else if (errorKind === "network") {
+        setErrorKind(null);
+        setErrorMessage("");
+        setConnectionUrl("");
+        setRefreshKey((k) => k + 1);
+      }
+    }
+    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
+  }, [errorKind, api.serverUrl]);
 
   useEffect(() => {
     if (!cachedDateKey) return;
@@ -254,20 +280,32 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
 
   // Fetch schedules for the displayed week
   useEffect(() => {
+    setIsLoading(true);
     const start = startOfDateKeyEpoch(days[0]);
     const end = startOfDateKeyEpoch(addDaysToDateKey(days[6], 1));
     api
       .listSchedules(start, end)
       .then((result) => {
         setItems(result.schedules);
-        setStatus("");
+        setErrorKind(null);
+        setErrorMessage("");
+        setIsLoading(false);
         if (editingRef.current && !result.schedules.some((item) => item.id === editingRef.current?.id)) {
           setEditing(null);
         }
       })
       .catch((error: unknown) => {
         setItems([]);
-        setStatus(error instanceof Error ? error.message : "无法加载日程");
+        setIsLoading(false);
+        if (error instanceof TypeError) {
+          setErrorKind("network");
+          setErrorMessage("无法与服务器通信");
+          setConnectionUrl(api.serverUrl);
+        } else {
+          setErrorKind("token");
+          setErrorMessage(error instanceof Error ? error.message : "无法加载日程");
+          setConnectionUrl("");
+        }
       });
   }, [api, days, refreshKey]);
 
@@ -979,7 +1017,41 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           </div>
         </div>
       </div>
-      {status || editStatus ? <div className="empty-state schedule-status">{editStatus || status}</div> : null}
+      {editStatus ? <div className="empty-state schedule-status">{editStatus}</div> : null}
+      {errorKind ? (
+        <div className={`schedule-error-bar${errorKind === "token" ? " token-error" : ""}`}>
+          <div className="schedule-error-icon">
+            {errorKind === "network" ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
+            ) : (
+              <img src={lockIcon} alt="" />
+            )}
+          </div>
+          <div className="schedule-error-info">
+            <div className="schedule-error-title">
+              {errorKind === "network" ? "服务器连接失败" : "身份验证失败"}
+            </div>
+            <div className="schedule-error-desc">
+              {errorKind === "network" && connectionUrl ? connectionUrl : errorMessage}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="schedule-error-retry"
+            onClick={() => {
+              if (onOpenSettings) {
+                onOpenSettings(errorKind === "network" ? "url" : "token");
+              } else {
+                setErrorKind(null);
+                setErrorMessage("");
+                setRefreshKey((k) => k + 1);
+              }
+            }}
+          >
+            {errorKind === "network" ? "检查设置" : "更新令牌"}
+          </button>
+        </div>
+      ) : null}
 
       {detailId != null ? (
         <ScheduleDetailModal

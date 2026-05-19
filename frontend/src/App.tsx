@@ -70,6 +70,7 @@ export function App() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsFocusTarget, setSettingsFocusTarget] = useState<"url" | "token" | undefined>();
   const [username, setUsername] = useState("");
   const [pendingAction, setPendingAction] = useState<{
     type: "todo" | "schedule" | "notify";
@@ -449,6 +450,10 @@ export function App() {
                 onDateChange={handleTodoDateChange}
                 pendingAction={pendingAction?.type === "todo" ? pendingAction : null}
                 onPendingActionConsumed={() => setPendingAction(null)}
+                onOpenSettings={(focusTarget) => {
+                  setSettingsFocusTarget(focusTarget);
+                  setShowSettings(true);
+                }}
               />
             </div>
           )}
@@ -466,15 +471,26 @@ export function App() {
                 onNavigate={handleMentionNavigate}
                 pendingAction={pendingAction?.type === "schedule" || pendingAction?.type === "notify" ? pendingAction : null}
                 onPendingActionConsumed={() => setPendingAction(null)}
+                onOpenSettings={(focusTarget) => {
+                  setSettingsFocusTarget(focusTarget);
+                  setShowSettings(true);
+                }}
               />
             </div>
           )}
           {visitedTabs.has("search") && (
             <div className="view-wrapper" data-active={activeTab === "search" || undefined}>
-              <SearchView api={api} onNavigate={(target, dateKey) => {
-                if (dateKey) setSelectedDateCache((prev) => ({ ...prev, [target]: dateKey }));
-                navigateTab(target as Tab);
-              }} />
+              <SearchView
+                api={api}
+                onNavigate={(target, dateKey) => {
+                  if (dateKey) setSelectedDateCache((prev) => ({ ...prev, [target]: dateKey }));
+                  navigateTab(target as Tab);
+                }}
+                onOpenSettings={(focusTarget) => {
+                  setSettingsFocusTarget(focusTarget);
+                  setShowSettings(true);
+                }}
+              />
             </div>
           )}
           {visitedTabs.has("notify") && (
@@ -484,7 +500,13 @@ export function App() {
           )}
           {visitedTabs.has("trash") && (
             <div className="view-wrapper" data-active={activeTab === "trash" || undefined}>
-              <TrashView api={api} />
+              <TrashView
+                api={api}
+                onOpenSettings={(focusTarget) => {
+                  setSettingsFocusTarget(focusTarget);
+                  setShowSettings(true);
+                }}
+              />
             </div>
           )}
         </section>
@@ -495,6 +517,7 @@ export function App() {
           settings={settings}
           onSave={handleSettingsSave}
           onClose={() => setShowSettings(false)}
+          focusTarget={settingsFocusTarget}
         />
       ) : null}
 

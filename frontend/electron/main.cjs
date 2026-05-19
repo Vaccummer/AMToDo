@@ -326,6 +326,10 @@ async function fetchSessionKey(serverUrl, accessToken) {
   const rawBody = await res.json();
   const data = decryptEnvelopeResponse(rawBody, dataKey);
 
+  if (!data.ok) {
+    throw new Error(data.error || "Failed to obtain session key");
+  }
+
   wsSessionKey = base64urlDecode(data.session_key);
   wsSessionKeyExpiry = data.expires_at;
   return wsSessionKey;
