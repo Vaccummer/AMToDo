@@ -471,6 +471,32 @@
   animation: dp-panel-in 0.15s ease-out;
 }
 
+.dropdown-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 4px 2px;
+  background: var(--modals-settings-input-bg);
+}
+
+.dropdown-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--font-lg);
+  color: var(--modals-schedule-text-dark);
+  background: var(--modals-schedule-input-bg);
+  border: 1px solid var(--modals-settings-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  outline: none;
+}
+
+.dropdown-search-input:focus {
+  border-color: var(--modals-settings-save-btn);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--modals-settings-save-btn) 15%, transparent);
+}
+
 .dropdown-option {
   display: block;
   width: 100%;

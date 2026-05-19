@@ -15,7 +15,7 @@
   -webkit-app-region: drag;
   height: 46px;
   background: var(--components-titlebar-bg);
-  color: #2a3040;
+  color: var(--components-titlebar-text, #d0e0d4);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -24,6 +24,14 @@
   user-select: none;
   border-top-left-radius: var(--radius-xl);
   border-top-right-radius: var(--radius-xl);
+}
+
+.titlebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.03) 45%, transparent 55%);
+  pointer-events: none;
 }
 
 .titlebar-drag {
@@ -37,30 +45,32 @@
   width: 14px;
   height: 14px;
   border-radius: var(--radius-pill);
-  background: var(--components-dropdown-accent);
+  background: var(--global-surface-muted, #5a6a60);
   transition: background 0.3s;
 }
 
 .brand-dot.ok {
   background: var(--components-dropdown-accent);
+  box-shadow: 0 0 8px rgba(78, 201, 160, 0.3);
 }
 
 .brand-title {
   font-size: 17px;
   font-weight: 700;
+  color: var(--components-titlebar-text, #d0e0d4);
 }
 
 .server-pill {
-  border: 1px solid var(--components-dropdown-border-alt);
+  border: 1px solid rgba(208, 224, 212, 0.15);
   border-radius: var(--radius-pill);
-  color: var(--components-dropdown-accent);
+  color: rgba(208, 224, 212, 0.4);
   font-size: var(--font-base);
   padding: 3px 9px;
 }
 
 .server-pill.ok {
   color: var(--components-dropdown-accent);
-  border-color: rgba(58, 123, 213, 0.25);
+  border-color: var(--components-dropdown-border-alt);
 }
 
 .titlebar-user {
@@ -104,13 +114,9 @@
 }
 
 .window-controls button:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: color-mix(in srgb, var(--components-dropdown-accent) 8%, transparent);
 }
 
-.window-controls .close:hover {
-  background: var(--status-danger-dark);
-  color: #fff;
-}
 
 .window-controls img {
   width: 14px;
@@ -119,10 +125,6 @@
   pointer-events: none;
 }
 
-.window-controls .close:hover img {
-  filter: brightness(0) invert(1);
-  opacity: 1;
-}
 
 .workspace {
   min-height: 0;

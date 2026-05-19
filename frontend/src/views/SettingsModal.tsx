@@ -7,29 +7,10 @@ import { listThemes, applyTheme, getTheme } from "../themes";
 import { Dropdown } from "./Dropdown";
 import { useConfirm } from "./ConfirmDialog";
 
-const TIMEZONE_OPTIONS = [
-  { value: "Asia/Shanghai", label: "Asia/Shanghai" },
-  { value: "Asia/Tokyo", label: "Asia/Tokyo" },
-  { value: "Asia/Seoul", label: "Asia/Seoul" },
-  { value: "Asia/Singapore", label: "Asia/Singapore" },
-  { value: "Asia/Kolkata", label: "Asia/Kolkata" },
-  { value: "Asia/Dubai", label: "Asia/Dubai" },
-  { value: "Asia/Jerusalem", label: "Asia/Jerusalem" },
-  { value: "Europe/London", label: "Europe/London" },
-  { value: "Europe/Paris", label: "Europe/Paris" },
-  { value: "Europe/Berlin", label: "Europe/Berlin" },
-  { value: "Europe/Moscow", label: "Europe/Moscow" },
-  { value: "America/New_York", label: "America/New_York" },
-  { value: "America/Chicago", label: "America/Chicago" },
-  { value: "America/Denver", label: "America/Denver" },
-  { value: "America/Los_Angeles", label: "America/Los_Angeles" },
-  { value: "America/Sao_Paulo", label: "America/Sao_Paulo" },
-  { value: "America/Argentina/Buenos_Aires", label: "America/Argentina/Buenos_Aires" },
-  { value: "Australia/Sydney", label: "Australia/Sydney" },
-  { value: "Pacific/Auckland", label: "Pacific/Auckland" },
-  { value: "Pacific/Honolulu", label: "Pacific/Honolulu" },
-  { value: "UTC", label: "UTC" },
-];
+const TIMEZONE_OPTIONS = Intl.supportedValuesOf("timeZone").map((tz) => ({
+  value: tz,
+  label: tz,
+}));
 
 const SCHEDULE_START_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
   value: String(hour),
@@ -81,6 +62,12 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
 
+  // Notification
+  const [notifyEnabled, setNotifyEnabled] = useState(initial.notification_enabled);
+  const [pollInterval, setPollInterval] = useState(String(initial.notification_poll_interval));
+  const [notifSilent, setNotifSilent] = useState(initial.notification_silent);
+  const [notifTimeout, setNotifTimeout] = useState(initial.notification_timeout);
+
   // Global hotkey
   const [hotkeyEnabled, setHotkeyEnabled] = useState(initial.global_hotkey_enabled);
   const [hotkeyValue, setHotkeyValue] = useState(initial.global_hotkey);
@@ -124,6 +111,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     setScheduleStartHour(String(initial.scheduler_start_hour));
     setScheduleEndHour(String(initial.scheduler_end_hour));
     setSlotMinutes(String(initial.scheduler_slot_minutes));
+    setNotifyEnabled(initial.notification_enabled);
+    setPollInterval(String(initial.notification_poll_interval));
+    setNotifSilent(initial.notification_silent);
+    setNotifTimeout(initial.notification_timeout);
     setHotkeyEnabled(initial.global_hotkey_enabled);
     setHotkeyValue(initial.global_hotkey);
     setRecording(false);
@@ -148,6 +139,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       Number(scheduleStartHour) !== initial.scheduler_start_hour ||
       Number(scheduleEndHour) !== initial.scheduler_end_hour ||
       Number(slotMinutes) !== initial.scheduler_slot_minutes ||
+      notifyEnabled !== initial.notification_enabled ||
+      Number(pollInterval) !== initial.notification_poll_interval ||
+      notifSilent !== initial.notification_silent ||
+      notifTimeout !== initial.notification_timeout ||
       hotkeyEnabled !== initial.global_hotkey_enabled ||
       hotkeyValue !== initial.global_hotkey
     );
@@ -162,6 +157,10 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
     scheduleStartHour,
     scheduleEndHour,
     slotMinutes,
+    notifyEnabled,
+    pollInterval,
+    notifSilent,
+    notifTimeout,
     hotkeyEnabled,
     hotkeyValue,
     initial
@@ -316,6 +315,11 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
       scheduler_slot_minutes: Number(slotMinutes),
       global_hotkey_enabled: hotkeyEnabled,
       global_hotkey: hotkeyValue,
+      notification_enabled: notifyEnabled,
+      notification_poll_interval: Number(pollInterval),
+      notification_query_window: Number(pollInterval) * 2,
+      notification_silent: notifSilent,
+      notification_timeout: notifTimeout,
     };
     onSave(updated);
     if (hotkeyEnabled && hotkeyValue) {
@@ -508,6 +512,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 value={timezone}
                 options={TIMEZONE_OPTIONS}
                 onChange={setTimezone}
+                searchable
               />
             </div>
           </div>
@@ -584,6 +589,110 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
 
           <div className="settings-modal-divider" />
 
+          {/* Notification — merged */}
+          <div className="settings-modal-section-label">通知设置</div>
+
+          {/* Master toggle */}
+          <div className="notify-master-row">
+            <div className="notify-master-left">
+              <div className={`notify-master-icon${notifyEnabled ? "" : " off"}`}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              </div>
+              <div className="notify-master-info">
+                <span className={`notify-master-title${notifyEnabled ? "" : " off"}`}>
+                  {notifyEnabled ? "启用通知" : "通知已关闭"}
+                </span>
+                <span className="notify-master-sub">
+                  {notifyEnabled ? "自动检查服务器上的新通知并弹窗提醒" : "开启后将自动检查新通知并弹窗提醒"}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className={`toggle-switch${notifyEnabled ? " on" : ""}`}
+              onClick={() => setNotifyEnabled((v) => !v)}
+              role="switch"
+              aria-checked={notifyEnabled}
+              aria-label="通知总开关"
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+
+          {/* Sub-settings */}
+          <div className={`notify-sub-card${notifyEnabled ? "" : " disabled"}`}>
+            <div className="notify-sub-row">
+              <div className="notify-sub-left">
+                <span className="notify-sub-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                </span>
+                <span className="notify-sub-label">轮询间隔</span>
+              </div>
+              <div className="notify-sub-right">
+                <input
+                  type="number"
+                  className="settings-modal-input"
+                  style={{ width: 80, textAlign: "right" }}
+                  value={pollInterval}
+                  min={1}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || /^\d+$/.test(v)) setPollInterval(v);
+                  }}
+                  onBlur={() => {
+                    const n = Number(pollInterval);
+                    if (!n || n < 1) setPollInterval("1");
+                  }}
+                />
+                <span className="notify-sub-hint">秒</span>
+              </div>
+            </div>
+            <div className="notify-sub-row">
+              <div className="notify-sub-left">
+                <span className="notify-sub-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>
+                </span>
+                <span className="notify-sub-label">静默模式</span>
+              </div>
+              <div className="notify-sub-right">
+                <span className="notify-sub-hint">不播放提示音</span>
+                <button
+                  type="button"
+                  className={`toggle-switch${notifSilent ? " on" : ""}`}
+                  onClick={() => setNotifSilent((v) => !v)}
+                  role="switch"
+                  aria-checked={notifSilent}
+                  aria-label="静默模式"
+                >
+                  <span className="toggle-thumb" />
+                </button>
+              </div>
+            </div>
+            <div className="notify-sub-row">
+              <div className="notify-sub-left">
+                <span className="notify-sub-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="2" /><polygon points="23 7 16 12 23 17" /></svg>
+                </span>
+                <span className="notify-sub-label">消失时间</span>
+              </div>
+              <div className="notify-sub-right">
+                <Dropdown
+                  value={notifTimeout}
+                  options={[
+                    { value: "default", label: "自动消失" },
+                    { value: "never", label: "常驻不消失" },
+                  ]}
+                  onChange={(v) => setNotifTimeout(v as "default" | "never")}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-modal-divider" />
+
           {/* Global Hotkey */}
           <div className="settings-modal-section-label">全局快捷键</div>
 
@@ -603,7 +712,7 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 <span className="toggle-thumb" />
               </button>
             </div>
-            <div className="settings-modal-input-row">
+            <div className={`settings-modal-input-row${!hotkeyEnabled ? " disabled" : ""}`}>
               <input
                 type="text"
                 className="settings-modal-input"
@@ -616,10 +725,11 @@ export function SettingsModal({ settings: initial, onSave, onClose }: Props) {
                 style={{ cursor: hotkeyEnabled ? "pointer" : "default", color: recording ? "#999" : undefined }}
                 placeholder="点击后按下快捷键组合"
               />
-              {hotkeyValue && hotkeyEnabled ? (
+              {hotkeyValue ? (
                 <button
                   type="button"
                   className="settings-modal-inline-btn"
+                  disabled={!hotkeyEnabled}
                   onClick={() => { setHotkeyValue(""); setHotkeyError(null); }}
                 >
                   清除
