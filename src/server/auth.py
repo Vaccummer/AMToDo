@@ -20,6 +20,19 @@ import json
 from fastapi import HTTPException, Request, status
 
 
+LOCALHOST_ADDRS = {"127.0.0.1", "::1"}
+
+
+async def require_localhost(request: Request) -> None:
+    """Reject requests that did not originate from localhost."""
+    client = request.client
+    if client is None or client.host not in LOCALHOST_ADDRS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin endpoints are only accessible from localhost",
+        )
+
+
 async def require_admin(request: Request) -> None:
     """Validate the server admin token from the request body."""
     body = await _read_body(request)

@@ -138,9 +138,10 @@ def load_settings() -> AppSettings:
 def load_cli_settings() -> AppSettings:
     """Load CLI settings from $AMTODO_CLI_ROOT/config/cli.toml.
 
-    database_url in cli.toml takes priority over server_url.  When neither
-    is set a local SQLite database under AMTODO_CLI_ROOT is used.
+    ``server_url`` is required — local-only mode is no longer supported.
     """
+
+    import json as _json
 
     root = cli_root()
     config_path = root / "config" / "cli.toml"
@@ -159,8 +160,15 @@ def load_cli_settings() -> AppSettings:
         admin_token = data.get("admin_token", "")
         server_public_key_path = data.get("server_public_key_path", "")
 
-    if not database_url and not server_url:
-        database_url = _default_database_url(root)
+    if not server_url:
+        print(
+            _json.dumps(
+                {"ok": False, "error": "server_url is not set in cli.toml; local mode is disabled"},
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     return AppSettings(
         database_url=database_url,

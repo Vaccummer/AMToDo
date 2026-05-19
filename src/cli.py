@@ -56,16 +56,6 @@ def root(
         raise typer.Exit
 
 
-@app.command("init-db")
-def init_db() -> None:
-    """Create database tables for the current configuration."""
-
-    settings = load_cli_settings()
-    context = create_application_context(settings)
-    context.database.create_schema()
-    _echo_json({"ok": True, "database_url": context.settings.database_url})
-
-
 @app.command("health")
 def health() -> None:
     """Check server health status."""

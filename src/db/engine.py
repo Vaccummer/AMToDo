@@ -162,9 +162,9 @@ def _quote_identifier(value: str) -> str:
 
 def _find_alembic_ini() -> Path:
     """Locate alembic.ini relative to AMTODO_ROOT."""
-    from config import amtodo_root
+    from config import server_root
 
-    root = amtodo_root()
+    root = server_root()
     ini_path = root / "alembic.ini"
     if ini_path.is_file():
         return ini_path
@@ -173,9 +173,9 @@ def _find_alembic_ini() -> Path:
 
 def _find_alembic_dir() -> Path:
     """Locate the alembic scripts directory relative to AMTODO_ROOT."""
-    from config import amtodo_root
+    from config import server_root
 
-    root = amtodo_root()
+    root = server_root()
     dir_path = root / "alembic"
     if dir_path.is_dir():
         return dir_path
