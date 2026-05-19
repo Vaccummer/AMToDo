@@ -130,6 +130,20 @@ def notification_to_dict(notification: object, mentions: list[object] | None = N
     return result
 
 
+def changelog_entry_to_dict(entry: object) -> dict[str, object]:
+    """Serialize a changelog entry ORM instance."""
+    import json
+    return {
+        "id": entry.id,
+        "entity_id": entry.entity_id,
+        "action": entry.action,
+        "changed_fields": json.loads(entry.changed_fields),
+        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
+        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
+        "created_at": entry.created_at,
+    }
+
+
 def error_to_dict(exc_type: type[BaseException], message: str) -> dict[str, object]:
     """Serialize an error to the standard error payload."""
     return {"ok": False, "error": {"type": exc_type.__name__, "message": message}}

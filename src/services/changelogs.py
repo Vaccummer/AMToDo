@@ -134,7 +134,7 @@ class TodoChangelogService:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Query changelog entries with optional filters."""
         if entity_id is not None:
@@ -144,14 +144,14 @@ class TodoChangelogService:
                 start_at=start_at,
                 end_at=end_at,
                 limit=limit,
-                offset=offset,
+                after_id=after_id,
             )
         return self._repository.list_all(
             action=action,
             start_at=start_at,
             end_at=end_at,
             limit=limit,
-            offset=offset,
+            after_id=after_id,
         )
 
 
@@ -275,7 +275,7 @@ class ScheduleChangelogService:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Query changelog entries with optional filters."""
         if entity_id is not None:
@@ -285,14 +285,14 @@ class ScheduleChangelogService:
                 start_at=start_at,
                 end_at=end_at,
                 limit=limit,
-                offset=offset,
+                after_id=after_id,
             )
         return self._repository.list_all(
             action=action,
             start_at=start_at,
             end_at=end_at,
             limit=limit,
-            offset=offset,
+            after_id=after_id,
         )
 
 
@@ -388,7 +388,7 @@ class NotificationChangelogService:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Query changelog entries with optional filters."""
         if entity_id is not None:
@@ -398,12 +398,12 @@ class NotificationChangelogService:
                 start_at=start_at,
                 end_at=end_at,
                 limit=limit,
-                offset=offset,
+                after_id=after_id,
             )
         return self._repository.list_all(
             action=action,
             start_at=start_at,
             end_at=end_at,
             limit=limit,
-            offset=offset,
+            after_id=after_id,
         )

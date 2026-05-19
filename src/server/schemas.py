@@ -7,6 +7,8 @@ All POST request bodies include an auth field:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 # ── Auth mixins ──
@@ -32,6 +34,10 @@ class AdminConfigRequest(AdminAuthMixin):
 # ── User ──
 
 class UserMeRequest(UserAuthMixin):
+    pass
+
+
+class UserTokenRegenerateRequest(UserAuthMixin):
     pass
 
 
@@ -68,7 +74,7 @@ class TodoSearchRequest(UserAuthMixin):
     sort_by: str = "updated_at"
     sort_order: str = "desc"
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class TodoStatsRequest(UserAuthMixin):
@@ -154,7 +160,7 @@ class TodoTrashListRequest(UserAuthMixin):
     sort_by: str = "updated_at"
     sort_order: str = "desc"
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class TodoTrashRestoreRequest(UserAuthMixin):
@@ -252,7 +258,7 @@ class ScheduleSearchRequest(UserAuthMixin):
     sort_by: str = "updated_at"
     sort_order: str = "desc"
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class ScheduleStatsRequest(UserAuthMixin):
@@ -340,7 +346,7 @@ class ScheduleTrashListRequest(UserAuthMixin):
     sort_by: str = "updated_at"
     sort_order: str = "desc"
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class ScheduleTrashRestoreRequest(UserAuthMixin):
@@ -359,7 +365,7 @@ class TodoChangelogQueryRequest(UserAuthMixin):
     start_at: int | None = None
     end_at: int | None = None
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class ScheduleChangelogQueryRequest(UserAuthMixin):
@@ -368,7 +374,7 @@ class ScheduleChangelogQueryRequest(UserAuthMixin):
     start_at: int | None = None
     end_at: int | None = None
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 class NotificationChangelogQueryRequest(UserAuthMixin):
@@ -377,13 +383,13 @@ class NotificationChangelogQueryRequest(UserAuthMixin):
     start_at: int | None = None
     end_at: int | None = None
     limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
+    after_id: int | None = None
 
 
 # -- Notification --
 
 class NotificationMentionInput(BaseModel):
-    target_type: str
+    target_type: Literal["todo", "schedule"]
     target_id: int
 
 
