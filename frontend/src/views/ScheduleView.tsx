@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { AMToDoApi, ScheduleItem, NotificationItem } from "../api/client";
 import { API_NETWORK_STATUS_EVENT } from "../api/client";
@@ -281,6 +281,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   // Fetch schedules for the displayed week
   useEffect(() => {
     setIsLoading(true);
+    setItems([]);
     const start = startOfDateKeyEpoch(days[0]);
     const end = startOfDateKeyEpoch(addDaysToDateKey(days[6], 1));
     api
@@ -887,6 +888,15 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
     setDetailId(id);
   }
 
+  function pseudoHasEvent(dayKey: string, slot: ScheduleSlot): boolean {
+    let hash = 0;
+    const str = dayKey + slot.key;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash) % 100 < 30;
+  }
+
   return (
     <div className="schedule-view">
       <DateBar
@@ -925,6 +935,21 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
       ) : null}
 
       <div className="schedule-grid-scroll">
+        {isLoading ? (
+          <div className="skel-grid">
+            {slots.map((slot) => (
+              <Fragment key={slot.key}>
+                <div className="time-label">{slot.label}</div>
+                {days.map((dayKey) => (
+                  <div
+                    className={`skel-cell${pseudoHasEvent(dayKey, slot) ? " has-event" : ""}`}
+                    key={`${dayKey}-${slot.key}`}
+                  />
+                ))}
+              </Fragment>
+            ))}
+          </div>
+        ) : (
         <div className={`schedule-grid${editing ? " editing" : ""}`} style={gridStyle}>
           {slots.map((slot) => (
             <TimeRow
@@ -1016,6 +1041,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
             ))}
           </div>
         </div>
+        )}
       </div>
       {editStatus ? <div className="empty-state schedule-status">{editStatus}</div> : null}
       {errorKind ? (

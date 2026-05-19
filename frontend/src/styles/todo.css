@@ -722,6 +722,68 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Skeleton loading shimmer ── */
+.skel-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--global-surface-line);
+  border-bottom: 0;
+  padding: 8px 12px;
+  min-height: 44px;
+  position: relative;
+  background: var(--global-surface-bg);
+}
+
+.skel-row:first-child {
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.skel-row:last-child {
+  border-bottom: 1px solid var(--global-surface-line);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.skel-block {
+  border-radius: var(--radius-sm);
+  background: var(--global-surface-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.skel-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, #f5f5f5 50%, transparent 100%);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skel-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--global-surface-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.skel-circle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, #f5f5f5 50%, transparent 100%);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ── Empty state (no todos) — Style E ── */
 .empty-state {
   display: flex;

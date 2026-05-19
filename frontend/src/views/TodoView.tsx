@@ -152,6 +152,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setTodos([]);
     const start = startOfDateKeyEpoch(selectedDayKey);
     const end = startOfDateKeyEpoch(addDaysToDateKey(selectedDayKey, 1));
     api
@@ -460,10 +461,18 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             </button>
           </div>
         ) : isLoading ? (
-          <div className="empty-state-loading">
-            <div className="loading-spinner" />
-            <p className="loading-text">加载中...</p>
-          </div>
+          <>
+            {Array.from({ length: 4 }, (_, i) => (
+              <div className="skel-row" key={i}>
+                <div className="skel-circle" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div className="skel-block" style={{ width: `${55 + i * 8}%`, height: 14 }} />
+                  <div className="skel-block" style={{ width: `${30 + i * 5}%`, height: 10 }} />
+                </div>
+                <div className="skel-block" style={{ width: 52, height: 20, borderRadius: "var(--radius-pill)" }} />
+              </div>
+            ))}
+          </>
         ) : todos.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-illustration">
