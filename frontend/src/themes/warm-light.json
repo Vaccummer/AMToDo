@@ -14,7 +14,8 @@
       "border-warm": "#d9d0c4",
       "line": "#e4ddd3",
       "muted": "#8c8277",
-      "muted-warm": "#a09888"
+      "muted-warm": "#a09888",
+      "blue-gray": "rgba(208,224,212,0.7)"
     },
     "text": {
       "_comment": "Global text hierarchy",
@@ -30,7 +31,8 @@
   "components": {
     "titlebar": {
       "_comment": "Top title bar",
-      "bg": "linear-gradient(to right, rgb(58, 31, 107), rgb(44, 62, 80))"
+      "bg": "linear-gradient(120deg, #1a2820 0%, #1e3028 25%, #1a2a22 50%, #20342c 75%, #1a2820 100%)",
+      "text": "#d0e0d4"
     },
     "nav": {
       "_comment": "Side navigation bar",
@@ -51,9 +53,11 @@
     "dropdown": {
       "_comment": "Dropdown menus (settings modal, etc.)",
       "focus": "#4a6fa5",
-      "accent": "#3a7bd5",
+      "accent": "#4ec9a0",
+      "accent-dark": "#4ec9a0",
       "bg": "#fbfcfe",
-      "border": "#c8d6e5"
+      "border": "#2a4a3a",
+      "border-alt": "rgba(78,201,160,0.25)"
     },
     "calendar": {
       "_comment": "Date picker / calendar popup",
@@ -105,7 +109,14 @@
       "bg": "#f6f3ee",
       "bg-alt": "#f7f3ee",
       "title-input": "#254f5c",
-      "placeholder": "#c4bbb0"
+      "placeholder": "#c4bbb0",
+      "zone-colors": [
+        "rgba(240, 198, 109, 0.16)",
+        "rgba(189, 232, 220, 0.18)",
+        "rgba(148, 199, 220, 0.18)",
+        "rgba(232, 162, 170, 0.18)",
+        "rgba(212, 207, 240, 0.18)"
+      ]
     },
     "trash": {
       "_comment": "Trash / recycle bin view",
