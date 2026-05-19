@@ -1,5 +1,5 @@
 # AMToDo UI configuration (non-visual parameters).
-server_url = "http://127.0.0.1:800"
+server_url = "http://127.0.0.1:8000"
 access_token = "UsKLFcbMTsqbGjPI_z3-dR0afo9O9PdYp_IQLbeYyTU"
 admin_token = "123456"
 language = "zh-CN"

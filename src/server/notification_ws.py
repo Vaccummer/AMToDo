@@ -117,6 +117,8 @@ async def websocket_notifications(websocket: WebSocket):
     except asyncio.TimeoutError:
         await _safe_close(websocket, 4002, "auth timeout")
         return
+    except WebSocketDisconnect:
+        return
 
     import json as _json
     try:
