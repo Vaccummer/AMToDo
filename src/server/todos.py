@@ -15,7 +15,7 @@ from fastapi import (
 from clock import Clock
 from config import AppSettings
 from exceptions import AMToDoError, NotFoundError, ValidationError
-from serialization import attachment_to_dict, todo_to_dict
+from serialization import attachment_to_dict, changelog_entry_to_dict, todo_to_dict
 from server.attachment_helpers import (
     build_download_response,
     check_base64_size,
@@ -24,6 +24,7 @@ from server.attachment_helpers import (
     unique_targets,
     validate_attachment_limits,
 )
+from server.common import target_result as _target_result_helper
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     TodoAttachmentDownloadRequest,
@@ -58,17 +59,6 @@ UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 
 
-def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
-    import json
-    return {
-        "id": entry.id,
-        "entity_id": entry.entity_id,
-        "action": entry.action,
-        "changed_fields": json.loads(entry.changed_fields),
-        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
-        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
-        "created_at": entry.created_at,
-    }
 
 
 @router.post("/list")
@@ -144,7 +134,14 @@ def search_todos(
         sort_by=body.sort_by,
         sort_order=body.sort_order,
     )
-    paged = todos[body.offset:body.offset + body.limit]
+    if body.after_id is not None:
+        cursor_idx = next((i for i, t in enumerate(todos) if t.id == body.after_id), None)
+        if cursor_idx is not None:
+            todos = todos[cursor_idx + 1:]
+    paged = todos[:body.limit + 1]
+    has_more = len(paged) > body.limit
+    if has_more:
+        paged = paged[:body.limit]
 
     return {
         "ok": True,
@@ -171,8 +168,8 @@ def search_todos(
         "sort": {"by": body.sort_by, "order": body.sort_order},
         "pagination": {
             "limit": body.limit,
-            "offset": body.offset,
-            "has_more": body.offset + body.limit < len(todos),
+            "has_more": has_more,
+            "next_cursor": paged[-1].id if has_more and paged else None,
         },
         "total": len(todos),
         "count": len(paged),
@@ -441,11 +438,23 @@ def list_deleted_todos(
         resolved_fields = set(body.fields) & {"title", "description", "tag"}
         todos = [t for t in todos if regex.search(search_text(t, resolved_fields))]
     todos = sort_results(todos, sort_by=body.sort_by, sort_order=body.sort_order, value_fn=_todo_sort_value)
-    paged = todos[body.offset:body.offset + body.limit]
+    if body.after_id is not None:
+        cursor_idx = next((i for i, t in enumerate(todos) if t.id == body.after_id), None)
+        if cursor_idx is not None:
+            todos = todos[cursor_idx + 1:]
+    paged = todos[:body.limit + 1]
+    has_more = len(paged) > body.limit
+    if has_more:
+        paged = paged[:body.limit]
     return {
         "ok": True,
         "total": len(todos),
         "count": len(paged),
+        "pagination": {
+            "limit": body.limit,
+            "has_more": has_more,
+            "next_cursor": paged[-1].id if has_more and paged else None,
+        },
         "todos": [todo_to_dict(todo, settings.timezone) for todo in paged],
     }
 
@@ -599,12 +608,12 @@ def todo_changelog(
         start_at=body.start_at,
         end_at=body.end_at,
         limit=body.limit,
-        offset=body.offset,
+        after_id=body.after_id,
     )
     return {
         "ok": True,
         "total": total,
-        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+        "entries": [changelog_entry_to_dict(entry) for entry in entries],
     }
 
 
@@ -633,12 +642,7 @@ def _target_result(
     operation: Callable[[int], Todo],
     timezone: str,
 ) -> dict[str, object]:
-    try:
-        todo = operation(target)
-    except AMToDoError as exc:
-        return {
-            "target": target,
-            "ok": False,
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-        }
-    return {"target": target, "ok": True, "todo": todo_to_dict(todo, timezone)}
+    def _to_dict(todo: Todo, **kw: object) -> dict[str, object]:
+        return {"todo": todo_to_dict(todo, kw["timezone"])}  # type: ignore[arg-type]
+
+    return _target_result_helper(target, operation, _to_dict, timezone=timezone)

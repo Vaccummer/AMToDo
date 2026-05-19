@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import secrets
 import time
 
 import httpx
@@ -13,9 +14,9 @@ from sqlalchemy import select
 from config import __version__, amtodo_root
 from db.base import Base
 from models.user import User
-from serialization import user_to_dict
+from serialization import user_to_dict, user_to_dict_with_token
 from server.auth import require_admin, require_user
-from server.schemas import AdminConfigRequest, AdminInitDbRequest, UserMeRequest
+from server.schemas import AdminConfigRequest, AdminInitDbRequest, UserMeRequest, UserTokenRegenerateRequest
 
 logger = logging.getLogger("amtodo")
 
@@ -137,7 +138,7 @@ def agent_guide() -> dict[str, object]:
                     "sort_by": "updated_at",
                     "sort_order": "desc",
                     "limit": 50,
-                    "offset": 0,
+                    "after_id": None,
                 },
             },
             {"method": "POST", "path": "/todos/stats", "auth": "user"},
@@ -165,7 +166,7 @@ def agent_guide() -> dict[str, object]:
                     "sort_by": "updated_at",
                     "sort_order": "desc",
                     "limit": 50,
-                    "offset": 0,
+                    "after_id": None,
                 },
             },
             {"method": "POST", "path": "/schedules/stats", "auth": "user"},
@@ -231,3 +232,30 @@ def current_user(
     with db.session() as session:
         user = session.get(User, user_id)
     return {"ok": True, "user": user_to_dict(user)}
+
+
+@router.post("/user/token/regenerate")
+def regenerate_token(
+    body: UserTokenRegenerateRequest,
+    request: Request,
+    user_id: int = Depends(require_user),
+) -> dict[str, object]:
+    """Generate a new access token for the current user. Invalidates the old one."""
+    new_token = secrets.token_hex(64)
+    db = request.app.state.db
+    token_map: dict[str, int] = request.app.state.token_map
+
+    with db.session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            from exceptions import NotFoundError
+            raise NotFoundError("User not found")
+        old_token = user.token
+        user.token = new_token
+        session.flush()
+
+    # Update in-memory token map
+    token_map.pop(old_token, None)
+    token_map[new_token] = user_id
+
+    return {"ok": True, "user": user_to_dict_with_token(user)}

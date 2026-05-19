@@ -15,7 +15,7 @@ from fastapi import (
 from clock import Clock
 from config import AppSettings
 from exceptions import AMToDoError, NotFoundError
-from serialization import schedule_attachment_to_dict, schedule_to_dict
+from serialization import changelog_entry_to_dict, schedule_attachment_to_dict, schedule_to_dict
 from server.attachment_helpers import (
     build_download_response,
     check_base64_size,
@@ -24,6 +24,7 @@ from server.attachment_helpers import (
     unique_targets,
     validate_attachment_limits,
 )
+from server.common import target_result as _target_result_helper
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     ScheduleAttachmentDownloadRequest,
@@ -65,17 +66,6 @@ UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
 
 
-def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
-    import json
-    return {
-        "id": entry.id,
-        "entity_id": entry.entity_id,
-        "action": entry.action,
-        "changed_fields": json.loads(entry.changed_fields),
-        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
-        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
-        "created_at": entry.created_at,
-    }
 
 
 @router.post("/list")
@@ -123,7 +113,14 @@ def search_schedules(
         sort_by=body.sort_by,
         sort_order=body.sort_order,
     )
-    paged = schedules[body.offset:body.offset + body.limit]
+    if body.after_id is not None:
+        cursor_idx = next((i for i, s in enumerate(schedules) if s.id == body.after_id), None)
+        if cursor_idx is not None:
+            schedules = schedules[cursor_idx + 1:]
+    paged = schedules[:body.limit + 1]
+    has_more = len(paged) > body.limit
+    if has_more:
+        paged = paged[:body.limit]
 
     return {
         "ok": True,
@@ -143,8 +140,8 @@ def search_schedules(
         "sort": {"by": body.sort_by, "order": body.sort_order},
         "pagination": {
             "limit": body.limit,
-            "offset": body.offset,
-            "has_more": body.offset + body.limit < len(schedules),
+            "has_more": has_more,
+            "next_cursor": paged[-1].id if has_more and paged else None,
         },
         "total": len(schedules),
         "count": len(paged),
@@ -291,11 +288,23 @@ def list_deleted_schedules(
         resolved_fields = set(body.fields) & {"title", "description", "location", "category"}
         schedules = [s for s in schedules if regex.search(search_text(s, resolved_fields))]
     schedules = sort_results(schedules, sort_by=body.sort_by, sort_order=body.sort_order, value_fn=_schedule_sort_value)
-    paged = schedules[body.offset:body.offset + body.limit]
+    if body.after_id is not None:
+        cursor_idx = next((i for i, s in enumerate(schedules) if s.id == body.after_id), None)
+        if cursor_idx is not None:
+            schedules = schedules[cursor_idx + 1:]
+    paged = schedules[:body.limit + 1]
+    has_more = len(paged) > body.limit
+    if has_more:
+        paged = paged[:body.limit]
     return {
         "ok": True,
         "total": len(schedules),
         "count": len(paged),
+        "pagination": {
+            "limit": body.limit,
+            "has_more": has_more,
+            "next_cursor": paged[-1].id if has_more and paged else None,
+        },
         "schedules": [schedule_to_dict(schedule) for schedule in paged],
     }
 
@@ -533,12 +542,12 @@ def schedule_changelog(
         start_at=body.start_at,
         end_at=body.end_at,
         limit=body.limit,
-        offset=body.offset,
+        after_id=body.after_id,
     )
     return {
         "ok": True,
         "total": total,
-        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+        "entries": [changelog_entry_to_dict(entry) for entry in entries],
     }
 
 
@@ -549,15 +558,7 @@ def _target_result(
     target: int,
     operation: Callable[[int], Schedule],
 ) -> dict[str, object]:
-    try:
-        schedule = operation(target)
-    except AMToDoError as exc:
-        return {
-            "target": target,
-            "ok": False,
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-        }
-    return {"target": target, "ok": True, "schedule": schedule_to_dict(schedule)}
+    return _target_result_helper(target, operation, lambda s, **kw: {"schedule": schedule_to_dict(s)})
 
 
 def _schedule_sort_value(schedule: Schedule, sort_by: str) -> object:

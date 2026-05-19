@@ -30,7 +30,7 @@ class TodoChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return changelog entries for a specific entity, with total count."""
         statement = select(self._model).where(self._model.entity_id == entity_id)
@@ -46,8 +46,10 @@ class TodoChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total
 
     def list_all(
@@ -57,7 +59,7 @@ class TodoChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return all changelog entries with optional filters and total count."""
         statement = select(self._model)
@@ -71,8 +73,10 @@ class TodoChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total
 
 
@@ -96,7 +100,7 @@ class ScheduleChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return changelog entries for a specific entity, with total count."""
         statement = select(self._model).where(self._model.entity_id == entity_id)
@@ -112,8 +116,10 @@ class ScheduleChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total
 
     def list_all(
@@ -123,7 +129,7 @@ class ScheduleChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return all changelog entries with optional filters and total count."""
         statement = select(self._model)
@@ -137,8 +143,10 @@ class ScheduleChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total
 
 
@@ -162,7 +170,7 @@ class NotificationChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return changelog entries for a specific entity, with total count."""
         statement = select(self._model).where(self._model.entity_id == entity_id)
@@ -178,8 +186,10 @@ class NotificationChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total
 
     def list_all(
@@ -189,7 +199,7 @@ class NotificationChangelogRepository:
         start_at: int | None = None,
         end_at: int | None = None,
         limit: int = 50,
-        offset: int = 0,
+        after_id: int | None = None,
     ) -> tuple[list[object], int]:
         """Return all changelog entries with optional filters and total count."""
         statement = select(self._model)
@@ -203,6 +213,8 @@ class NotificationChangelogRepository:
         if end_at is not None:
             statement = statement.where(self._model.created_at < end_at)
             count_statement = count_statement.where(self._model.created_at < end_at)
+        if after_id is not None:
+            statement = statement.where(self._model.id < after_id)
         total = self._session.scalar(count_statement) or 0
-        statement = statement.order_by(self._model.created_at.desc()).offset(offset).limit(limit)
+        statement = statement.order_by(self._model.id.desc()).limit(limit)
         return list(self._session.scalars(statement)), total

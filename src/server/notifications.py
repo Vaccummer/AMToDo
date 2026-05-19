@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 
 from clock import Clock
 from config import AppSettings
-from serialization import notification_to_dict
+from serialization import changelog_entry_to_dict, notification_to_dict
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     NotificationChangelogQueryRequest,
@@ -136,7 +136,6 @@ def list_notifications(
 @router.post("/list_triggered")
 def list_triggered_notifications(
     body: NotificationListTriggeredRequest,
-    settings: SettingsDep,
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
@@ -190,17 +189,6 @@ def purge_notification(
     return {"ok": True}
 
 
-def _changelog_entry_to_dict(entry: object) -> dict[str, object]:
-    import json
-    return {
-        "id": entry.id,
-        "entity_id": entry.entity_id,
-        "action": entry.action,
-        "changed_fields": json.loads(entry.changed_fields),
-        "before_snapshot": json.loads(entry.before_snapshot) if entry.before_snapshot else None,
-        "after_snapshot": json.loads(entry.after_snapshot) if entry.after_snapshot else None,
-        "created_at": entry.created_at,
-    }
 
 
 @router.post("/changelog")
@@ -216,10 +204,10 @@ def notification_changelog(
         start_at=body.start_at,
         end_at=body.end_at,
         limit=body.limit,
-        offset=body.offset,
+        after_id=body.after_id,
     )
     return {
         "ok": True,
         "total": total,
-        "entries": [_changelog_entry_to_dict(entry) for entry in entries],
+        "entries": [changelog_entry_to_dict(entry) for entry in entries],
     }
