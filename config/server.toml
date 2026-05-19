@@ -24,6 +24,19 @@ attachment_root = "db"
 requests = 30
 window_seconds = 60
 
+[notification]
+# Background check interval for triggered notifications (seconds)
+watcher_interval = 10
+
+# Heartbeat interval for WebSocket connections (seconds)
+heartbeat_interval = 30
+
+# Authentication handshake timeout for new WebSocket connections (seconds)
+auth_timeout = 5
+
+# Maximum lifetime of a session key (seconds, safety net)
+session_key_ttl = 3600
+
 [health]
 # TTL (seconds) for cached public IP addresses (0 = no cache, fetch every time)
 ip_cache_ttl = 300

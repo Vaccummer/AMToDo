@@ -50,7 +50,11 @@ const shell = window.amtodoShell ?? {
   isMaximized: async () => false,
   onMaximizedChange: () => () => undefined,
   readSettings: async () => ({}),
-  writeSettings: async () => ({ ok: true })
+  writeSettings: async () => ({ ok: true }),
+  startNotificationPolling: async () => ({ ok: true }),
+  onNotificationClicked: () => () => {},
+  connectNotificationWebSocket: async () => ({ ok: true }),
+  disconnectNotificationWebSocket: async () => ({ ok: true }),
 };
 
 export function App() {
@@ -68,7 +72,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [username, setUsername] = useState("");
   const [pendingAction, setPendingAction] = useState<{
-    type: "todo" | "schedule";
+    type: "todo" | "schedule" | "notify";
     id: number;
     action: "jump" | "edit";
     dateKey?: string;
@@ -90,6 +94,13 @@ export function App() {
   const [api, setApi] = useState<AMToDoApi>(
     () => new AMToDoApi(settings.server_url, settings.access_token)
   );
+
+  const handleTodoDateChange = useCallback((key: string) => {
+    setSelectedDateCache((prev) => prev.todo === key ? prev : { ...prev, todo: key });
+  }, []);
+  const handleScheduleDateChange = useCallback((key: string) => {
+    setSelectedDateCache((prev) => prev.schedule === key ? prev : { ...prev, schedule: key });
+  }, []);
 
   function navigateTab(tab: Tab) {
     const h = tabHistory.current;
@@ -316,6 +327,16 @@ export function App() {
     return shell.onMaximizedChange(setMaximized);
   }, []);
 
+  // Listen for notification clicks → navigate to schedule & open edit
+  useEffect(() => {
+    return shell.onNotificationClicked?.((data: { id: number; trigger_at: number }) => {
+      const { id, trigger_at } = data;
+      const dateKey = dateKeyFromEpoch(trigger_at, settings.timezone);
+      navigateTab("schedule");
+      setPendingAction({ type: "notify", id, action: "edit", dateKey });
+    });
+  }, [settings.timezone]);
+
   const handleSettingsSave = useCallback((newSettings: UISettings) => {
     shell.writeSettings({
       server_url: newSettings.server_url,
@@ -332,10 +353,20 @@ export function App() {
       scheduler_start_hour: String(newSettings.scheduler_start_hour),
       scheduler_end_hour: String(newSettings.scheduler_end_hour),
       scheduler_slot_minutes: String(newSettings.scheduler_slot_minutes),
+      notification_enabled: String(newSettings.notification_enabled),
       notification_poll_interval: String(newSettings.notification_poll_interval),
       notification_query_window: String(newSettings.notification_query_window),
       global_hotkey_enabled: String(newSettings.global_hotkey_enabled),
       global_hotkey: newSettings.global_hotkey,
+      notification_silent: String(newSettings.notification_silent),
+      notification_timeout: newSettings.notification_timeout,
+    }).then(() => {
+      shell.startNotificationPolling?.({
+        server_url: newSettings.server_url,
+        access_token: newSettings.access_token,
+        notification_poll_interval: String(newSettings.notification_poll_interval),
+        notification_query_window: String(newSettings.notification_query_window),
+      });
     }).catch(() => { /* keep going */ });
     setSettings(newSettings);
     setDefaultTimezone(newSettings.timezone);
@@ -415,7 +446,7 @@ export function App() {
                 calendarDays={settings.calendar_days}
                 weekStart={settings.week_start}
                 cachedDateKey={selectedDateCache.todo}
-                onDateChange={(key) => { setSelectedDateCache((prev) => ({ ...prev, todo: key })); }}
+                onDateChange={handleTodoDateChange}
                 pendingAction={pendingAction?.type === "todo" ? pendingAction : null}
                 onPendingActionConsumed={() => setPendingAction(null)}
               />
@@ -431,9 +462,9 @@ export function App() {
                 slotMinutes={settings.scheduler_slot_minutes}
                 weekStart={settings.week_start}
                 cachedDateKey={selectedDateCache.schedule}
-                onDateChange={(key) => { setSelectedDateCache((prev) => ({ ...prev, schedule: key })); }}
+                onDateChange={handleScheduleDateChange}
                 onNavigate={handleMentionNavigate}
-                pendingAction={pendingAction?.type === "schedule" ? pendingAction : null}
+                pendingAction={pendingAction?.type === "schedule" || pendingAction?.type === "notify" ? pendingAction : null}
                 onPendingActionConsumed={() => setPendingAction(null)}
               />
             </div>

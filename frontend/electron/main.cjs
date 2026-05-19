@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut, Notification } = require("electron");
+const crypto = require("node:crypto");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -16,75 +17,27 @@ const notificationFiredIds = new Set(); // IDs already shown as system notificat
 const DEFAULT_POLL_INTERVAL = 30; // seconds
 const DEFAULT_QUERY_WINDOW = 60; // seconds
 
-function createTrayIcon() {
-  const size = 16;
-  const buf = Buffer.alloc(size * size * 4, 0);
-  const cx = (size - 1) / 2;
-  const cy = (size - 1) / 2;
-  const r = size / 2 - 1;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const dist = Math.hypot(x - cx, y - cy);
-      if (dist <= r) {
-        buf[i] = 0x00;     // R
-        buf[i + 1] = 0xc0; // G
-        buf[i + 2] = 0x80; // B
-        buf[i + 3] = 0xff; // A
-      } else if (dist <= r + 1.5) {
-        const alpha = Math.max(0, Math.min(255, Math.round((r + 1.5 - dist) * 255)));
-        buf[i] = 0x00;
-        buf[i + 1] = 0xc0;
-        buf[i + 2] = 0x80;
-        buf[i + 3] = Math.min(alpha, 255);
-      }
-    }
-  }
-  return nativeImage.createFromBuffer(buf, { width: size, height: size, scaleFactor: 1 });
+// --- Icon helpers (load from app.png, resize for each use) ---
+
+const APP_PNG_PATH = path.join(__dirname, "..", "src", "assets", "app.png");
+
+let _appPngImage = null;
+
+function _appPng() {
+  if (!_appPngImage) _appPngImage = nativeImage.createFromPath(APP_PNG_PATH);
+  return _appPngImage;
 }
 
 function createAppIcon() {
-  const size = 64;
-  const buf = Buffer.alloc(size * size * 4, 0);
-  const cx = size / 2;
-  const cy = size / 2;
-  const outerR = size / 2 - 2;
-  const innerR = outerR - 8;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const dist = Math.hypot(x - cx, y - cy);
-      if (dist <= innerR) {
-        // white inner circle
-        buf[i] = 0xff;
-        buf[i + 1] = 0xff;
-        buf[i + 2] = 0xff;
-        buf[i + 3] = 0xff;
-      } else if (dist <= outerR) {
-        // green ring
-        buf[i] = 0x00;
-        buf[i + 1] = 0xc0;
-        buf[i + 2] = 0x80;
-        buf[i + 3] = 0xff;
-      }
-    }
-  }
-  // draw a simple checkmark line in the center
-  const lx1 = 22, ly1 = 32, lx2 = 28, ly2 = 38;
-  const lx3 = 28, ly3 = 38, lx4 = 42, ly4 = 24;
-  for (const [sx, sy, ex, ey] of [[lx1, ly1, lx2, ly2], [lx3, ly3, lx4, ly4]]) {
-    const steps = Math.max(Math.abs(ex - sx), Math.abs(ey - sy));
-    for (let t = 0; t <= steps; t++) {
-      const px = Math.round(sx + (ex - sx) * t / steps);
-      const py = Math.round(sy + (ey - sy) * t / steps);
-      const pi = (py * size + px) * 4;
-      buf[pi] = 0x00;
-      buf[pi + 1] = 0x9f;
-      buf[pi + 2] = 0x72;
-      buf[pi + 3] = 0xff;
-    }
-  }
-  return nativeImage.createFromBuffer(buf, { width: size, height: size, scaleFactor: 1 });
+  return _appPng().resize({ width: 64, height: 64 });
+}
+
+function createTrayIcon() {
+  return _appPng().resize({ width: 16, height: 16 });
+}
+
+function createWindowIcon() {
+  return _appPng();
 }
 
 function createTray() {
@@ -190,19 +143,26 @@ function pollNotifications(serverUrl, accessToken, queryWindow) {
 
         notificationFiredIds.add(n.id);
 
+        const epoch = typeof n.trigger_at === "number" ? n.trigger_at : 0;
+        const triggerTime = formatTimeStr(epoch);
+        const desc = typeof n.description === "string" ? n.description : "";
+        const body = desc ? `${desc}\n触发: ${triggerTime}` : `触发: ${triggerTime}`;
+
         const electronNotification = new Notification({
           title: n.title || "AMToDo",
-          body: n.description || "",
+          body,
+          icon: createAppIcon(),
+          silent: getNotifSetting("notification_silent") === "true",
+          timeoutType: getNotifSetting("notification_timeout") === "never" ? "never" : "default",
         });
 
-        const notificationId = n.id;
         electronNotification.on("click", () => {
           if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
           }
-          mainWindow?.webContents.send("notification:clicked", notificationId);
+          mainWindow?.webContents.send("notification:clicked", { id: n.id, trigger_at: n.trigger_at });
         });
 
         electronNotification.show();
@@ -246,6 +206,295 @@ function stopNotificationPolling() {
   notificationFiredIds.clear();
 }
 
+// --- WebSocket notification state ---
+let wsSessionKey = null;       // Buffer, 32 bytes
+let wsSessionKeyExpiry = 0;    // Unix seconds
+let wsConnection = null;       // WebSocket instance
+let wsServerUrl = null;        // current server URL
+let wsAccessToken = null;      // current access_token
+
+// --- Crypto helpers for WebSocket ---
+
+function base64urlEncode(buffer) {
+  return buffer.toString("base64")
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64urlDecode(str) {
+  let b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4 !== 0) b64 += "=";
+  return Buffer.from(b64, "base64");
+}
+
+function sha256Hex(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function aes256GcmDecrypt(keyBytes, nonce, ciphertextWithTag) {
+  // ciphertextWithTag: ciphertext || 16-byte tag
+  const tag = ciphertextWithTag.slice(-16);
+  const ciphertext = ciphertextWithTag.slice(0, -16);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", keyBytes, nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function readServerPublicKeyPem() {
+  const rootPath = path.resolve(__dirname, "..", "..");
+  const keyPath = path.join(rootPath, "config", "keys", "server_public.pem");
+  return fs.readFileSync(keyPath);
+}
+
+function encryptEnvelope(payload, serverPublicKeyPem) {
+  // Generate ephemeral P-256 ECDH keypair
+  const ecdh = crypto.createECDH("prime256v1");
+  ecdh.generateKeys();
+  const ekRaw = ecdh.getPublicKey(); // uncompressed point
+
+  // Extract raw 65-byte EC point from server's SPKI PEM
+  const serverPubKeyObj = crypto.createPublicKey({
+    key: serverPublicKeyPem,
+    format: "pem",
+    type: "spki",
+  });
+  const der = Buffer.from(
+    serverPubKeyObj.export({ format: "der", type: "spki" })
+  );
+  // SPKI DER → last 65 bytes = uncompressed EC point (0x04 || x || y)
+  const rawServerKey = der.slice(-65);
+
+  // Compute shared secret via ECDH
+  const shared = ecdh.computeSecret(rawServerKey);
+
+  // HKDF-SHA256 → AES-256 key
+  const hkdfInfo = Buffer.from("amtodo-encryption", "utf8");
+  const aesKey = crypto.hkdfSync("sha256", shared, Buffer.alloc(0), hkdfInfo, 32);
+
+  // Encrypt inner payload
+  const nonce = crypto.randomBytes(12);
+  const now = Math.floor(Date.now() / 1000);
+  const requestId = crypto.randomUUID().replace(/-/g, "");
+  const inner = JSON.stringify({ requestId, timestamp: now, payload });
+
+  const cipher = crypto.createCipheriv("aes-256-gcm", aesKey, nonce);
+  const encrypted = Buffer.concat([cipher.update(inner, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  const envelope = {
+    version: 1,
+    keyId: "server-key-v1",
+    alg: "ECDH-P256-HKDF-SHA256+A256GCM",
+    ek: base64urlEncode(ekRaw),
+    nonce: base64urlEncode(nonce),
+    data: base64urlEncode(encrypted),
+    tag: base64urlEncode(tag),
+  };
+
+  return { envelope, dataKey: aesKey };
+}
+
+function decryptEnvelopeResponse(responseBody, dataKey) {
+  const nonce = base64urlDecode(responseBody.nonce);
+  const encData = base64urlDecode(responseBody.data);
+  const tag = base64urlDecode(responseBody.tag);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", dataKey, nonce);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(encData), decipher.final()]);
+  return JSON.parse(plaintext.toString("utf8"));
+}
+
+// --- WebSocket connection management ---
+
+async function fetchSessionKey(serverUrl, accessToken) {
+  const serverPublicKeyPem = readServerPublicKeyPem();
+  const { envelope, dataKey } = encryptEnvelope(
+    { access_token: accessToken },
+    serverPublicKeyPem
+  );
+
+  const res = await fetch(serverUrl.replace(/\/+$/, "") + "/api/v1/notifications/ws-key", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(envelope),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch session key: ${res.status}`);
+  }
+
+  const rawBody = await res.json();
+  const data = decryptEnvelopeResponse(rawBody, dataKey);
+
+  wsSessionKey = base64urlDecode(data.session_key);
+  wsSessionKeyExpiry = data.expires_at;
+  return wsSessionKey;
+}
+
+function decryptWebSocketMessage(base64Data) {
+  const raw = base64urlDecode(base64Data);
+  const nonce = raw.slice(0, 12);
+  const ciphertext = raw.slice(12);
+  return aes256GcmDecrypt(wsSessionKey, nonce, ciphertext);
+}
+
+function connectWebSocket(serverUrl, accessToken) {
+  // Clean up old connection
+  disconnectWebSocket();
+
+  wsServerUrl = serverUrl;
+  wsAccessToken = accessToken;
+
+  const wsUrl = serverUrl.replace(/^http/, "ws").replace(/\/+$/, "") + "/api/v1/notifications/ws";
+
+  // Require the 'ws' package (install with: cd frontend && npm install ws)
+  let WebSocketClient;
+  try {
+    WebSocketClient = require("ws");
+  } catch (_) {
+    // Fallback: try native WebSocket (available in newer Electron / Node.js 21+)
+    WebSocketClient = globalThis;
+  }
+  const ws = new (WebSocketClient.WebSocket || WebSocketClient)(wsUrl);
+  wsConnection = ws;
+
+  ws.on("open", async () => {
+    try {
+      // Fetch session key if needed
+      if (!wsSessionKey || Date.now() / 1000 >= wsSessionKeyExpiry) {
+        await fetchSessionKey(serverUrl, accessToken);
+      }
+
+      // Send authentication message
+      const keyHash = sha256Hex(wsSessionKey);
+      ws.send(JSON.stringify({ type: "auth", key_hash: keyHash }));
+    } catch (e) {
+      console.error("WebSocket auth failed:", e);
+      ws.close();
+    }
+  });
+
+  ws.on("message", (data) => {
+    // data is Buffer (ws package) or string (native WebSocket)
+    const raw = typeof data === "string" ? data : data.toString("utf8");
+
+    try {
+      const msg = JSON.parse(raw);
+
+      switch (msg.type) {
+        case "auth_ok":
+          console.log("WebSocket authenticated");
+          break;
+
+        case "auth_failed":
+          console.error("WebSocket auth rejected:", msg.reason);
+          ws.close();
+          break;
+
+        case "notification": {
+          const decrypted = decryptWebSocketMessage(msg.data);
+          const rawJson = decrypted.toString("utf8");
+          const notification = JSON.parse(rawJson);
+
+          const epoch = typeof notification.trigger_at === "number" ? notification.trigger_at : 0;
+          const triggerTime = formatTimeStr(epoch);
+          const desc = typeof notification.description === "string" ? notification.description : "";
+          const body = desc ? `${desc}\n触发: ${triggerTime}` : `触发: ${triggerTime}`;
+          console.log("[ws] notif title=%s epoch=%d triggerTime=%s body=%s", notification.title, epoch, triggerTime, body);
+
+          const electronNotification = new Notification({
+            title: notification.title || "AMToDo",
+            body,
+            icon: createAppIcon(),
+            silent: getNotifSetting("notification_silent") === "true",
+            timeoutType: getNotifSetting("notification_timeout") === "never" ? "never" : "default",
+          });
+
+          electronNotification.on("click", () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore();
+              mainWindow.show();
+              mainWindow.focus();
+            }
+            mainWindow?.webContents.send("notification:clicked", {
+              id: notification.id,
+              trigger_at: notification.trigger_at,
+            });
+          });
+
+          electronNotification.show();
+          break;
+        }
+
+        case "ping":
+          ws.send(JSON.stringify({ type: "pong" }));
+          break;
+      }
+    } catch (e) {
+      console.error("Failed to handle WebSocket message:", e);
+    }
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log("WebSocket closed:", code, reason?.toString() || "");
+    wsConnection = null;
+    // Do NOT auto-reconnect; client controls reconnection
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+}
+
+function disconnectWebSocket() {
+  if (wsConnection) {
+    try { wsConnection.close(); } catch (_) {}
+    wsConnection = null;
+  }
+  wsSessionKey = null;
+  wsSessionKeyExpiry = 0;
+  wsServerUrl = null;
+  wsAccessToken = null;
+}
+
+function formatTimeStr(epoch) {
+  if (!epoch) return "";
+  const d = new Date(epoch * 1000);
+  if (isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return hh + ":" + mm + ":" + ss;
+}
+
+// Lazily read current notification settings from ui.toml
+let _cachedNotifSettings = null;
+function getNotifSetting(key) {
+  if (_cachedNotifSettings === null) {
+    try { _cachedNotifSettings = readUiToml(); } catch (_) { _cachedNotifSettings = {}; }
+  }
+  return _cachedNotifSettings[key] || "";
+}
+
+async function tryReconnectWebSocket() {
+  if (!wsServerUrl || !wsAccessToken) return false;
+
+  try {
+    const healthUrl = wsServerUrl.replace(/\/+$/, "") + "/api/v1/health";
+    const healthRes = await fetch(healthUrl, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!healthRes.ok) return false;
+
+    connectWebSocket(wsServerUrl, wsAccessToken);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1080,
@@ -253,7 +502,7 @@ function createWindow() {
     minWidth: 760,
     minHeight: 520,
     title: "AMToDo",
-    icon: createAppIcon(),
+    icon: createWindowIcon(),
     frame: false,
     thickFrame: true,
     roundedCorners: true,
@@ -323,7 +572,8 @@ function writeUiToml(settings) {
     "calendar_days", "week_start",
     "scheduler_start_hour", "scheduler_end_hour", "scheduler_slot_minutes",
     "global_hotkey_enabled", "global_hotkey",
-    "notification_poll_interval", "notification_query_window"
+    "notification_poll_interval", "notification_query_window",
+    "notification_silent", "notification_timeout"
   ];
   lines.push("# AMToDo UI configuration (non-visual parameters).");
   for (const key of keys) {
@@ -335,7 +585,7 @@ function writeUiToml(settings) {
   fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
 }
 
-app.setAppUserModelId("com.amtodo.app");
+app.setAppUserModelId("AMToDo");
 
 app.whenReady().then(() => {
   ipcMain.handle("settings:read", () => {
@@ -349,6 +599,7 @@ app.whenReady().then(() => {
   ipcMain.handle("settings:write", (_event, settings) => {
     try {
       writeUiToml(settings);
+      _cachedNotifSettings = null;  // refresh cache after write
       // Stop notification polling when settings change; renderer can restart
       stopNotificationPolling();
       return { ok: true };
@@ -407,6 +658,23 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle("notification:ws-connect", async (_event, settings) => {
+    // Mutually exclusive: close polling when switching to WebSocket
+    stopNotificationPolling();
+    disconnectWebSocket();
+    try {
+      connectWebSocket(settings.server_url, settings.access_token);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("notification:ws-disconnect", () => {
+    disconnectWebSocket();
+    return { ok: true };
+  });
+
   createWindow();
   createTray();
 
@@ -416,8 +684,16 @@ app.whenReady().then(() => {
     if (settings.global_hotkey_enabled === "true" && settings.global_hotkey) {
       registerGlobalHotkey(settings.global_hotkey);
     }
-    // Start notification polling
-    startNotificationPolling(settings);
+    // Start notification push (WebSocket preferred, polling as fallback)
+    if (settings.server_url && settings.access_token) {
+      try {
+        connectWebSocket(settings.server_url, settings.access_token);
+        console.log("Notification mode: websocket");
+      } catch {
+        startNotificationPolling(settings);
+        console.log("Notification mode: poll (websocket unavailable)");
+      }
+    }
   } catch {
     // settings file may not exist yet
   }
