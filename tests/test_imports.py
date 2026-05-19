@@ -33,15 +33,14 @@ def test_create_application_context(tmp_path) -> None:
     assert context.settings.database_url
 
 
-def test_load_cli_settings(tmp_path) -> None:
-    """CLI settings can be loaded from cli.toml or fall back to defaults."""
+def test_load_cli_settings_requires_server_url(tmp_path) -> None:
+    """CLI settings require server_url; local mode is disabled."""
 
     os.environ["AMTODO_CLI_ROOT"] = str(tmp_path)
     try:
-        settings = load_cli_settings()
+        import pytest
+
+        with pytest.raises(SystemExit):
+            load_cli_settings()
     finally:
         del os.environ["AMTODO_CLI_ROOT"]
-
-    assert settings.database_url
-    # Without cli.toml and without server_url, defaults to local SQLite
-    assert "sqlite" in settings.database_url

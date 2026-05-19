@@ -28,7 +28,7 @@ def client(tmp_path):
     token = secrets.token_urlsafe(32)
     clock = SystemClock()
 
-    with TestClient(app) as test_client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         # lifespan has run, db and token_map are now on app.state
         db = app.state.db
         token_map: dict[str, int] = app.state.token_map
@@ -317,6 +317,3 @@ class TestAdminClient:
         assert result["status"] == "ok"
         assert "version" in result
 
-    def test_init_db(self, client):
-        result = client.init_db()
-        assert result["ok"] is True

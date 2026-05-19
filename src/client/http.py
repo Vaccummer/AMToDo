@@ -44,12 +44,6 @@ class AMTodoClient:
 
     # ── admin (admin_token) ──
 
-    def init_db(self) -> dict[str, Any]:
-        return self._admin_post("/api/v1/admin/init-db")
-
-    def admin_config(self) -> dict[str, Any]:
-        return self._admin_post("/api/v1/admin/config")
-
     # ── user ──
 
     def user_me(self) -> dict[str, Any]:
