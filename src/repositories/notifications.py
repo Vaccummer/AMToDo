@@ -96,6 +96,20 @@ class NotificationMentionRepository:
         )
         return list(self._session.scalars(statement))
 
+    def list_for_notifications(self, notification_ids: list[int]) -> dict[int, list[object]]:
+        """Return mentions grouped by notification_id for a batch of IDs."""
+        if not notification_ids:
+            return {}
+        statement = (
+            select(self._model)
+            .where(self._model.notification_id.in_(notification_ids))
+            .order_by(self._model.notification_id, self._model.id)
+        )
+        result: dict[int, list[object]] = {nid: [] for nid in notification_ids}
+        for mention in self._session.scalars(statement):
+            result[mention.notification_id].append(mention)
+        return result
+
     def delete_for_notification(self, notification_id: int) -> None:
         mentions = self.list_for_notification(notification_id)
         for mention in mentions:

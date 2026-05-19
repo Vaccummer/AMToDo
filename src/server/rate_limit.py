@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import TYPE_CHECKING
 
 from fastapi.responses import JSONResponse
@@ -27,8 +27,8 @@ class RateLimiter:
     def __init__(self, max_requests: int, window_seconds: int) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        # ip -> list of request timestamps
-        self._records: dict[str, list[float]] = defaultdict(list)
+        # ip -> deque of request timestamps
+        self._records: dict[str, deque[float]] = defaultdict(deque)
         self._last_access: dict[str, float] = {}
         self._last_gc: float = time.monotonic()
 
@@ -38,9 +38,9 @@ class RateLimiter:
         cutoff = now - self.window_seconds
         timestamps = self._records[ip]
 
-        # Prune expired entries for this IP
+        # Prune expired entries for this IP (deque popleft is O(1))
         while timestamps and timestamps[0] <= cutoff:
-            timestamps.pop(0)
+            timestamps.popleft()
 
         if len(timestamps) >= self.max_requests:
             return False
@@ -103,16 +103,15 @@ class RateLimitMiddleware:
 
 
 def _get_client_ip(scope: Scope) -> str:
-    """Extract client IP from ASGI scope, respecting X-Forwarded-For."""
-    # Prefer X-Forwarded-For (first entry = original client)
-    for key, value in scope.get("headers", []):
-        if key == b"x-forwarded-for":
-            forwarded = value.decode("utf-8", errors="replace")
-            return forwarded.split(",")[0].strip()
+    """Extract client IP from ASGI scope.
 
-    # Fall back to direct client address
+    Only trusts the direct client address. X-Forwarded-For is NOT used
+    because it can be trivially spoofed by any HTTP client. If you run
+    behind a reverse proxy that sets X-Real-IP, update this function to
+    read from that header after verifying the proxy strips untrusted
+    forwarding headers.
+    """
     client = scope.get("client")
     if client:
         return client[0]
-
     return "unknown"

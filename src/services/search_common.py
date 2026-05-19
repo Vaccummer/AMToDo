@@ -9,10 +9,23 @@ from typing import Any
 from exceptions import ValidationError
 
 
+_REGEX_MAX_PATTERN_LEN = 200
+_REGEX_DANGEROUS = re.compile(r"(\+|\*)\1{3,}|(\([^)]*\))[+*]\2[+*]")
+
+
 def compile_search_query(query: str, *, use_regex: bool, ignore_case: bool) -> re.Pattern[str]:
     """Compile a search query into a regex pattern."""
     flags = re.IGNORECASE if ignore_case else 0
-    pattern = query if use_regex else re.escape(query)
+    if use_regex:
+        if len(query) > _REGEX_MAX_PATTERN_LEN:
+            raise ValidationError(
+                f"regex pattern too long ({len(query)} > {_REGEX_MAX_PATTERN_LEN})"
+            )
+        if _REGEX_DANGEROUS.search(query):
+            raise ValidationError("regex pattern contains potentially catastrophic backtracking")
+        pattern = query
+    else:
+        pattern = re.escape(query)
     try:
         return re.compile(pattern, flags=flags)
     except re.error as exc:

@@ -175,11 +175,15 @@ class UnitOfWork:
         """Return the todo changelog repository for the active session."""
         return TodoChangelogRepository(self.session, self._todo_changelog_model)
 
+    def _make_changelog_service(self, service_cls, repo_cls, model):
+        from clock import SystemClock
+        repo = repo_cls(self.session, model)
+        return service_cls(repo, SystemClock(), model)
+
     @property
     def todo_changelog_service(self) -> TodoChangelogService:
         """Return the todo changelog service for the active session."""
-        from clock import SystemClock
-        return TodoChangelogService(self.todo_changelogs, SystemClock(), self._todo_changelog_model)
+        return self._make_changelog_service(TodoChangelogService, TodoChangelogRepository, self._todo_changelog_model)
 
     @property
     def schedule_changelogs(self) -> ScheduleChangelogRepository:
@@ -189,8 +193,7 @@ class UnitOfWork:
     @property
     def schedule_changelog_service(self) -> ScheduleChangelogService:
         """Return the schedule changelog service for the active session."""
-        from clock import SystemClock
-        return ScheduleChangelogService(self.schedule_changelogs, SystemClock(), self._schedule_changelog_model)
+        return self._make_changelog_service(ScheduleChangelogService, ScheduleChangelogRepository, self._schedule_changelog_model)
 
     @property
     def notification_changelogs(self) -> NotificationChangelogRepository:
@@ -200,8 +203,7 @@ class UnitOfWork:
     @property
     def notification_changelog_service(self) -> NotificationChangelogService:
         """Return the notification changelog service for the active session."""
-        from clock import SystemClock
-        return NotificationChangelogService(self.notification_changelogs, SystemClock(), self._notification_changelog_model)
+        return self._make_changelog_service(NotificationChangelogService, NotificationChangelogRepository, self._notification_changelog_model)
 
     @property
     def notifications(self) -> NotificationRepository:

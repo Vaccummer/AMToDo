@@ -14,6 +14,7 @@ treats the Pydantic request model as the sole body parameter (flat mode).
 
 from __future__ import annotations
 
+import hmac
 import json
 
 from fastapi import HTTPException, Request, status
@@ -24,7 +25,7 @@ async def require_admin(request: Request) -> None:
     body = await _read_body(request)
     admin_token = body.get("admin_token", "")
     expected: str = request.app.state.settings.admin_token
-    if admin_token != expected:
+    if not hmac.compare_digest(admin_token, expected):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid admin token",

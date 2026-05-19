@@ -18,7 +18,7 @@ from sqlalchemy import select
 import json
 
 from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, __version__, AppSettings, amtodo_root
-from amtodo_crypto import ReplayProtector, is_envelope, open_envelope, seal_response
+from amtodo_crypto import ReplayProtector, is_envelope, open_envelope_with_key, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
@@ -156,8 +156,22 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
 
         await _heartbeat_task(ws_mgr, notif_cfg)
 
-    _bg_tasks.append(_asyncio.create_task(_watcher_wrapper()))
-    _bg_tasks.append(_asyncio.create_task(_heartbeat_wrapper()))
+    _bg_logger = logging.getLogger("amtodo")
+
+    def _log_task_exception(task: _asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            _bg_logger.error("Background task %s failed: %s", task.get_name(), exc, exc_info=exc)
+
+    t1 = _asyncio.create_task(_watcher_wrapper(), name="notification-watcher")
+    t1.add_done_callback(_log_task_exception)
+    _bg_tasks.append(t1)
+
+    t2 = _asyncio.create_task(_heartbeat_wrapper(), name="ws-heartbeat")
+    t2.add_done_callback(_log_task_exception)
+    _bg_tasks.append(t2)
 
     yield
 
@@ -195,7 +209,13 @@ def _load_private_keys(settings: AppSettings) -> dict[str, bytes]:
 
 
 def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
+    from amtodo_crypto.keys import load_private_key
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     private_keys = _load_private_keys(settings)
+    parsed_keys: dict[str, ec.EllipticCurvePrivateKey] = {}
+    for key_id, pem in private_keys.items():
+        parsed_keys[key_id] = load_private_key(pem)
 
     @app.middleware("http")
     async def decryption_middleware(request, call_next):
@@ -237,8 +257,16 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
                 content=error_to_dict(ValidationError, "request must be encrypted"),
             )
 
+        key_id = body_json.get("keyId")
+        parsed_key = parsed_keys.get(key_id) if key_id else None
+        if parsed_key is None:
+            return JSONResponse(
+                status_code=400,
+                content=error_to_dict(ValidationError, f"unknown or missing keyId: {key_id!r}"),
+            )
+
         try:
-            inner, data_key = open_envelope(body_json, private_keys)
+            inner, data_key = open_envelope_with_key(body_json, parsed_key)
         except ValueError as exc:
             return JSONResponse(
                 status_code=400,

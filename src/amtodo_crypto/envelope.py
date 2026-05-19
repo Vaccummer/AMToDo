@@ -84,6 +84,30 @@ def open_envelope(envelope: dict, private_keys: dict[str, bytes]) -> tuple[dict,
     if not key_id or key_id not in private_keys:
         raise ValueError(f"unknown or missing keyId: {key_id!r}")
 
+    server_private = load_private_key(private_keys[key_id])
+    if not isinstance(server_private, ec.EllipticCurvePrivateKey):
+        raise TypeError("server private key must be P-256")
+
+    return _decrypt_with_key(envelope, server_private)
+
+
+def open_envelope_with_key(
+    envelope: dict, private_key: ec.EllipticCurvePrivateKey
+) -> tuple[dict, bytes]:
+    """Decrypt *envelope* with a pre-parsed private key.
+
+    Avoids re-parsing PEM on every request. Raises ValueError on any
+    decryption or format error.
+    """
+    if not isinstance(envelope, dict):
+        raise ValueError("envelope must be a JSON object")
+    return _decrypt_with_key(envelope, private_key)
+
+
+def _decrypt_with_key(
+    envelope: dict, server_private: ec.EllipticCurvePrivateKey
+) -> tuple[dict, bytes]:
+    """Core decryption logic shared by open_envelope and open_envelope_with_key."""
     try:
         ek_raw = _b64url_decode(envelope["ek"])
         nonce = _b64url_decode(envelope["nonce"])
@@ -91,10 +115,6 @@ def open_envelope(envelope: dict, private_keys: dict[str, bytes]) -> tuple[dict,
         tag = _b64url_decode(envelope["tag"])
     except (KeyError, ValueError) as exc:
         raise ValueError(f"malformed envelope field: {exc}") from exc
-
-    server_private = load_private_key(private_keys[key_id])
-    if not isinstance(server_private, ec.EllipticCurvePrivateKey):
-        raise TypeError("server private key must be P-256")
 
     try:
         client_public = ec.EllipticCurvePublicKey.from_encoded_point(
