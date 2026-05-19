@@ -24,6 +24,7 @@ from models.user import User
 from serialization import error_to_dict
 from server.admin import router as admin_router
 from server.notifications import router as notification_router
+from server.notification_ws import router as ws_router
 from server.rate_limit import RateLimitMiddleware, RateLimiter
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
@@ -105,7 +106,14 @@ def _register_per_user_tables(db, token_map: dict[str, int]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
     """Startup: create single database, populate token map. Shutdown: dispose engine."""
+    import asyncio as _asyncio
+
     from db.engine import Database, create_database
+    from server.websocket_manager import (
+        NotificationResultCache,
+        SessionKeyManager,
+        WebSocketManager,
+    )
 
     settings: AppSettings = app.state.settings
     db: Database = create_database(settings)
@@ -124,8 +132,38 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
     app.state.db = db
     app.state.token_map = token_map
 
+    # --- WebSocket notification push ----------------------------------
+    notif_cfg = getattr(app.state, "notification_config", {})
+    session_key_ttl = int(notif_cfg.get("session_key_ttl", 3600))
+
+    key_mgr = SessionKeyManager(ttl_seconds=session_key_ttl)
+    ws_mgr = WebSocketManager()
+    app.state.ws_key_manager = key_mgr
+    app.state.ws_manager = ws_mgr
+
+    # Start background tasks
+    _bg_tasks: list[_asyncio.Task] = []
+
+    async def _watcher_wrapper():
+        """Thin wrapper that passes the notification config to the watcher."""
+        from server.notification_ws import _notification_watcher
+
+        await _notification_watcher(ws_mgr, key_mgr, db, token_map, notif_cfg)
+
+    async def _heartbeat_wrapper():
+        """Thin wrapper that passes the notification config to the heartbeat task."""
+        from server.notification_ws import _heartbeat_task
+
+        await _heartbeat_task(ws_mgr, notif_cfg)
+
+    _bg_tasks.append(_asyncio.create_task(_watcher_wrapper()))
+    _bg_tasks.append(_asyncio.create_task(_heartbeat_wrapper()))
+
     yield
 
+    # Shutdown: cancel background tasks and dispose engine
+    for t in _bg_tasks:
+        t.cancel()
     db.engine.dispose()
 
 
@@ -163,8 +201,8 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
     async def decryption_middleware(request, call_next):
         from starlette.requests import Request
 
-        # Health check and notification polling pass through unencrypted
-        if request.url.path.rstrip("/") in ("/api/v1/health", "/api/v1/notifications/list_triggered"):
+        # Health check passes through unencrypted
+        if request.url.path.rstrip("/") == "/api/v1/health":
             return await call_next(request)
 
         # Read-only methods pass through without body encryption
@@ -228,8 +266,8 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
 
         response = await call_next(request)
 
-        # Encrypt JSON responses with the session data key
-        if response.status_code < 500 and _is_json_response(response):
+        # Encrypt all JSON responses with the session data key
+        if _is_json_response(response):
             body_chunks = [chunk async for chunk in response.body_iterator]
             raw_body = b"".join(body_chunks)
             response_body = json.loads(raw_body)
@@ -351,6 +389,7 @@ def create_app(settings: AppSettings) -> FastAPI:
     app.include_router(todo_router, prefix="/api/v1/todos", tags=["todos"])
     app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
     app.include_router(notification_router, prefix="/api/v1/notifications", tags=["notifications"])
+    app.include_router(ws_router, prefix="/api/v1/notifications", tags=["notifications"])
 
     return app
 
@@ -425,6 +464,9 @@ def main() -> None:
         ip_cache_ttl_seconds=ip_cache_ttl,
     )
     app = create_app(settings)
+
+    # Store notification config for WebSocket background tasks
+    app.state.notification_config = raw.get("notification", {})
 
     log_config = _build_log_config(str(log_path))
     try:

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("amtodoShell", {
   unregisterHotkey: () => ipcRenderer.invoke("hotkey:unregister"),
   startNotificationPolling: (settings) => ipcRenderer.invoke("notification:start-polling", settings),
   stopNotificationPolling: () => ipcRenderer.invoke("notification:stop-polling"),
+  connectNotificationWebSocket: (settings) => ipcRenderer.invoke("notification:ws-connect", settings),
+  disconnectNotificationWebSocket: () => ipcRenderer.invoke("notification:ws-disconnect"),
   onNotificationClicked: (callback) => {
     const listener = (_event, notificationId) => callback(notificationId);
     ipcRenderer.on("notification:clicked", listener);

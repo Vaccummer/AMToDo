@@ -15,8 +15,11 @@ export interface UISettings {
   scheduler_slot_minutes: number;
   global_hotkey_enabled: boolean;
   global_hotkey: string;
+  notification_enabled: boolean;
   notification_poll_interval: number;
   notification_query_window: number;
+  notification_silent: boolean;
+  notification_timeout: "default" | "never";
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -36,8 +39,11 @@ export const DEFAULT_SETTINGS: UISettings = {
   scheduler_slot_minutes: 30,
   global_hotkey_enabled: false,
   global_hotkey: "",
+  notification_enabled: true,
   notification_poll_interval: 30,
   notification_query_window: 60,
+  notification_silent: false,
+  notification_timeout: "default",
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
@@ -75,8 +81,11 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     ),
     global_hotkey_enabled: globalHotkeyEnabled,
     global_hotkey: globalHotkey,
+    notification_enabled: raw.notification_enabled !== "false",
     notification_poll_interval: notificationPollInterval,
     notification_query_window: notificationQueryWindow,
+    notification_silent: raw.notification_silent === "true",
+    notification_timeout: (raw.notification_timeout === "never" ? "never" : "default") as "default" | "never",
   };
 }
 

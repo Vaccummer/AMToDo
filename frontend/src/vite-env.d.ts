@@ -17,9 +17,13 @@ interface SettingsData {
   scheduler_slot_minutes?: string;
   global_hotkey_enabled?: string;
   global_hotkey?: string;
+  notification_enabled?: string;
   notification_poll_interval?: string;
   notification_query_window?: string;
+  notification_silent?: string;
+  notification_timeout?: string;
 }
+
 
 interface Window {
   amtodoShell?: {
@@ -34,6 +38,8 @@ interface Window {
     unregisterHotkey?: () => Promise<void>;
     startNotificationPolling?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
     stopNotificationPolling?: () => Promise<{ ok: boolean; error?: string }>;
-    onNotificationClicked?: (callback: (notificationId: number) => void) => () => void;
+    onNotificationClicked?: (callback: (data: { id: number; trigger_at: number }) => void) => () => void;
+    connectNotificationWebSocket?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string; mode?: string }>;
+    disconnectNotificationWebSocket?: () => Promise<{ ok: boolean; error?: string }>;
   };
 }
