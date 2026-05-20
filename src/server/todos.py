@@ -69,6 +69,8 @@ def list_todos(
     clock: ClockDep,
 ) -> dict[str, object]:
     """List ToDos planned in an optional epoch range."""
+    from sqlalchemy import func
+
     completed = _completion_filter(
         open_only=body.open_only, completed_only=body.completed_only
     )
@@ -81,11 +83,22 @@ def list_todos(
         resolved_end = body.end_at if body.end_at is not None else resolved_start + 86_400
         todos = service.list_between(resolved_start, resolved_end, completed=completed)
 
+    att_model = uow.attachment_model
+    att_counts: dict[int, int] = dict(
+        uow.session.query(att_model.todo_id, func.count())
+        .filter(att_model.todo_id.in_([t.id for t in todos]))
+        .group_by(att_model.todo_id)
+        .all()
+    ) if todos else {}
+
     result: dict[str, object] = {
         "ok": True,
         "filter": {"completed": completed},
         "count": len(todos),
-        "todos": [todo_to_dict(todo, settings.timezone) for todo in todos],
+        "todos": [
+            todo_to_dict(todo, settings.timezone, attachment_count=att_counts.get(todo.id, 0))
+            for todo in todos
+        ],
     }
     if body.start_at is not None or body.end_at is not None:
         result["range"] = {"start_at": body.start_at, "end_at": body.end_at}
@@ -143,6 +156,16 @@ def search_todos(
     if has_more:
         paged = paged[:body.limit]
 
+    from sqlalchemy import func as _func
+
+    att_model = uow.attachment_model
+    att_counts: dict[int, int] = dict(
+        uow.session.query(att_model.todo_id, _func.count())
+        .filter(att_model.todo_id.in_([t.id for t in paged]))
+        .group_by(att_model.todo_id)
+        .all()
+    ) if paged else {}
+
     return {
         "ok": True,
         "query": body.query,
@@ -173,7 +196,10 @@ def search_todos(
         },
         "total": len(todos),
         "count": len(paged),
-        "todos": [todo_to_dict(todo, settings.timezone) for todo in paged],
+        "todos": [
+            todo_to_dict(todo, settings.timezone, attachment_count=att_counts.get(todo.id, 0))
+            for todo in paged
+        ],
     }
 
 
