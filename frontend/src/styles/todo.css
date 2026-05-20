@@ -203,7 +203,7 @@
 .todo-list {
   overflow-y: auto;
   padding: 18px;
-  padding-bottom: 0;
+  padding-bottom: 18px;
   display: flex;
   flex-direction: column;
 }
@@ -801,19 +801,19 @@
 }
 
 .empty-state-illustration {
-  width: 80px;
-  height: 80px;
+  width: 110px;
+  height: 110px;
   position: relative;
 }
 
 .empty-state-illustration .paper {
-  width: 48px;
-  height: 58px;
+  width: 66px;
+  height: 80px;
   background: #f0eeea;
-  border-radius: 4px 12px 4px 4px;
+  border-radius: 6px 16px 6px 6px;
   position: absolute;
-  top: 10px;
-  left: 16px;
+  top: 14px;
+  left: 22px;
 }
 
 .empty-state-illustration .paper-line {
@@ -821,19 +821,19 @@
   background: #ddd;
   border-radius: 2px;
   position: absolute;
-  left: 24px;
+  left: 33px;
 }
 
-.empty-state-illustration .paper-line:nth-child(1) { top: 28px; width: 28px; }
-.empty-state-illustration .paper-line:nth-child(2) { top: 36px; width: 22px; }
-.empty-state-illustration .paper-line:nth-child(3) { top: 44px; width: 16px; }
+.empty-state-illustration .paper-line:nth-child(1) { top: 38px; width: 38px; }
+.empty-state-illustration .paper-line:nth-child(2) { top: 49px; width: 30px; }
+.empty-state-illustration .paper-line:nth-child(3) { top: 60px; width: 22px; }
 
 .empty-state-illustration .check {
   position: absolute;
-  bottom: 8px;
-  right: 12px;
-  width: 22px;
-  height: 22px;
+  bottom: 10px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #e8f5e9;
   display: flex;
@@ -842,8 +842,8 @@
 }
 
 .empty-state-illustration .check svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   stroke: #81c784;
   stroke-width: 2.5;
   fill: none;
@@ -909,48 +909,48 @@
 }
 
 .error-illustration {
-  width: 80px;
-  height: 80px;
+  width: 110px;
+  height: 110px;
   position: relative;
 }
 
 .error-cloud {
-  width: 52px;
-  height: 30px;
+  width: 72px;
+  height: 42px;
   background: #f5d0d0;
-  border-radius: 30px;
+  border-radius: 42px;
   position: absolute;
-  top: 14px;
-  left: 14px;
+  top: 20px;
+  left: 19px;
 }
 
 .error-cloud::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  background: #f5d0d0;
+  border-radius: 50%;
+  position: absolute;
+  top: -18px;
+  left: 12px;
+}
+
+.error-cloud::after {
   content: "";
   width: 24px;
   height: 24px;
   background: #f5d0d0;
   border-radius: 50%;
   position: absolute;
-  top: -14px;
-  left: 8px;
-}
-
-.error-cloud::after {
-  content: "";
-  width: 18px;
-  height: 18px;
-  background: #f5d0d0;
-  border-radius: 50%;
-  position: absolute;
-  top: -8px;
-  right: 8px;
+  top: -10px;
+  right: 10px;
 }
 
 .error-bolt {
   position: absolute;
-  top: 34px;
-  left: 32px;
-  font-size: 20px;
+  top: 48px;
+  left: 44px;
+  font-size: 28px;
   color: #e85d5d;
   line-height: 1;
   animation: bolt-flash 2s ease-in-out infinite;

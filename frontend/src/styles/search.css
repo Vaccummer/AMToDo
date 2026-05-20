@@ -540,59 +540,60 @@
   gap: 14px;
   padding: 48px 16px;
   text-align: center;
+  flex: 1;
 }
 
 .search-error-illustration {
-  width: 80px;
-  height: 80px;
+  width: 110px;
+  height: 110px;
   position: relative;
 }
 
 .search-error-illustration .error-cloud {
-  width: 52px;
-  height: 30px;
+  width: 72px;
+  height: 42px;
   background: #f5d0d0;
-  border-radius: 30px;
+  border-radius: 42px;
   position: absolute;
-  top: 14px;
-  left: 14px;
+  top: 20px;
+  left: 19px;
 }
 
 .search-error-illustration .error-cloud::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  background: #f5d0d0;
+  border-radius: 50%;
+  position: absolute;
+  top: -18px;
+  left: 12px;
+}
+
+.search-error-illustration .error-cloud::after {
   content: "";
   width: 24px;
   height: 24px;
   background: #f5d0d0;
   border-radius: 50%;
   position: absolute;
-  top: -14px;
-  left: 8px;
-}
-
-.search-error-illustration .error-cloud::after {
-  content: "";
-  width: 18px;
-  height: 18px;
-  background: #f5d0d0;
-  border-radius: 50%;
-  position: absolute;
-  top: -8px;
-  right: 8px;
+  top: -10px;
+  right: 10px;
 }
 
 .search-error-illustration .error-bolt {
   position: absolute;
-  top: 34px;
-  left: 32px;
-  font-size: 20px;
+  top: 48px;
+  left: 44px;
+  font-size: 28px;
   color: #e85d5d;
   line-height: 1;
   animation: bolt-flash 2s ease-in-out infinite;
 }
 
 .search-error-illustration .error-lock-icon {
-  width: 64px;
-  height: 64px;
+  width: 88px;
+  height: 88px;
   margin-top: 8px;
 }
 
@@ -983,4 +984,175 @@
 .search-result-row.todo.late-done .search-attachment-count {
   background: var(--modals-schedule-cream);
   color: var(--modals-schedule-label);
+}
+
+/* ── Search empty states ── */
+
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  flex: 1;
+  gap: 14px;
+}
+
+/* 方案H: 初始状态 — 搜索维度卡片 */
+.search-empty-initial {
+  gap: 20px;
+}
+
+.search-empty-initial .search-empty-title {
+  font-size: var(--font-xl);
+  font-weight: 600;
+  color: var(--global-text-secondary);
+}
+
+.search-empty-initial .search-empty-sub {
+  font-size: var(--font-lg);
+  color: var(--global-text-muted);
+  margin-bottom: 4px;
+}
+
+.search-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 380px;
+}
+
+.search-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--global-surface-bg) 50%, transparent);
+  border: 1px solid var(--global-surface-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.search-card:hover {
+  background: color-mix(in srgb, var(--global-surface-bg) 80%, transparent);
+  border-color: var(--global-surface-border);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-label {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--global-text-primary);
+}
+
+.card-hint {
+  font-size: var(--font-sm);
+  color: var(--global-text-muted);
+}
+
+/* 卡片颜色: 待办=teal */
+.card-todo .card-icon {
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+}
+.card-todo .card-icon svg { stroke: var(--status-primary-base); }
+
+/* 卡片颜色: 日程=amber */
+.card-schedule .card-icon {
+  background: color-mix(in srgb, var(--modals-schedule-save-btn) 10%, transparent);
+}
+.card-schedule .card-icon svg { stroke: var(--modals-schedule-save-btn); }
+
+/* 卡片颜色: 通知=purple */
+.card-notify .card-icon {
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 10%, transparent);
+}
+.card-notify .card-icon svg { stroke: var(--views-notify-mention-purple); }
+
+/* 卡片颜色: ID=blue-gray */
+.card-id .card-icon {
+  background: color-mix(in srgb, var(--global-surface-blue-gray) 10%, transparent);
+}
+.card-id .card-icon svg { stroke: var(--global-surface-blue-gray); }
+
+/* 方案E: 无搜索结果 */
+.search-empty-no-result {
+  gap: 14px;
+}
+
+.search-empty-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--status-primary-base) 25%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.search-empty-icon svg {
+  width: 32px;
+  height: 32px;
+  color: var(--status-primary-base);
+  opacity: 0.6;
+}
+
+.search-empty-no-result .search-empty-title {
+  font-size: var(--font-xl);
+  font-weight: 600;
+  color: var(--global-text-secondary);
+}
+
+.search-empty-no-result .search-empty-sub {
+  font-size: var(--font-lg);
+  color: var(--global-text-muted);
+}
+
+.search-empty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-base);
+  font-weight: 600;
+  margin-top: 4px;
+  background: color-mix(in srgb, var(--modals-schedule-amber) 8%, transparent);
+  color: #8a6d1b;
+  border: 1px solid color-mix(in srgb, var(--modals-schedule-amber) 15%, transparent);
+}
+
+.search-empty-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--modals-schedule-amber);
 }
