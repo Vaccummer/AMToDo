@@ -28,6 +28,7 @@ from server.notification_ws import router as ws_router
 from server.rate_limit import RateLimitMiddleware, RateLimiter
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
+from server.ui_ws import router as ui_ws_router
 
 
 if TYPE_CHECKING:
@@ -216,6 +217,10 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
     parsed_keys: dict[str, ec.EllipticCurvePrivateKey] = {}
     for key_id, pem in private_keys.items():
         parsed_keys[key_id] = load_private_key(pem)
+
+    # Store the primary parsed private key for UI WebSocket auth handshake
+    if parsed_keys:
+        app.state.encryption_private_key = next(iter(parsed_keys.values()))
 
     @app.middleware("http")
     async def decryption_middleware(request, call_next):
@@ -418,6 +423,7 @@ def create_app(settings: AppSettings) -> FastAPI:
     app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
     app.include_router(notification_router, prefix="/api/v1/notifications", tags=["notifications"])
     app.include_router(ws_router, prefix="/api/v1/notifications", tags=["notifications"])
+    app.include_router(ui_ws_router, prefix="/api/v1", tags=["ui-ws"])
 
     return app
 
@@ -442,6 +448,7 @@ def main() -> None:
     if not host or host == "null":
         host = None
     port = server.get("port", 8000)
+    server_name = server.get("name", "")
     admin_token = auth.get("admin_token", "")
     attachment_root = storage_cfg.get("attachment_root", "")
     max_attachment_size_bytes = storage_cfg.get(
@@ -481,6 +488,7 @@ def main() -> None:
         admin_token=admin_token,
         server_host=host,
         server_port=port,
+        server_name=server_name,
         server_private_key_path=private_key_path,
         server_public_key_path=public_key_path,
         request_timestamp_tolerance_seconds=tolerance,
