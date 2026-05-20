@@ -26,7 +26,10 @@ function splitTag(ciphertext: ArrayBuffer): { data: Uint8Array; tag: Uint8Array 
 }
 
 export async function importP256PublicKey(base64Key: string): Promise<CryptoKey> {
-  const rawBytes = Uint8Array.from(atob(base64Key), (c) => c.charCodeAt(0));
+  // Accept both standard base64 and base64url encoding
+  let b64 = base64Key.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4 !== 0) b64 += "=";
+  const rawBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return crypto.subtle.importKey(
     "spki",
     rawBytes,
@@ -34,6 +37,51 @@ export async function importP256PublicKey(base64Key: string): Promise<CryptoKey>
     false,
     []
   );
+}
+
+/**
+ * Compute SHA-256 fingerprint of a base64-encoded P-256 SPKI public key.
+ * Returns a hex string like "sha256:a3b1c2d3...".
+ */
+export async function fingerprintPublicKey(base64Key: string): Promise<string> {
+  let b64 = base64Key.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4 !== 0) b64 += "=";
+  const rawBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const hash = await crypto.subtle.digest("SHA-256", rawBytes);
+  const hex = Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `sha256:${hex}`;
+}
+
+export class FingerprintMismatchError extends Error {
+  constructor(
+    public readonly expected: string,
+    public readonly actual: string
+  ) {
+    super(
+      `服务器公钥指纹不匹配！\n期望: ${expected}\n实际: ${actual}\n可能存在中间人攻击，或服务器已更换密钥。`
+    );
+    this.name = "FingerprintMismatchError";
+  }
+}
+
+/**
+ * TOFU verification: check public_key against a stored fingerprint.
+ * - If stored is empty → accept and return the new fingerprint to store.
+ * - If stored matches → accept.
+ * - If stored mismatches → throw FingerprintMismatchError.
+ */
+export async function verifyOrEnrollKey(
+  base64Key: string,
+  storedFingerprint: string
+): Promise<string> {
+  const fp = await fingerprintPublicKey(base64Key);
+  if (!storedFingerprint) {
+    return fp; // first use — caller should persist this
+  }
+  if (fp !== storedFingerprint) {
+    throw new FingerprintMismatchError(storedFingerprint, fp);
+  }
+  return storedFingerprint;
 }
 
 export interface SealedEnvelope {

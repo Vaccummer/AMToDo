@@ -21,7 +21,12 @@ export interface UISettings {
   notification_silent: boolean;
   notification_timeout: "default" | "never";
   ws_reconnect_retries: number;
+  reconnect_max_attempts: number;
+  ws_enabled: boolean;
+  notify_on_disconnect: boolean;
   ws_reconnect_interval_ms: number;
+  /** TOFU: SHA-256 fingerprint of the server's P-256 public key. Empty = accept first key. */
+  known_key_fingerprint: string;
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -47,7 +52,11 @@ export const DEFAULT_SETTINGS: UISettings = {
   notification_silent: false,
   notification_timeout: "default",
   ws_reconnect_retries: 3,
+  reconnect_max_attempts: 3,
+  ws_enabled: true,
+  notify_on_disconnect: true,
   ws_reconnect_interval_ms: 3000,
+  known_key_fingerprint: "",
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
@@ -91,7 +100,14 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     notification_silent: raw.notification_silent === "true",
     notification_timeout: (raw.notification_timeout === "never" ? "never" : "default") as "default" | "never",
     ws_reconnect_retries: parseNumberSetting(raw.ws_reconnect_retries, DEFAULT_SETTINGS.ws_reconnect_retries),
+    reconnect_max_attempts: parseNumberSetting(
+      raw.reconnect_max_attempts ?? raw.ws_reconnect_retries,
+      DEFAULT_SETTINGS.reconnect_max_attempts
+    ),
+    ws_enabled: raw.ws_enabled !== "false",
+    notify_on_disconnect: raw.notify_on_disconnect !== "false",
     ws_reconnect_interval_ms: parseNumberSetting(raw.ws_reconnect_interval_ms, DEFAULT_SETTINGS.ws_reconnect_interval_ms),
+    known_key_fingerprint: raw.known_key_fingerprint ?? DEFAULT_SETTINGS.known_key_fingerprint,
   };
 }
 

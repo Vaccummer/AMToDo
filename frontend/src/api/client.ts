@@ -1,9 +1,12 @@
 import { SERVER_URL } from "../config";
+import type { UiWsClient } from "./ws-client";
 
 export type HealthResponse = {
   status: string;
   version: string;
+  name?: string;
   public_key?: string;
+  public_key_fingerprint?: string;
   ipv4?: string;
   ipv6?: string;
   bind?: string[];
@@ -339,6 +342,18 @@ const DEFAULT_BASE_URL = SERVER_URL;
 const KEY_ID = "server-key-v1";
 export const API_NETWORK_STATUS_EVENT = "amtodo:api-network-status";
 
+/** Convert REST path like "/api/v1/todos/list" to WS message type like "todo.list". */
+function pathToWsType(path: string): string {
+  const parts = path.replace(/^\/api\/v1\//, "").split("/");
+  // Attachment paths: /api/v1/todos/attachments/upload → attachment.upload
+  if (parts.length >= 3 && parts[1] === "attachments") {
+    return "attachment." + parts.slice(2).join(".").replace(/-/g, "_");
+  }
+  // Singularize resource: "todos" → "todo", "schedules" → "schedule", "notifications" → "notification"
+  const resource = parts[0].replace(/s$/, "");
+  return [resource, ...parts.slice(1)].join(".").replace(/-/g, "_");
+}
+
 export function notifyNetworkStatus(online: boolean, message?: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -365,6 +380,7 @@ export class AMToDoApi {
   private readonly baseUrl: string;
   private readonly token: string | null;
   private readonly p256PublicKey: CryptoKey | null;
+  private readonly wsClient: UiWsClient | null;
   maxAttachmentSize: number;
   maxAttachmentsPerTodo: number;
 
@@ -374,12 +390,14 @@ export class AMToDoApi {
     p256PublicKey: CryptoKey | null = null,
     maxAttachmentSize = 20 * 1024 * 1024,
     maxAttachmentsPerTodo = 20,
+    wsClient: UiWsClient | null = null,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
     this.p256PublicKey = p256PublicKey;
     this.maxAttachmentSize = maxAttachmentSize;
     this.maxAttachmentsPerTodo = maxAttachmentsPerTodo;
+    this.wsClient = wsClient;
   }
 
   get serverUrl(): string {
@@ -850,6 +868,20 @@ export class AMToDoApi {
   // --- Private helpers ---
 
   private async downloadAttachment(path: string, body: Record<string, unknown>): Promise<ArrayBuffer> {
+    // Route through WebSocket when available
+    if (this.wsClient) {
+      const wsType = pathToWsType(path);
+      const { access_token: _, ...payload } = body;
+      const result = await this.wsClient.send<{ name: string; content_base64: string }>(wsType, payload);
+      const b64 = result.content_base64;
+      let b64Std = b64.replace(/-/g, "+").replace(/_/g, "/");
+      while (b64Std.length % 4 !== 0) b64Std += "=";
+      const binary = atob(b64Std);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
     const headers = new Headers();
     headers.set("Content-Type", "application/json");
 
@@ -896,6 +928,14 @@ export class AMToDoApi {
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    // Route through WebSocket when available
+    if (this.wsClient) {
+      const wsType = pathToWsType(path);
+      // Strip access_token — WS connection is already authenticated
+      const { access_token: _, ...payload } = body;
+      return this.wsClient.send<T>(wsType, payload);
+    }
+
     const headers = new Headers();
     headers.set("Content-Type", "application/json");
 
