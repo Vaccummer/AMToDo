@@ -35,6 +35,7 @@ class AppSettings:
     access_token: str = ""
     server_host: str | None = "0.0.0.0"
     server_port: int = 8000
+    server_name: str = ""
     admin_token: str = ""
     server_public_key_path: str = ""
     server_private_key_path: str = ""

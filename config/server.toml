@@ -1,6 +1,7 @@
 [server]
 host = ""
 port = 8000
+name = "Vaccummer"
 
 [database]
 url = "sqlite:///db/amtodo.sqlite3"

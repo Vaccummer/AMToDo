@@ -16,7 +16,18 @@ from db.base import Base
 from models.user import User
 from serialization import user_to_dict, user_to_dict_with_token
 from server.auth import require_admin, require_localhost, require_user
-from server.schemas import AdminConfigRequest, AdminInitDbRequest, UserMeRequest, UserTokenRegenerateRequest
+from server.schemas import (
+    AdminConfigRequest,
+    AdminInitDbRequest,
+    AdminUserCreateRequest,
+    AdminUserDeleteRequest,
+    AdminUserListRequest,
+    AdminUserRegenTokenRequest,
+    AdminUserUpdateRequest,
+    UserMeRequest,
+    UserTokenRegenerateRequest,
+    UserUpdateRequest,
+)
 
 logger = logging.getLogger("amtodo")
 
@@ -60,6 +71,7 @@ async def health(request: Request) -> dict[str, object]:
     result: dict[str, object] = {
         "status": "ok",
         "version": __version__,
+        **({"name": settings.server_name} if settings.server_name else {}),
         "limits": {
             "max_attachment_size_bytes": settings.max_attachment_size_bytes,
             "max_attachment_request_body_bytes": settings.max_attachment_request_body_bytes,
@@ -69,6 +81,7 @@ async def health(request: Request) -> dict[str, object]:
 
     if settings.server_public_key_path:
         try:
+            import hashlib
             from amtodo_crypto.keys import public_key_spki
 
             root = server_root()
@@ -76,6 +89,7 @@ async def health(request: Request) -> dict[str, object]:
             if pub_path.is_file():
                 raw = public_key_spki(pub_path.read_bytes())
                 result["public_key"] = base64.b64encode(raw).decode("ascii")
+                result["public_key_fingerprint"] = "sha256:" + hashlib.sha256(raw).hexdigest()
         except Exception:
             pass
 
@@ -864,6 +878,197 @@ def server_config(
     }
 
 
+@router.post("/admin/users/create")
+def admin_user_create(
+    body: AdminUserCreateRequest,
+    request: Request,
+    _localhost: None = Depends(require_localhost),
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """Create a new user. Requires admin token + localhost."""
+    from clock import SystemClock
+    from exceptions import ConflictError
+
+    db = request.app.state.db
+    clock = SystemClock()
+
+    with db.session() as session:
+        existing = session.execute(
+            select(User).where(User.name == body.name)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"user with name '{body.name}' already exists")
+
+        token = secrets.token_urlsafe(32)
+        user_id_row = session.execute(
+            select(User.id).order_by(User.id.desc()).limit(1)
+        ).scalar_one_or_none()
+        user_id = (user_id_row + 1) if user_id_row is not None else 1
+
+        user = User(
+            id=user_id,
+            name=body.name,
+            token=token,
+            created_at=clock.now_epoch(),
+        )
+        session.add(user)
+        session.commit()
+        return {"ok": True, "user": user_to_dict_with_token(user)}
+
+
+@router.post("/admin/users/list")
+def admin_user_list(
+    body: AdminUserListRequest,
+    request: Request,
+    _localhost: None = Depends(require_localhost),
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """List all users. Requires admin token + localhost."""
+    db = request.app.state.db
+    with db.session() as session:
+        users = list(session.execute(select(User).order_by(User.id)).scalars().all())
+        return {
+            "ok": True,
+            "count": len(users),
+            "users": [user_to_dict_with_token(u) for u in users],
+        }
+
+
+@router.post("/admin/users/delete")
+def admin_user_delete(
+    body: AdminUserDeleteRequest,
+    request: Request,
+    _localhost: None = Depends(require_localhost),
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """Delete a user and all owned data. Requires admin token + localhost."""
+    from models.factory import get_user_tables
+    from exceptions import NotFoundError
+
+    db = request.app.state.db
+    attachment_root = request.app.state.attachment_root
+
+    with db.session() as session:
+        user = session.get(User, body.user_id)
+        if user is None:
+            raise NotFoundError(f"user {body.user_id} not found")
+
+        token = user.token
+        name = user.name
+
+        (
+            todo_model,
+            schedule_model,
+            setting_model,
+            todo_att_model,
+            sched_att_model,
+            todo_changelog_model,
+            schedule_changelog_model,
+            _notification_changelog_model,
+            _notification_model,
+            _notification_mention_model,
+        ) = get_user_tables(body.user_id)
+
+        # Remove attachment files from disk
+        import shutil
+
+        user_att_dir = attachment_root / str(body.user_id)
+        if user_att_dir.is_dir():
+            shutil.rmtree(user_att_dir, ignore_errors=True)
+
+        # Drop user tables
+        for model in (
+            todo_att_model,
+            sched_att_model,
+            todo_changelog_model,
+            schedule_changelog_model,
+            _notification_changelog_model,
+            _notification_mention_model,
+            _notification_model,
+            setting_model,
+            schedule_model,
+            todo_model,
+        ):
+            model.__table__.drop(db.engine, checkfirst=True)
+
+        session.delete(user)
+        session.commit()
+
+        # Invalidate token cache
+        token_map: dict[str, int] = request.app.state.token_map
+        token_map.pop(token, None)
+
+        return {"ok": True, "deleted": {"user_id": body.user_id, "name": name}}
+
+
+@router.post("/admin/users/update")
+def admin_user_update(
+    body: AdminUserUpdateRequest,
+    request: Request,
+    _localhost: None = Depends(require_localhost),
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """Update a user's name. Requires admin token + localhost."""
+    from exceptions import ConflictError, NotFoundError
+
+    db = request.app.state.db
+
+    with db.session() as session:
+        user = session.get(User, body.user_id)
+        if user is None:
+            raise NotFoundError(f"user {body.user_id} not found")
+
+        existing = session.execute(
+            select(User).where(User.name == body.name, User.id != body.user_id)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"user with name '{body.name}' already exists")
+
+        user.name = body.name
+        session.commit()
+        return {"ok": True, "user": user_to_dict_with_token(user)}
+
+
+@router.post("/admin/users/regen-token")
+def admin_user_regen_token(
+    body: AdminUserRegenTokenRequest,
+    request: Request,
+    _localhost: None = Depends(require_localhost),
+    _auth: None = Depends(require_admin),
+) -> dict[str, object]:
+    """Regenerate a user's access token. Requires admin token + localhost."""
+    from exceptions import NotFoundError, ValidationError
+
+    db = request.app.state.db
+    token_map: dict[str, int] = request.app.state.token_map
+
+    with db.session() as session:
+        user = session.get(User, body.user_id)
+        if user is None:
+            raise NotFoundError(f"user {body.user_id} not found")
+
+        old_token = user.token
+        new_token = secrets.token_urlsafe(32)
+        for _ in range(10):
+            existing = session.execute(
+                select(User).where(User.token == new_token)
+            ).scalar_one_or_none()
+            if existing is None:
+                break
+            new_token = secrets.token_urlsafe(32)
+        else:
+            raise ValidationError("failed to generate unique token")
+
+        user.token = new_token
+        session.commit()
+
+        # Update token cache
+        token_map.pop(old_token, None)
+        token_map[new_token] = user.id
+
+        return {"ok": True, "user": user_to_dict_with_token(user)}
+
+
 @router.post("/user")
 def current_user(
     body: UserMeRequest,
@@ -902,3 +1107,31 @@ def regenerate_token(
     token_map[new_token] = user_id
 
     return {"ok": True, "user": user_to_dict_with_token(user)}
+
+
+@router.post("/user/update")
+def user_update_self(
+    body: UserUpdateRequest,
+    request: Request,
+    user_id: int = Depends(require_user),
+) -> dict[str, object]:
+    """Update the current user's own name."""
+    from exceptions import ConflictError
+
+    db = request.app.state.db
+
+    with db.session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            from exceptions import NotFoundError
+            raise NotFoundError("User not found")
+
+        existing = session.execute(
+            select(User).where(User.name == body.name, User.id != user_id)
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"user with name '{body.name}' already exists")
+
+        user.name = body.name
+        session.commit()
+        return {"ok": True, "user": user_to_dict(user)}
