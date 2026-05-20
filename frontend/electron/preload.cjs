@@ -16,16 +16,10 @@ contextBridge.exposeInMainWorld("amtodoShell", {
   unregisterHotkey: () => ipcRenderer.invoke("hotkey:unregister"),
   startNotificationPolling: (settings) => ipcRenderer.invoke("notification:start-polling", settings),
   stopNotificationPolling: () => ipcRenderer.invoke("notification:stop-polling"),
-  connectNotificationWebSocket: (settings) => ipcRenderer.invoke("notification:ws-connect", settings),
-  disconnectNotificationWebSocket: () => ipcRenderer.invoke("notification:ws-disconnect"),
+  showSystemNotification: (params) => ipcRenderer.invoke("notification:show", params),
   onNotificationClicked: (callback) => {
-    const listener = (_event, notificationId) => callback(notificationId);
+    const listener = (_event, data) => callback(data);
     ipcRenderer.on("notification:clicked", listener);
     return () => ipcRenderer.removeListener("notification:clicked", listener);
   },
-  onWsStatusChanged: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on("notification:ws-status", listener);
-    return () => ipcRenderer.removeListener("notification:ws-status", listener);
-  }
 });
