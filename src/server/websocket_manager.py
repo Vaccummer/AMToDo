@@ -66,6 +66,24 @@ class SessionKeyManager:
         self._hash_to_user[_key_hash(key)] = user_id
         return key, expires_at
 
+    def store(self, user_id: int, key: bytes) -> float:
+        """Store a client-provided AES-256 key for *user_id*.
+
+        Previous key (if any) is silently replaced.
+        Returns ``expires_at_unix``.
+        """
+        expires_at = time.time() + self._ttl
+
+        # Remove old reverse index entry if one exists
+        old_entry = self._keys.get(user_id)
+        if old_entry is not None:
+            old_hash = _key_hash(old_entry[0])
+            self._hash_to_user.pop(old_hash, None)
+
+        self._keys[user_id] = (key, expires_at)
+        self._hash_to_user[_key_hash(key)] = user_id
+        return expires_at
+
     def get(self, user_id: int) -> bytes | None:
         """Return the current key for *user_id*, or ``None`` if expired/missing."""
         entry = self._keys.get(user_id)
