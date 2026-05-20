@@ -22,6 +22,12 @@ interface SettingsData {
   notification_query_window?: string;
   notification_silent?: string;
   notification_timeout?: string;
+  ws_reconnect_retries?: string;
+  reconnect_max_attempts?: string;
+  ws_enabled?: string;
+  notify_on_disconnect?: string;
+  ws_reconnect_interval_ms?: string;
+  known_key_fingerprint?: string;
 }
 
 
@@ -42,9 +48,7 @@ interface Window {
     unregisterHotkey?: () => Promise<void>;
     startNotificationPolling?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
     stopNotificationPolling?: () => Promise<{ ok: boolean; error?: string }>;
+    showSystemNotification?: (params: { title: string; body: string; id: number; trigger_at: number }) => Promise<{ ok: boolean; error?: string }>;
     onNotificationClicked?: (callback: (data: { id: number; trigger_at: number }) => void) => () => void;
-    connectNotificationWebSocket?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string; mode?: string }>;
-    disconnectNotificationWebSocket?: () => Promise<{ ok: boolean; error?: string }>;
-    onWsStatusChanged?: (callback: (data: { status: "connected" | "disconnected" | "reconnecting"; attempt?: number; maxRetries?: number }) => void) => () => void;
   };
 }
