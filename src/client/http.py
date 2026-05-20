@@ -49,6 +49,12 @@ class AMTodoClient:
     def user_me(self) -> dict[str, Any]:
         return self._user_post("/api/v1/user")
 
+    def user_update_self(self, name: str) -> dict[str, Any]:
+        return self._user_post("/api/v1/user/update", {"name": name})
+
+    def user_regen_token_self(self) -> dict[str, Any]:
+        return self._user_post("/api/v1/user/token/regenerate")
+
     # ── admin users ──
 
     def user_create(self, name: str) -> dict[str, Any]:

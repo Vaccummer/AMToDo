@@ -40,6 +40,7 @@ app = typer.Typer(invoke_without_command=True, no_args_is_help=True)
 todo_app = typer.Typer(no_args_is_help=True)
 schedule_app = typer.Typer(no_args_is_help=True)
 user_app = typer.Typer(no_args_is_help=True)
+admin_app = typer.Typer(no_args_is_help=True)
 cache_app = typer.Typer(no_args_is_help=True)
 todo_attachment_app = typer.Typer(no_args_is_help=True, help="Manage ToDo attachments.")
 schedule_attachment_app = typer.Typer(no_args_is_help=True, help="Manage schedule attachments.")
@@ -1233,7 +1234,36 @@ def schedule_attachment_remove_orphaned(
     _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
 
 
-# ── user commands ──
+# ── user commands (self-service, access_token) ──
+
+
+@user_app.command("me")
+def user_me() -> None:
+    """Show the current authenticated user's information."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_me(), settings)
+
+
+@user_app.command("update")
+def user_update(
+    name: str = typer.Option(..., "--name", "-n", help="New user name."),
+) -> None:
+    """Update your own user name."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_update_self(name), settings)
+
+
+@user_app.command("regen-token")
+def user_regen_token() -> None:
+    """Regenerate your own access token."""
+
+    settings = load_cli_settings()
+    _run_http(lambda client: client.user_regen_token_self(), settings)
+
+
+# ── admin commands (manage any user, admin_token) ──
 
 
 def _fetch_admin_config() -> tuple[str, Path]:
@@ -1242,7 +1272,7 @@ def _fetch_admin_config() -> tuple[str, Path]:
 
     settings = load_cli_settings()
     if not settings.server_url:
-        _exit_with_error(ValidationError("server_url is required in config/cli.toml for user management"))
+        _exit_with_error(ValidationError("server_url is required in config/cli.toml for admin management"))
     if not settings.admin_token:
         _exit_with_error(ValidationError("admin_token is not configured in config/cli.toml"))
 
@@ -1266,7 +1296,7 @@ def _admin_context():
     return database, attachment_root
 
 
-def _user_create_direct(name: str) -> dict[str, object]:
+def _admin_user_create_direct(name: str) -> dict[str, object]:
     """Create a new user with a generated access token (direct DB)."""
     database, _attachment_root = _admin_context()
     clock = SystemClock()
@@ -1301,7 +1331,7 @@ def _user_create_direct(name: str) -> dict[str, object]:
     return {"ok": True, "user": result}
 
 
-def _user_list_direct() -> dict[str, object]:
+def _admin_user_list_direct() -> dict[str, object]:
     """List all registered users (direct DB)."""
     database, _attachment_root = _admin_context()
 
@@ -1316,7 +1346,7 @@ def _user_list_direct() -> dict[str, object]:
         }
 
 
-def _user_delete_direct(user_id: int) -> dict[str, object]:
+def _admin_user_delete_direct(user_id: int) -> dict[str, object]:
     """Delete a user and all owned data (direct DB)."""
     database, attachment_root = _admin_context()
 
@@ -1364,7 +1394,7 @@ def _user_delete_direct(user_id: int) -> dict[str, object]:
     return {"ok": True, "deleted": {"id": user_id, "name": name}}
 
 
-def _user_update_direct(user_id: int, name: str) -> dict[str, object]:
+def _admin_user_update_direct(user_id: int, name: str) -> dict[str, object]:
     """Update a user's name (direct DB)."""
     database, _attachment_root = _admin_context()
 
@@ -1384,7 +1414,7 @@ def _user_update_direct(user_id: int, name: str) -> dict[str, object]:
         return {"ok": True, "user": user_to_dict_with_token(user)}
 
 
-def _user_regen_token_direct(user_id: int) -> dict[str, object]:
+def _admin_user_regen_token_direct(user_id: int) -> dict[str, object]:
     """Regenerate a user's access token (direct DB)."""
     database, _attachment_root = _admin_context()
 
@@ -1409,30 +1439,32 @@ def _user_regen_token_direct(user_id: int) -> dict[str, object]:
         return {"ok": True, "user": user_to_dict_with_token(user)}
 
 
-@user_app.command("me")
-def user_me() -> None:
-    """Show the current authenticated user's information."""
-
-    settings = load_cli_settings()
-    _run_http(lambda client: client.user_me(), settings)
-
-
-@user_app.command("create")
-def user_create(name: str = typer.Argument(..., help="User name.")) -> None:
+@admin_app.command("create")
+def admin_create(name: str = typer.Argument(..., help="User name.")) -> None:
     """Create a new user with a generated access token."""
 
-    _echo_json(_user_create_direct(name))
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.user_create(name), settings)
+        return
+
+    _echo_json(_admin_user_create_direct(name))
 
 
-@user_app.command("list")
-def user_list() -> None:
+@admin_app.command("list")
+def admin_list() -> None:
     """List all registered users."""
 
-    _echo_json(_user_list_direct())
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.user_list(), settings)
+        return
+
+    _echo_json(_admin_user_list_direct())
 
 
-@user_app.command("delete")
-def user_delete(
+@admin_app.command("delete")
+def admin_delete(
     user_id: int = typer.Argument(..., help="User id."),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation."),
 ) -> None:
@@ -1446,24 +1478,39 @@ def user_delete(
             typer.echo("Aborted.")
             raise typer.Exit
 
-    _echo_json(_user_delete_direct(user_id))
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.user_delete(user_id), settings)
+        return
+
+    _echo_json(_admin_user_delete_direct(user_id))
 
 
-@user_app.command("update")
-def user_update(
+@admin_app.command("update")
+def admin_update(
     user_id: int = typer.Argument(..., help="User id."),
     name: str = typer.Option(..., "--name", "-n", help="New user name."),
 ) -> None:
     """Update a user's name."""
 
-    _echo_json(_user_update_direct(user_id, name))
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.user_update(user_id, name), settings)
+        return
+
+    _echo_json(_admin_user_update_direct(user_id, name))
 
 
-@user_app.command("regen-token")
-def user_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> None:
+@admin_app.command("regen-token")
+def admin_regen_token(user_id: int = typer.Argument(..., help="User id.")) -> None:
     """Regenerate a user's access token."""
 
-    _echo_json(_user_regen_token_direct(user_id))
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.user_regenerate_token(user_id), settings)
+        return
+
+    _echo_json(_admin_user_regen_token_direct(user_id))
 
 
 # ── cache commands ──
@@ -1612,9 +1659,38 @@ def gen_keys(
     })
 
 
+@app.command("fingerprint")
+def fingerprint(
+    public_key_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            help="Path to a P-256 public key PEM file.",
+        ),
+    ] = ...,
+) -> None:
+    """Compute SHA-256 fingerprint of a P-256 public key (same algorithm as the UI)."""
+    import hashlib
+    from amtodo_crypto.keys import public_key_spki
+
+    pem_bytes = public_key_path.read_bytes()
+    der_bytes = public_key_spki(pem_bytes)
+    digest = hashlib.sha256(der_bytes).hexdigest()
+    fingerprint_str = f"sha256:{digest}"
+
+    _echo_json({
+        "ok": True,
+        "fingerprint": fingerprint_str,
+        "public_key": str(public_key_path.resolve()),
+    })
+
+
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")
 app.add_typer(schedule_app, name="schedule", help="Manage schedule items.")
-app.add_typer(user_app, name="user", help="Manage users (admin).")
+app.add_typer(user_app, name="user", help="User self-service (me, update, regen-token).")
+app.add_typer(admin_app, name="admin", help="Admin user management (create, list, delete, update, regen-token).")
 app.add_typer(cache_app, name="cache", help="Manage local caches.")
 todo_app.add_typer(todo_attachment_app, name="attachment")
 schedule_app.add_typer(schedule_attachment_app, name="attachment")
