@@ -25,9 +25,11 @@ def user_to_dict_with_token(user: User) -> dict[str, object]:
     }
 
 
-def todo_to_dict(todo: Todo, timezone: str) -> dict[str, object]:
+def todo_to_dict(
+    todo: Todo, timezone: str, *, attachment_count: int | None = None
+) -> dict[str, object]:
     """Serialize a Todo ORM instance to the standard JSON payload."""
-    return {
+    d: dict[str, object] = {
         "id": todo.id,
         "title": todo.title,
         "description": todo.description,
@@ -41,6 +43,9 @@ def todo_to_dict(todo: Todo, timezone: str) -> dict[str, object]:
         "completed_at": todo.completed_at,
         "deleted_at": todo.deleted_at,
     }
+    if attachment_count is not None:
+        d["attachment_count"] = attachment_count
+    return d
 
 
 def attachment_to_dict(attachment: TodoAttachment, user_id: int) -> dict[str, object]:
