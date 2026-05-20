@@ -64,6 +64,11 @@
   box-shadow: 0 0 8px rgba(212, 160, 48, 0.35);
 }
 
+.brand-dot.idle {
+  background: #888;
+  box-shadow: 0 0 8px rgba(136, 136, 136, 0.25);
+}
+
 .brand-title {
   font-size: 17px;
   font-weight: 700;
@@ -253,6 +258,11 @@
   border: 1px solid color-mix(in srgb, #d4a030 25%, transparent);
 }
 
+.ws-banner.ws-idle {
+  background: color-mix(in srgb, #888 10%, var(--components-nav-bg));
+  border: 1px solid color-mix(in srgb, #888 25%, transparent);
+}
+
 .ws-dot {
   width: 8px;
   height: 8px;
@@ -262,6 +272,7 @@
 
 .ws-disconnected .ws-dot { background: var(--status-danger-base); }
 .ws-reconnecting .ws-dot { background: #d4a030; animation: wsPulseDot 1.2s ease-in-out infinite; }
+.ws-idle .ws-dot { background: #888; }
 
 .ws-text {
   flex: 1;
@@ -273,21 +284,7 @@
 
 .ws-disconnected .ws-text { color: var(--status-danger-base); }
 .ws-reconnecting .ws-text { color: #8a6d1b; }
-
-.ws-reconnect-btn {
-  flex-shrink: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: 3px 10px;
-  font: inherit;
-  font-size: var(--font-xs);
-  font-weight: 700;
-  cursor: pointer;
-  background: var(--status-danger-base);
-  color: #fff;
-}
-
-.ws-reconnect-btn:hover { background: #b03030; }
+.ws-idle .ws-text { color: #666; }
 
 @keyframes wsBannerSlideIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -298,3 +295,118 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.75); }
 }
+
+/* ── Signal ripple disconnect overlay ── */
+
+.signal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--global-surface-bg, #faf7f2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  animation: signalOverlayIn 0.3s ease;
+}
+
+@keyframes signalOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.signal-overlay-icon {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signal-overlay-icon svg {
+  width: 28px;
+  height: 28px;
+  z-index: 1;
+  position: relative;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.signal-overlay .signal-overlay-icon svg {
+  stroke: #888;
+  opacity: 0.5;
+}
+
+.signal-overlay.signal-overlay-warn .signal-overlay-icon svg {
+  stroke: var(--status-danger-base, #c62f2f);
+  opacity: 1;
+  animation: signalGlitch 2s steps(1) infinite;
+}
+
+@keyframes signalGlitch {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.3; }
+  25% { opacity: 1; }
+  45% { opacity: 0; }
+  50% { opacity: 1; }
+  70% { opacity: 0.5; }
+  75% { opacity: 1; }
+}
+
+.signal-overlay-wave {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid #888;
+  pointer-events: none;
+}
+
+.signal-overlay .signal-overlay-wave {
+  animation: waveIdle 4s ease-out infinite;
+}
+
+.signal-overlay .signal-overlay-wave:nth-child(2) { animation-delay: 1.3s; }
+.signal-overlay .signal-overlay-wave:nth-child(3) { animation-delay: 2.6s; }
+
+@keyframes waveIdle {
+  0% { width: 28px; height: 28px; opacity: 0.4; }
+  100% { width: 120px; height: 120px; opacity: 0; }
+}
+
+.signal-overlay.signal-overlay-warn .signal-overlay-wave {
+  border-color: var(--status-danger-base, #c62f2f);
+  animation: waveWarn 2s ease-out infinite;
+}
+
+.signal-overlay.signal-overlay-warn .signal-overlay-wave:nth-child(2) { animation-delay: 0.5s; }
+.signal-overlay.signal-overlay-warn .signal-overlay-wave:nth-child(3) { animation-delay: 1s; }
+
+@keyframes waveWarn {
+  0% { width: 28px; height: 28px; opacity: 0.5; }
+  100% { width: 140px; height: 140px; opacity: 0; }
+}
+
+.signal-overlay-title {
+  font-size: var(--font-lg, 14px);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.signal-overlay .signal-overlay-title { color: #888; }
+.signal-overlay.signal-overlay-warn .signal-overlay-title { color: var(--status-danger-base, #c62f2f); }
+
+.signal-overlay-sub {
+  font-size: var(--font-md, 13px);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+.signal-overlay .signal-overlay-sub { color: color-mix(in srgb, #888 60%, transparent); }
+.signal-overlay.signal-overlay-warn .signal-overlay-sub { color: color-mix(in srgb, var(--status-danger-base, #c62f2f) 55%, var(--global-surface-text, #342f2a)); }

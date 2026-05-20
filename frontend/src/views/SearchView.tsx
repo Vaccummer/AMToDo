@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../api/client";
-import { API_NETWORK_STATUS_EVENT } from "../api/client";
-import lockIcon from "../assets/lock.svg";
+import type { ConnectionStatusSnapshot } from "../api/connection-status";
 import { addDaysToDateKey, dateKeyFromEpoch, formatDueTime, formatTime, isOverdueTodo, startOfDateKeyEpoch } from "../lib/time";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
 import { NotifyFormModal } from "./NotifyFormModal";
@@ -11,12 +10,12 @@ import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { TodoDetailModal } from "./TodoDetailModal";
 import { useConfirm } from "./ConfirmDialog";
 
-type ErrorKind = "network" | "token";
-
 type Props = {
   api: AMToDoApi;
   onNavigate: (target: "todo" | "schedule", dateKey?: string) => void;
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
+  connectionStatus?: ConnectionStatusSnapshot;
+  onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
 };
 
 type SearchMode = "todo" | "schedule" | "notify";
@@ -276,7 +275,7 @@ function updateFields(fields: string[], value: string, checked: boolean): string
   return next.length ? next : fields;
 }
 
-export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
+export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, onConnectionError }: Props) {
   const initialConfig = useMemo(() => cloneSearchConfig(searchSessionConfig), []);
   const [mode, setMode] = useState<SearchMode>(initialConfig.mode);
   const [query, setQuery] = useState(initialConfig.query);
@@ -307,32 +306,12 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState("尚未搜索");
   const [busy, setBusy] = useState(false);
-  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
-  const [connectionUrl, setConnectionUrl] = useState<string>("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [detail, setDetail] = useState<ResultItem | null>(null);
   const [editingNotifyId, setEditingNotifyId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
-
-  useEffect(() => {
-    function onNetworkStatus(e: Event) {
-      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
-      if (!online) {
-        setErrorKind("network");
-        setErrorMessage("无法与服务器通信");
-        setConnectionUrl(api.serverUrl);
-      } else if (errorKind === "network") {
-        setErrorKind(null);
-        setErrorMessage("");
-        setConnectionUrl("");
-      }
-    }
-    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
-    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
-  }, [errorKind, api.serverUrl]);
 
   const currentFields = mode === "todo" ? todoFields : mode === "schedule" ? scheduleFields : notifyFields;
   const currentSortOptions = mode === "todo" ? TODO_SORT_OPTIONS : mode === "schedule" ? SCHEDULE_SORT_OPTIONS : NOTIFY_SORT_OPTIONS;
@@ -473,8 +452,7 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
         const response = await api.searchTodos(query, params);
         setResults(response.todos.map((item) => ({ type: "todo", item })));
         setTotal(response.total);
-        setErrorKind(null);
-        setErrorMessage("");
+        onConnectionError?.(null);
         setStatus(response.total ? "" : "没有匹配结果");
       } else if (mode === "schedule") {
         const params: Parameters<AMToDoApi["searchSchedules"]>[1] = {
@@ -500,8 +478,7 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
         const response = await api.searchSchedules(query, params);
         setResults(response.schedules.map((item) => ({ type: "schedule", item })));
         setTotal(response.total);
-        setErrorKind(null);
-        setErrorMessage("");
+        onConnectionError?.(null);
         setStatus(response.total ? "" : "没有匹配结果");
       } else {
         // Notify mode: fetch all and client-side filter
@@ -552,15 +529,12 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
       setResults([]);
       setTotal(0);
       if (error instanceof TypeError) {
-        setErrorKind("network");
-        setErrorMessage("无法与服务器通信");
-        setConnectionUrl(api.serverUrl);
+        onConnectionError?.("network", "无法与服务器通信");
         setStatus("连接失败");
       } else {
-        setErrorKind("token");
-        setErrorMessage(error instanceof Error ? error.message : "搜索失败");
-        setConnectionUrl("");
-        setStatus(error instanceof Error ? error.message : "搜索失败");
+        const msg = error instanceof Error ? error.message : "搜索失败";
+        onConnectionError?.("token", msg);
+        setStatus(msg);
       }
     } finally {
       setBusy(false);
@@ -1013,7 +987,7 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
 
         <section className="search-results">
           <div className="search-results-toolbar">
-            <span>{errorKind ? (errorKind === "network" ? "连接失败" : "认证失败") : status || `${results.length}/${total} 项`}</span>
+            <span>{connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error") ? (connectionStatus.status === "offline" ? "连接失败" : "认证失败") : status || `${results.length}/${total} 项`}</span>
             <div className="search-sort-controls">
               <Dropdown
                 value={currentSortBy}
@@ -1037,39 +1011,7 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
           </div>
 
           <div className="search-result-list">
-            {errorKind ? (
-              <div className={`search-error-state${errorKind === "token" ? " token-error" : ""}`}>
-                <div className="search-error-illustration">
-                  {errorKind === "network" ? (
-                    <>
-                      <div className="error-cloud" />
-                      <div className="error-bolt">⚡</div>
-                    </>
-                  ) : (
-                    <img className="error-lock-icon" src={lockIcon} alt="" />
-                  )}
-                </div>
-                <p className="search-error-title">{errorKind === "network" ? "连接中断" : "身份验证失败"}</p>
-                <p className="search-error-subtitle">{errorMessage}</p>
-                {errorKind === "network" && connectionUrl && (
-                  <p className="search-error-url">{connectionUrl}</p>
-                )}
-                <button
-                  type="button"
-                  className="search-error-btn"
-                  onClick={() => {
-                    if (onOpenSettings) {
-                      onOpenSettings(errorKind === "network" ? "url" : "token");
-                    } else {
-                      setErrorKind(null);
-                      setErrorMessage("");
-                    }
-                  }}
-                >
-                  {errorKind === "network" ? "检查连接设置" : "更新访问令牌"}
-                </button>
-              </div>
-            ) : results.map((result) => {
+            {results.map((result) => {
               const key = resultKey(result);
               const isEditing = editingKey === key;
               if (result.type === "todo") {
@@ -1260,6 +1202,67 @@ export function SearchView({ api, onNavigate, onOpenSettings }: Props) {
                 </div>
               );
             })}
+            {results.length === 0 && (
+              status === "尚未搜索" ? (
+                <div className="search-empty search-empty-initial">
+                  <span className="search-empty-title">选择搜索维度</span>
+                  <span className="search-empty-sub">可通过以下方式查找内容</span>
+                  <div className="search-cards">
+                    <button type="button" className="search-card card-todo" onClick={() => setMode("todo")}>
+                      <div className="card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                      </div>
+                      <div className="card-text">
+                        <span className="card-label">待办事项</span>
+                        <span className="card-hint">标题 · 描述 · 标签</span>
+                      </div>
+                    </button>
+                    <button type="button" className="search-card card-schedule" onClick={() => setMode("schedule")}>
+                      <div className="card-icon">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                      </div>
+                      <div className="card-text">
+                        <span className="card-label">日程安排</span>
+                        <span className="card-hint">标题 · 地点 · 分类</span>
+                      </div>
+                    </button>
+                    <button type="button" className="search-card card-notify" onClick={() => setMode("notify")}>
+                      <div className="card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                      </div>
+                      <div className="card-text">
+                        <span className="card-label">通知提醒</span>
+                        <span className="card-hint">描述 · 触发时间</span>
+                      </div>
+                    </button>
+                    <button type="button" className="search-card card-id" onClick={() => setIdSearch(true)}>
+                      <div className="card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                      </div>
+                      <div className="card-text">
+                        <span className="card-label">ID 精确查找</span>
+                        <span className="card-hint">空格分隔多个 ID</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="search-empty search-empty-no-result">
+                  <div className="search-empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                  </div>
+                  <span className="search-empty-title">未找到匹配项</span>
+                  <span className="search-empty-sub">{query ? `没有包含「${query}」的结果` : "请尝试不同的搜索条件"}</span>
+                  <div className="search-empty-badge">
+                    <div className="search-empty-badge-dot" />
+                    0 条匹配
+                  </div>
+                </div>
+              )
+            )}
           </div>
         </section>
       </div>

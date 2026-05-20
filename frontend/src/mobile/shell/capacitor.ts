@@ -47,6 +47,5 @@ export class CapacitorShell implements NonNullable<Window["amtodoShell"]> {
       LocalNotifications.removeAllListeners();
     };
   };
-  connectNotificationWebSocket = async () => ({ ok: true });
-  disconnectNotificationWebSocket = async () => ({ ok: true });
+  showSystemNotification = async (_params: { title: string; body: string; id: number; trigger_at: number }) => ({ ok: true });
 }

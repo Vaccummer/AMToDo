@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "./api/client";
+import { AMToDoApi, type HealthResponse, type TodoItem } from "./api/client";
+import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "./api/ws-client";
+import { ConnectionStatusManager, useConnectionStatus } from "./api/connection-status";
+import { FingerprintMismatchError } from "./crypto/envelope";
 import { ACCESS_TOKEN, SERVER_URL } from "./config";
-import { importP256PublicKey } from "./crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "./lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "./lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "./themes";
@@ -25,7 +27,6 @@ import userIcon from "./assets/user.svg";
 import windowlizeIcon from "./assets/windowlize.svg";
 
 type Tab = "todo" | "schedule" | "search" | "trash" | "notify";
-type ConnectionStatus = "checking" | "online" | "offline";
 
 const tabIcons: Record<Tab, string> = {
   todo: todoIcon,
@@ -52,24 +53,22 @@ const shell = window.amtodoShell ?? {
   readSettings: async () => ({}),
   writeSettings: async () => ({ ok: true }),
   startNotificationPolling: async () => ({ ok: true }),
+  stopNotificationPolling: async () => ({ ok: true }),
   onNotificationClicked: () => () => {},
-  connectNotificationWebSocket: async () => ({ ok: true }),
-  disconnectNotificationWebSocket: async () => ({ ok: true }),
-  onWsStatusChanged: () => () => {},
+  showSystemNotification: async () => ({ ok: true }),
 };
 
 export function App() {
-  // Apply default theme immediately on first render
-  applyTheme(getTheme(DEFAULT_THEME));
+  // Apply default theme once on mount (settings load effect will override later)
+  useEffect(() => {
+    applyTheme(getTheme(DEFAULT_THEME));
+  }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>("todo");
   const visitedTabs = useRef<Set<Tab>>(new Set(["todo"])).current;
   const [visitedTick, setVisitedTick] = useState(0);
   const tabHistory = useRef<{ stack: Tab[]; index: number }>({ stack: ["todo"], index: 0 });
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [healthError, setHealthError] = useState<string | null>(null);
-  const [healthErrorKind, setHealthErrorKind] = useState<"network" | "token" | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<"url" | "token" | undefined>();
@@ -88,7 +87,21 @@ export function App() {
     item: TodoItem;
   } | null>(null);
 
-  const [wsStatus, setWsStatus] = useState<"connected" | "disconnected" | "reconnecting">("connected");
+  const connectionManagerRef = useRef(new ConnectionStatusManager());
+  const connStatus = useConnectionStatus(connectionManagerRef.current);
+
+  const handleConnectionError = useCallback((kind: "network" | "token" | null, message?: string) => {
+    const mgr = connectionManagerRef.current;
+    if (kind === null) {
+      mgr.reportApiOk();
+    } else {
+      mgr.reportApiError(kind, message ?? (kind === "token" ? "身份验证失败" : "无法与服务器通信"));
+    }
+  }, []);
+
+  const wsClientRef = useRef<UiWsClient | null>(null);
+
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const [settings, setSettings] = useState<UISettings>(() => ({
     ...DEFAULT_SETTINGS,
@@ -96,9 +109,7 @@ export function App() {
     access_token: ACCESS_TOKEN || DEFAULT_SETTINGS.access_token,
   }));
 
-  const [api, setApi] = useState<AMToDoApi>(
-    () => new AMToDoApi(settings.server_url, settings.access_token)
-  );
+  const [api, setApi] = useState<AMToDoApi | null>(null);
 
   const handleTodoDateChange = useCallback((key: string) => {
     setSelectedDateCache((prev) => prev.todo === key ? prev : { ...prev, todo: key });
@@ -120,6 +131,7 @@ export function App() {
   }
 
   async function handleMentionNavigate(type: "todo" | "schedule", id: number, action: "jump" | "edit") {
+    if (!api) return;
     // Cross-type edit: open in current view without switching tabs
     if (action === "edit" && type !== activeTab) {
       try {
@@ -143,14 +155,6 @@ export function App() {
     } catch { /* navigate without date */ }
     navigateTab(type);
     setPendingAction({ type, id, action, dateKey });
-  }
-
-  async function handleManualReconnect() {
-    setWsStatus("reconnecting");
-    const result = await shell.connectNotificationWebSocket?.(settings as never);
-    if (result && !result.ok) {
-      setWsStatus("disconnected");
-    }
   }
 
   useEffect(() => {
@@ -186,7 +190,8 @@ export function App() {
         document.documentElement.style.setProperty("--app-font-family", parsed.font_family);
         document.documentElement.style.setProperty("--app-font-size", `${parsed.font_size}px`);
       })
-      .catch(() => { /* keep defaults */ });
+      .catch(() => { /* keep defaults */ })
+      .finally(() => { setSettingsLoaded(true); });
   }, []);
 
   // Parallel startup: detect server_url and lan_address simultaneously
@@ -250,84 +255,199 @@ export function App() {
     return () => { cancelled = true; };
   }, [settings.lan_address]);
 
-  // Bootstrap API client with health check + encryption
+  // Bootstrap: health check (HTTP) → WS connect → API ready
   useEffect(() => {
+    if (!settingsLoaded) return;
+    if (!settings.ws_enabled) {
+      connectionManagerRef.current.reportIdle();
+      setApi(null);
+      setHealth(null);
+      return;
+    }
     let cancelled = false;
     let retryTimer: number | undefined;
-    let wasOffline = false;
+    const MAX_STARTUP_ATTEMPTS = 3;
+    const STARTUP_DELAYS = [0, 1000, 2000];
+    let startupAttempt = 0;
 
     const bootstrap = async () => {
+      const mgr = connectionManagerRef.current;
+
+      // Phase 1: Health check via HTTP (needed for server version + limits)
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
 
-      const limits = result.limits;
-      let readyApi = baseApi;
-      if (result.public_key) {
-        const p256Key = await importP256PublicKey(result.public_key);
-        readyApi = new AMToDoApi(
-          settings.server_url,
-          settings.access_token,
-          p256Key,
-          limits.max_attachment_size_bytes,
-          limits.max_attachments_per_todo
-        );
-      } else {
-        baseApi.maxAttachmentSize = limits.max_attachment_size_bytes;
-        baseApi.maxAttachmentsPerTodo = limits.max_attachments_per_todo;
-      }
-
       if (cancelled) return;
       setHealth(result);
-      setHealthError(null);
-      setHealthErrorKind(null);
-      setApi(readyApi);
-      setConnectionStatus("online");
-      if (wasOffline) {
-        notifyNetworkStatus(true);
+      mgr.reportHealthOk(result.version, result.name);
+
+      // TOFU: verify server public key fingerprint from health response
+      let currentFingerprint = settings.known_key_fingerprint;
+      if (result.public_key) {
+        const { verifyOrEnrollKey } = await import("./crypto/envelope");
+        currentFingerprint = await verifyOrEnrollKey(result.public_key, currentFingerprint);
+        if (currentFingerprint !== settings.known_key_fingerprint) {
+          setSettings((prev) => ({ ...prev, known_key_fingerprint: currentFingerprint }));
+          shell.writeSettings({ known_key_fingerprint: currentFingerprint }).catch(() => {});
+        }
       }
-      wasOffline = false;
+
+      const limits = result.limits;
+
+      // Phase 2: Connect UI WebSocket
+      const wsClient = new UiWsClient(
+        settings.server_url,
+        settings.access_token,
+        settings.ws_reconnect_interval_ms,
+        currentFingerprint,
+        (enrolledFp: string) => {
+          setSettings((prev) => ({ ...prev, known_key_fingerprint: enrolledFp }));
+          shell.writeSettings({ known_key_fingerprint: enrolledFp }).catch(() => {});
+        },
+        settings.reconnect_max_attempts
+      );
+
+      // Feed WS status into the connection manager
+      const unsubStatus = wsClient.onStatusChange((status) => {
+        if (!cancelled) mgr.reportWsStatus(status);
+      });
+
+      // Feed WS auth rejection close codes into the manager
+      const unsubDisconnect = wsClient.onDisconnectReason((code) => {
+        if (cancelled) return;
+        if (code === RECONNECT_EXHAUSTED_CODE) {
+          mgr.reportReconnectExhausted();
+        } else {
+          mgr.reportWsStatus("disconnected", code);
+        }
+      });
+
+      // Listen for notification pushes
+      const unsubNotif = wsClient.onNotification((notification) => {
+        if (cancelled) return;
+        showSystemNotification(notification);
+      });
+
+      await wsClient.connect();
+
+      if (cancelled) {
+        unsubStatus();
+        unsubDisconnect();
+        unsubNotif();
+        wsClient.disconnect();
+        return;
+      }
+
+      wsClientRef.current = wsClient;
+
+      // Phase 3: Create API client with WS transport
+      const readyApi = new AMToDoApi(
+        settings.server_url,
+        settings.access_token,
+        null,
+        limits.max_attachment_size_bytes,
+        limits.max_attachments_per_todo,
+        wsClient
+      );
+
+      setApi(readyApi);
+      startupAttempt = 0;
     };
 
     const scheduleRetry = () => {
+      if (startupAttempt >= MAX_STARTUP_ATTEMPTS) return;
+      const delay = STARTUP_DELAYS[startupAttempt] ?? 2000;
+      startupAttempt++;
       retryTimer = window.setTimeout(() => {
         void runBootstrap();
-      }, 2000);
+      }, delay);
     };
 
     const runBootstrap = async () => {
       if (cancelled) return;
-      setConnectionStatus("checking");
       try {
         await bootstrap();
       } catch (error: unknown) {
         if (cancelled) return;
-        wasOffline = true;
         setHealth(null);
-        setHealthError(error instanceof Error ? error.message : "无法连接后端");
-        setHealthErrorKind(error instanceof TypeError ? "network" : "token");
-        setConnectionStatus("offline");
-        scheduleRetry();
+        const mgr = connectionManagerRef.current;
+        const message = error instanceof Error ? error.message : "无法连接后端";
+        if (error instanceof FingerprintMismatchError) {
+          mgr.reportFingerprintMismatch(message);
+        } else {
+          const kind = error instanceof TypeError ? "network" : "token";
+          mgr.reportHealthError(kind, message);
+        }
+        if (!(error instanceof FingerprintMismatchError)) scheduleRetry();
       }
     };
 
     void runBootstrap();
     return () => {
       cancelled = true;
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+        wsClientRef.current = null;
       }
     };
-  }, [settings.server_url, settings.access_token]);
+  }, [settingsLoaded, settings.server_url, settings.access_token, settings.ws_enabled]);
 
-  // Listen for WebSocket status changes from main process
-  useEffect(() => {
-    return shell.onWsStatusChanged?.((data) => {
-      setWsStatus(data.status);
-    });
-  }, []);
+  function showSystemNotification(notification: WsNotificationPayload) {
+    const epoch = typeof notification.trigger_at === "number" ? notification.trigger_at : 0;
+    const d = new Date(epoch * 1000);
+    const timeStr = isNaN(d.getTime())
+      ? ""
+      : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+    const desc = notification.description ?? "";
+    const body = desc ? `${desc}\n触发: ${timeStr}` : `触发: ${timeStr}`;
+
+    const handleClick = () => {
+      window.focus();
+      const dateKey = dateKeyFromEpoch(notification.trigger_at, settings.timezone);
+      navigateTab("schedule");
+      setPendingAction({ type: "notify", id: notification.id, action: "edit", dateKey });
+    };
+
+    // Try Electron main process notification first, fallback to Web Notification API
+    if (shell.showSystemNotification) {
+      shell.showSystemNotification({
+        title: notification.title || "AMToDo",
+        body,
+        id: notification.id,
+        trigger_at: notification.trigger_at,
+      }).then((result: { ok: boolean }) => {
+        if (!result.ok) throw new Error("main process notification failed");
+      }).catch(() => {
+        // Fallback to Web Notification API
+        if (typeof Notification !== "undefined") {
+          if (Notification.permission === "granted") {
+            new Notification(notification.title || "AMToDo", { body }).onclick = handleClick;
+          } else if (Notification.permission !== "denied") {
+            Notification.requestPermission().then((perm) => {
+              if (perm === "granted") {
+                new Notification(notification.title || "AMToDo", { body }).onclick = handleClick;
+              }
+            });
+          }
+        }
+      });
+    } else if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") {
+        new Notification(notification.title || "AMToDo", { body }).onclick = handleClick;
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then((perm) => {
+          if (perm === "granted") {
+            new Notification(notification.title || "AMToDo", { body }).onclick = handleClick;
+          }
+        });
+      }
+    }
+  }
 
   // Fetch current user display name
   useEffect(() => {
+    if (!api) return;
     api.user()
       .then((result) => setUsername(result.user.name))
       .catch(() => setUsername(""));
@@ -349,55 +469,69 @@ export function App() {
     });
   }, [settings.timezone]);
 
-  const handleSettingsSave = useCallback((newSettings: UISettings) => {
+  const flushSettings = useCallback((s: UISettings) => {
     shell.writeSettings({
-      server_url: newSettings.server_url,
-      lan_address: newSettings.lan_address,
-      access_token: newSettings.access_token,
-      admin_token: newSettings.admin_token,
-      language: newSettings.language,
-      timezone: newSettings.timezone,
-      font_family: newSettings.font_family,
-      font_size: String(newSettings.font_size),
-      theme: newSettings.theme,
-      calendar_days: String(newSettings.calendar_days),
-      week_start: String(newSettings.week_start),
-      scheduler_start_hour: String(newSettings.scheduler_start_hour),
-      scheduler_end_hour: String(newSettings.scheduler_end_hour),
-      scheduler_slot_minutes: String(newSettings.scheduler_slot_minutes),
-      notification_enabled: String(newSettings.notification_enabled),
-      notification_poll_interval: String(newSettings.notification_poll_interval),
-      notification_query_window: String(newSettings.notification_query_window),
-      global_hotkey_enabled: String(newSettings.global_hotkey_enabled),
-      global_hotkey: newSettings.global_hotkey,
-      notification_silent: String(newSettings.notification_silent),
-      notification_timeout: newSettings.notification_timeout,
+      server_url: s.server_url,
+      lan_address: s.lan_address,
+      access_token: s.access_token,
+      admin_token: s.admin_token,
+      language: s.language,
+      timezone: s.timezone,
+      font_family: s.font_family,
+      font_size: String(s.font_size),
+      theme: s.theme,
+      calendar_days: String(s.calendar_days),
+      week_start: String(s.week_start),
+      scheduler_start_hour: String(s.scheduler_start_hour),
+      scheduler_end_hour: String(s.scheduler_end_hour),
+      scheduler_slot_minutes: String(s.scheduler_slot_minutes),
+      notification_enabled: String(s.notification_enabled),
+      notification_poll_interval: String(s.notification_poll_interval),
+      notification_query_window: String(s.notification_query_window),
+      global_hotkey_enabled: String(s.global_hotkey_enabled),
+      global_hotkey: s.global_hotkey,
+      notification_silent: String(s.notification_silent),
+      notification_timeout: s.notification_timeout,
+      ws_reconnect_interval_ms: String(s.ws_reconnect_interval_ms),
+      ws_enabled: String(s.ws_enabled),
+      reconnect_max_attempts: String(s.reconnect_max_attempts),
+      notify_on_disconnect: String(s.notify_on_disconnect),
     }).then(() => {
       shell.startNotificationPolling?.({
-        server_url: newSettings.server_url,
-        access_token: newSettings.access_token,
-        notification_poll_interval: String(newSettings.notification_poll_interval),
-        notification_query_window: String(newSettings.notification_query_window),
+        server_url: s.server_url,
+        access_token: s.access_token,
+        notification_poll_interval: String(s.notification_poll_interval),
+        notification_query_window: String(s.notification_query_window),
       });
     }).catch(() => { /* keep going */ });
-    setSettings(newSettings);
-    setDefaultTimezone(newSettings.timezone);
-    applyTheme(getTheme(newSettings.theme));
-    document.documentElement.style.setProperty("--app-font-family", newSettings.font_family);
-    document.documentElement.style.setProperty("--app-font-size", `${newSettings.font_size}px`);
-    setShowSettings(false);
   }, []);
 
-  const connectionOk = connectionStatus === "online";
+  const dotClass = connStatus.status === "online" ? " ok"
+    : connStatus.status === "token-error" ? " token-error"
+    : connStatus.status === "fingerprint" ? " token-error"
+    : connStatus.status === "key-mismatch" ? " token-error"
+    : connStatus.status === "checking" ? ""
+    : connStatus.status === "idle" ? " idle"
+    : " network-error";
+
+  const pillText = connStatus.status === "online"
+    ? (connStatus.serverVersion ? `API ${connStatus.serverVersion}` : "API 在线")
+    : connStatus.status === "checking" ? "API 检查中"
+    : connStatus.status === "token-error" ? "令牌无效"
+    : connStatus.status === "fingerprint" ? "指纹不匹配"
+    : connStatus.status === "key-mismatch" ? "密钥不匹配"
+    : connStatus.status === "replay-detected" ? "重放检测"
+    : connStatus.status === "idle" ? "已断开"
+    : "API 离线";
 
   return (
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar-drag">
-          <div className={`brand-dot${connectionOk ? " ok" : healthErrorKind === "token" ? " token-error" : healthError ? " network-error" : ""}`} />
+          <div className={`brand-dot${dotClass}`} />
           <span className="brand-title">AMToDo</span>
-          <span className={`server-pill${connectionOk ? " ok" : healthErrorKind === "token" ? " token-error" : healthError ? " network-error" : ""}`}>
-            {connectionOk ? (health ? `API ${health.version}` : "API 在线") : healthError ? "API 离线" : "API 检查中"}
+          <span className={`server-pill${dotClass}`}>
+            {pillText}
           </span>
         </div>
         {username ? (
@@ -449,20 +583,28 @@ export function App() {
               {tabLabels[tab]}
             </button>
           ))}
-          {wsStatus !== "connected" && (
-            <div className={`ws-banner ${wsStatus === "reconnecting" ? "ws-reconnecting" : "ws-disconnected"}`}>
+          {connStatus.status !== "online" && connStatus.status !== "checking" && (
+            <div className={`ws-banner ${
+              connStatus.status === "reconnecting" ? "ws-reconnecting"
+              : connStatus.status === "idle" ? "ws-idle"
+              : "ws-disconnected"
+            }`}>
               <div className="ws-dot" />
               <span className="ws-text">
-                {wsStatus === "reconnecting" ? "正在重连..." : "通知服务断开"}
+                {connStatus.status === "reconnecting" ? "正在重连..."
+                  : connStatus.status === "idle" ? "已手动断开"
+                  : connStatus.status === "token-error" ? "令牌无效"
+                  : connStatus.status === "fingerprint" ? "指纹不匹配"
+                  : connStatus.status === "key-mismatch" ? "密钥不匹配"
+                  : connStatus.status === "replay-detected" ? "重放检测"
+                  : connStatus.status === "offline" ? "服务不可达"
+                  : "服务断开"}
               </span>
-              {wsStatus === "disconnected" && (
-                <button className="ws-reconnect-btn" onClick={handleManualReconnect}>重连</button>
-              )}
             </div>
           )}
         </nav>
         <section className="content-panel">
-          {visitedTabs.has("todo") && (
+          {api && visitedTabs.has("todo") && (
             <div className="view-wrapper" data-active={activeTab === "todo" || undefined}>
               <TodoView
                 api={api}
@@ -476,10 +618,12 @@ export function App() {
                   setSettingsFocusTarget(focusTarget);
                   setShowSettings(true);
                 }}
+                connectionStatus={connStatus}
+                onConnectionError={handleConnectionError}
               />
             </div>
           )}
-          {visitedTabs.has("schedule") && (
+          {api && visitedTabs.has("schedule") && (
             <div className="view-wrapper" data-active={activeTab === "schedule" || undefined}>
               <ScheduleView
                 api={api}
@@ -497,10 +641,12 @@ export function App() {
                   setSettingsFocusTarget(focusTarget);
                   setShowSettings(true);
                 }}
+                connectionStatus={connStatus}
+                onConnectionError={handleConnectionError}
               />
             </div>
           )}
-          {visitedTabs.has("search") && (
+          {api && visitedTabs.has("search") && (
             <div className="view-wrapper" data-active={activeTab === "search" || undefined}>
               <SearchView
                 api={api}
@@ -512,15 +658,17 @@ export function App() {
                   setSettingsFocusTarget(focusTarget);
                   setShowSettings(true);
                 }}
+                connectionStatus={connStatus}
+                onConnectionError={handleConnectionError}
               />
             </div>
           )}
-          {visitedTabs.has("notify") && (
+          {api && visitedTabs.has("notify") && (
             <div className="view-wrapper" data-active={activeTab === "notify" || undefined}>
               <NotifyView api={api} settings={settings} onNavigate={handleMentionNavigate} />
             </div>
           )}
-          {visitedTabs.has("trash") && (
+          {api && visitedTabs.has("trash") && (
             <div className="view-wrapper" data-active={activeTab === "trash" || undefined}>
               <TrashView
                 api={api}
@@ -528,7 +676,38 @@ export function App() {
                   setSettingsFocusTarget(focusTarget);
                   setShowSettings(true);
                 }}
+                connectionStatus={connStatus}
+                onConnectionError={handleConnectionError}
               />
+            </div>
+          )}
+          {(connStatus.status === "idle" || connStatus.status === "offline" || connStatus.status === "token-error" || connStatus.status === "fingerprint" || connStatus.status === "key-mismatch" || connStatus.status === "replay-detected") && (
+            <div className={`signal-overlay${connStatus.status !== "idle" ? " signal-overlay-warn" : ""}`}>
+              <div className="signal-overlay-icon">
+                <div className="signal-overlay-wave" />
+                <div className="signal-overlay-wave" />
+                <div className="signal-overlay-wave" />
+                <svg viewBox="0 0 24 24">
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                  <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+                  <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+                  <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+                  <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+                  <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                  <line x1="12" y1="20" x2="12.01" y2="20" />
+                </svg>
+              </div>
+              <span className="signal-overlay-title">
+                {connStatus.status === "idle" ? "信号已关闭" : "信号中断"}
+              </span>
+              <span className="signal-overlay-sub">
+                {connStatus.status === "idle" ? "WebSocket 已手动断开"
+                  : connStatus.status === "token-error" ? "访问令牌无效或已过期"
+                  : connStatus.status === "fingerprint" ? "服务器公钥指纹不匹配"
+                  : connStatus.status === "key-mismatch" ? "服务端解密失败，密钥不一致"
+                  : connStatus.status === "replay-detected" ? "检测到重放攻击，连接已拒绝"
+                  : "与服务器的连接丢失"}
+              </span>
             </div>
           )}
         </section>
@@ -537,13 +716,36 @@ export function App() {
       {showSettings ? (
         <SettingsModal
           settings={settings}
-          onSave={handleSettingsSave}
+          onSave={(newSettings) => {
+            flushSettings(newSettings);
+            setSettings(newSettings);
+            setDefaultTimezone(newSettings.timezone);
+            applyTheme(getTheme(newSettings.theme));
+            document.documentElement.style.setProperty("--app-font-family", newSettings.font_family);
+            document.documentElement.style.setProperty("--app-font-size", `${newSettings.font_size}px`);
+            setShowSettings(false);
+          }}
+          onSaveConnection={(fields) => {
+            const entries: Record<string, string> = {};
+            for (const [k, v] of Object.entries(fields)) {
+              entries[k] = String(v);
+            }
+            shell.writeSettings(entries).catch(() => {});
+            setSettings((prev) => ({ ...prev, ...fields }));
+          }}
           onClose={() => setShowSettings(false)}
           focusTarget={settingsFocusTarget}
+          connectionStatus={connStatus}
+          onConnectionToggle={(enabled) => {
+            setSettings((prev) => ({ ...prev, ws_enabled: enabled }));
+          }}
+          onAcceptFingerprint={(fingerprint) => {
+            setSettings((prev) => ({ ...prev, known_key_fingerprint: fingerprint }));
+          }}
         />
       ) : null}
 
-      {crossTypeEdit ? (
+      {crossTypeEdit && api ? (
         <TodoDetailModal
           todo={crossTypeEdit.item}
           api={api}
