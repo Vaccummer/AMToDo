@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../api/client";
-import { importP256PublicKey } from "../crypto/envelope";
+import type { ConnectionStatusSnapshot } from "../api/connection-status";
+import { FingerprintMismatchError, fingerprintPublicKey, importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
 import type { UISettings } from "../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../themes";
@@ -25,28 +26,58 @@ const SCHEDULE_END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
   };
 });
 
+// ── Types ──
+
+type UrlCheckResult =
+  | { kind: "ok"; version: string; name?: string; publicKey?: string }
+  | { kind: "unreachable"; message: string }
+  | { kind: "invalid"; message: string }
+  | { kind: "fingerprint"; old: string; new: string };
+
+type TokenResult =
+  | { ok: true; userName: string }
+  | { ok: false; message: string };
+
 type Props = {
   settings: UISettings;
   onSave: (settings: UISettings) => void;
+  onSaveConnection?: (fields: Partial<UISettings>) => void;
   onClose: () => void;
   focusTarget?: "url" | "token";
+  connectionStatus?: ConnectionStatusSnapshot;
+  onConnectionToggle?: (enabled: boolean) => void;
+  onAcceptFingerprint?: (fingerprint: string) => void;
 };
 
-export function SettingsModal({ settings: initial, onSave, onClose, focusTarget }: Props) {
-  const [serverUrl, setServerUrl] = useState(initial.server_url);
+// ── Helpers ──
 
-  useEffect(() => {
-    if (!focusTarget) return;
-    const id = focusTarget === "url" ? "srv-url" : "srv-token";
-    requestAnimationFrame(() => {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      if (el) {
-        el.focus();
-        el.select();
-      }
-    });
-  }, [focusTarget]);
-  const [lanAddress, setLanAddress] = useState(initial.lan_address);
+const CHECK_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const CROSS_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="15" y1="9" x2="9" y2="15" />
+    <line x1="9" y1="9" x2="15" y2="15" />
+  </svg>
+);
+
+const WARN_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+// ── Main Component ──
+
+export function SettingsModal({ settings: initial, onSave, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
+  // Form fields
+  const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
   const [language, setLanguage] = useState(initial.language);
   const [timezone, setTimezone] = useState(initial.timezone);
@@ -57,19 +88,29 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
   const [slotMinutes, setSlotMinutes] = useState(String(initial.scheduler_slot_minutes));
   const [showToken, setShowToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("general");
 
-  // URL connection test
-  const [testingUrl, setTestingUrl] = useState(false);
-  const [urlTestResult, setUrlTestResult] = useState<{ ok: boolean; version?: string; message: string } | null>(null);
+  // Connection
+  const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
+  const [reconnectMaxAttempts, setReconnectMaxAttempts] = useState(String(initial.reconnect_max_attempts));
+  const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(initial.notify_on_disconnect);
+  const [lanAddress, setLanAddress] = useState(initial.lan_address || "");
+  const [lanLoading, setLanLoading] = useState(false);
+
+  // URL check
+  const [urlChecking, setUrlChecking] = useState(false);
+  const [urlCheckResult, setUrlCheckResult] = useState<UrlCheckResult | null>(null);
+  const storedPublicKeyRef = useRef<string | null>(null);
+  const validatedFingerprintRef = useRef<string | null>(null);
+
+  // Token verify
+  const [tokenVerifying, setTokenVerifying] = useState(false);
+  const [tokenResult, setTokenResult] = useState<TokenResult | null>(null);
+
+  // Toggle guard
+  const userToggledWsRef = useRef(false);
+
   const { ask, dialog: confirmDialog } = useConfirm();
-
-  // LAN address load
-  const [loadingLan, setLoadingLan] = useState(false);
-  const [lanLoadResult, setLanLoadResult] = useState<{ ok: boolean; message: string } | null>(null);
-
-  // Token verification
-  const [verifyingToken, setVerifyingToken] = useState(false);
-  const [tokenResult, setTokenResult] = useState<{ ok: boolean; userName?: string; message: string } | null>(null);
 
   // Cache
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
@@ -77,7 +118,6 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
 
   // Notification
   const [notifyEnabled, setNotifyEnabled] = useState(initial.notification_enabled);
-  const [pollInterval, setPollInterval] = useState(String(initial.notification_poll_interval));
   const [notifSilent, setNotifSilent] = useState(initial.notification_silent);
   const [notifTimeout, setNotifTimeout] = useState(initial.notification_timeout);
 
@@ -113,128 +153,156 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
     }
   }, []);
 
-  useEffect(() => {
-    setServerUrl(initial.server_url);
-    setLanAddress(initial.lan_address);
-    setAccessToken(initial.access_token);
-    setLanguage(initial.language);
-    setTimezone(initial.timezone);
-    setTheme(initial.theme);
-    setWeekStart(String(initial.week_start));
-    setScheduleStartHour(String(initial.scheduler_start_hour));
-    setScheduleEndHour(String(initial.scheduler_end_hour));
-    setSlotMinutes(String(initial.scheduler_slot_minutes));
-    setNotifyEnabled(initial.notification_enabled);
-    setPollInterval(String(initial.notification_poll_interval));
-    setNotifSilent(initial.notification_silent);
-    setNotifTimeout(initial.notification_timeout);
-    setHotkeyEnabled(initial.global_hotkey_enabled);
-    setHotkeyValue(initial.global_hotkey);
-    setRecording(false);
-    setHotkeyError(null);
-    setUrlTestResult(null);
-    setTokenResult(null);
-  }, [initial]);
+  // Check results reset when server URL changes (handled by handleUrlChange)
 
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
 
-  const dirty = useMemo(() => {
-    return (
-      serverUrl !== initial.server_url ||
-      lanAddress !== initial.lan_address ||
-      accessToken !== initial.access_token ||
-      language !== initial.language ||
-      timezone !== initial.timezone ||
-      theme !== initial.theme ||
-      Number(weekStart) !== initial.week_start ||
-      Number(scheduleStartHour) !== initial.scheduler_start_hour ||
-      Number(scheduleEndHour) !== initial.scheduler_end_hour ||
-      Number(slotMinutes) !== initial.scheduler_slot_minutes ||
-      notifyEnabled !== initial.notification_enabled ||
-      Number(pollInterval) !== initial.notification_poll_interval ||
-      notifSilent !== initial.notification_silent ||
-      notifTimeout !== initial.notification_timeout ||
-      hotkeyEnabled !== initial.global_hotkey_enabled ||
-      hotkeyValue !== initial.global_hotkey
-    );
-  }, [
-    serverUrl,
-    lanAddress,
-    accessToken,
-    language,
-    timezone,
-    theme,
-    weekStart,
-    scheduleStartHour,
-    scheduleEndHour,
-    slotMinutes,
-    notifyEnabled,
-    pollInterval,
-    notifSilent,
-    notifTimeout,
-    hotkeyEnabled,
-    hotkeyValue,
-    initial
-  ]);
-
-  const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
-  const canSave = dirty && validScheduleHours;
-  const urlInputClass = [
-    "settings-modal-input",
-    urlTestResult ? (urlTestResult.ok ? "valid" : "invalid") : ""
-  ].filter(Boolean).join(" ");
-  const lanInputClass = [
-    "settings-modal-input",
-    lanLoadResult ? (lanLoadResult.ok ? "valid" : "invalid") : ""
-  ].filter(Boolean).join(" ");
-  const tokenInputClass = [
-    "settings-modal-input",
-    tokenResult ? (tokenResult.ok ? "valid" : "invalid") : ""
-  ].filter(Boolean).join(" ");
-
-  async function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      if (dirty) {
-        const ok = await ask({
-          title: "放弃更改",
-          message: "有未保存的更改，确定关闭吗？",
-          confirmLabel: "关闭",
-          danger: true,
-        });
-        if (!ok) return;
-      }
-      onClose();
+  // Auto-revert wsEnabled if connection fails after user toggle
+  useEffect(() => {
+    if (!userToggledWsRef.current) return;
+    if (!wsEnabled) return;
+    const s = connectionStatus?.status;
+    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
+      userToggledWsRef.current = false;
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+    } else if (s === "online") {
+      userToggledWsRef.current = false;
     }
-  }
+  }, [connectionStatus?.status, wsEnabled, onConnectionToggle]);
 
-  async function handleTestUrl() {
-    setTestingUrl(true);
-    setUrlTestResult(null);
+  // ── Connection logic ──
+
+  async function checkUrl(): Promise<boolean> {
+    if (!serverUrl) {
+      setUrlCheckResult(null);
+      storedPublicKeyRef.current = null;
+      return false;
+    }
+    setUrlChecking(true);
+    setUrlCheckResult(null);
+    setTokenResult(null);
+    storedPublicKeyRef.current = null;
     try {
+      onSaveConnection?.({ server_url: serverUrl });
+
       const api = new AMToDoApi(serverUrl, null);
       const result = await api.health();
-      setUrlTestResult({ ok: true, version: result.version, message: `连接成功 (${result.version})` });
+
+      // Validate response format
+      if (!result || typeof result.version !== "string") {
+        setUrlCheckResult({ kind: "invalid", message: "响应格式异常 — 服务器返回了非预期的响应格式" });
+        return false;
+      }
+
+      // Check public key fingerprint
+      if (result.public_key) {
+        const storedFp = serverUrl === initial.server_url ? initial.known_key_fingerprint : "";
+        try {
+          await verifyOrEnrollKey(result.public_key, storedFp);
+          storedPublicKeyRef.current = result.public_key;
+        } catch (e) {
+          if (e instanceof FingerprintMismatchError) {
+            setUrlCheckResult({ kind: "fingerprint", old: e.expected, new: e.actual });
+            return false;
+          }
+          throw e;
+        }
+      }
+
+      // Save fingerprint on success
+      if (result.public_key) {
+        const fp = await fingerprintPublicKey(result.public_key);
+        validatedFingerprintRef.current = fp;
+        onSaveConnection?.({ known_key_fingerprint: fp });
+      }
+
+      setUrlCheckResult({ kind: "ok", version: result.version, name: result.name, publicKey: result.public_key });
+      return true;
     } catch (err: unknown) {
-      setUrlTestResult({ ok: false, message: err instanceof Error ? err.message : "连接失败" });
+      const msg = err instanceof Error ? err.message : "连接失败";
+      setUrlCheckResult({ kind: "unreachable", message: msg });
+      return false;
     } finally {
-      setTestingUrl(false);
+      setUrlChecking(false);
     }
   }
 
-  async function handleLoadFromLan() {
+  function handleUrlChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    setServerUrl(value);
+    if (urlCheckResult) {
+      setUrlCheckResult(null);
+      storedPublicKeyRef.current = null;
+      validatedFingerprintRef.current = null;
+      setTokenResult(null);
+    }
+  }
+
+  async function verifyToken(opts?: { skipUrlCheck?: boolean }): Promise<boolean> {
+    if (accessToken) {
+      onSaveConnection?.({ access_token: accessToken });
+    }
+    if (!accessToken) return false;
+    if (!opts?.skipUrlCheck && urlCheckResult?.kind !== "ok") return false;
+    setTokenVerifying(true);
+    setTokenResult(null);
+    try {
+      const pubKey = storedPublicKeyRef.current;
+      let api: AMToDoApi;
+      if (pubKey) {
+        const p256Key = await importP256PublicKey(pubKey);
+        api = new AMToDoApi(serverUrl, accessToken, p256Key);
+      } else {
+        api = new AMToDoApi(serverUrl, accessToken);
+      }
+      const result = await api.user();
+      if (result.ok) {
+        setTokenResult({ ok: true, userName: result.user.name });
+        return true;
+      } else {
+        setTokenResult({ ok: false, message: "令牌无效" });
+        return false;
+      }
+    } catch (err: unknown) {
+      setTokenResult({ ok: false, message: err instanceof Error ? err.message : "验证失败" });
+      return false;
+    } finally {
+      setTokenVerifying(false);
+    }
+  }
+
+  function handleReconnectBlur() {
+    const n = Number(reconnectMaxAttempts);
+    if (!Number.isFinite(n) || n < 0) {
+      setReconnectMaxAttempts("3");
+    }
+  }
+
+  function handleNotifyDisconnectToggle() {
+    setNotifyOnDisconnect((v) => !v);
+  }
+
+  function handleTokenChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    setAccessToken(value);
+    if (tokenResult) setTokenResult(null);
+  }
+
+  // LAN address: fetch and write to URL input
+  async function handleLanFetch() {
     if (!lanAddress) return;
-    setLoadingLan(true);
-    setLanLoadResult(null);
+    setLanLoading(true);
     try {
       const api = new AMToDoApi(lanAddress, null);
       const result = await api.health();
       if (!result.ipv4 && !result.ipv6) {
-        setLanLoadResult({ ok: false, message: "服务器未返回公网地址" });
+        // Just use LAN address directly
+        setServerUrl(lanAddress);
         return;
       }
-      // Verify addresses with short timeout, prefer IPv6
       const url = new URL(lanAddress);
       const port = url.port;
       const candidates: string[] = [];
@@ -245,67 +313,98 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
           const verifyApi = new AMToDoApi(candidate, null);
           await Promise.race([
             verifyApi.health(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000)),
           ]);
           setServerUrl(candidate);
-          setLanLoadResult({ ok: true, message: `已获取并验证公网地址: ${candidate}` });
           return;
         } catch {
           continue;
         }
       }
-      setLanLoadResult({ ok: false, message: "获取的公网地址均不可达" });
-    } catch (err: unknown) {
-      setLanLoadResult({ ok: false, message: err instanceof Error ? err.message : "连接失败" });
+      // Fallback: use LAN address
+      setServerUrl(lanAddress);
+    } catch {
+      setServerUrl(lanAddress);
     } finally {
-      setLoadingLan(false);
+      setLanLoading(false);
     }
   }
 
-  async function handleVerifyToken() {
-    setVerifyingToken(true);
-    setTokenResult(null);
-    try {
-      const plainApi = new AMToDoApi(serverUrl, null);
-      const healthResult = await plainApi.health();
-      let api: AMToDoApi;
-      if (healthResult.public_key) {
-        const p256Key = await importP256PublicKey(healthResult.public_key);
-        api = new AMToDoApi(serverUrl, accessToken, p256Key);
-      } else {
-        api = new AMToDoApi(serverUrl, accessToken);
-      }
-      const result = await api.user();
-      if (result.ok) {
-        setTokenResult({ ok: true, userName: result.user.name, message: `令牌有效 — 用户: ${result.user.name}` });
-      } else {
-        setTokenResult({ ok: false, message: "令牌无效" });
-      }
-    } catch (err: unknown) {
-      setTokenResult({ ok: false, message: err instanceof Error ? err.message : "验证失败" });
-    } finally {
-      setVerifyingToken(false);
+  // Connection toggle
+  async function handleWsToggle() {
+    if (wsEnabled) {
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+      return;
+    }
+
+    // ── Turning ON: validate URL and token first ──
+    // 1. URL check (skip if already passed)
+    let urlOk = urlCheckResult?.kind === "ok";
+    if (!urlOk) {
+      urlOk = await checkUrl();
+      if (!urlOk) return; // URL check failed — abort
+    }
+
+    // 2. Token verification (skip if already passed)
+    let tokenOk = tokenResult?.ok === true;
+    if (!tokenOk) {
+      tokenOk = await verifyToken({ skipUrlCheck: true });
+      if (!tokenOk) return; // Token check failed — abort
+    }
+
+    // Both checks passed — enable
+    setWsEnabled(true);
+    userToggledWsRef.current = true;
+    onSaveConnection?.({ ws_enabled: true });
+    onConnectionToggle?.(true);
+  }
+
+  // Fingerprint accept/reject (from connectionStatus prop)
+  function handleAcceptFingerprint() {
+    if (urlCheckResult?.kind === "fingerprint") {
+      onSaveConnection?.({ known_key_fingerprint: urlCheckResult.new });
+      onAcceptFingerprint?.(urlCheckResult.new);
+      setTimeout(() => checkUrl(), 100);
     }
   }
 
-  async function handleClearCache() {
-    const ok = await ask({
-      title: "清除缓存",
-      message: "确定清除所有附件缓存吗？下次查看附件时需要重新下载。",
-      confirmLabel: "清除",
-      danger: true,
-    });
-    if (!ok) return;
-    setClearingCache(true);
-    try {
-      await clearAttachmentCache();
-      await loadCacheSize();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "缓存清除失败");
-    } finally {
-      setClearingCache(false);
-    }
+  function handleRejectFingerprint() {
+    setUrlCheckResult(null);
+    storedPublicKeyRef.current = null;
   }
+
+  const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
+
+  const dirty = useMemo(() => {
+    return (
+      serverUrl !== initial.server_url ||
+      accessToken !== initial.access_token ||
+      language !== initial.language ||
+      timezone !== initial.timezone ||
+      theme !== initial.theme ||
+      Number(weekStart) !== initial.week_start ||
+      Number(scheduleStartHour) !== initial.scheduler_start_hour ||
+      Number(scheduleEndHour) !== initial.scheduler_end_hour ||
+      Number(slotMinutes) !== initial.scheduler_slot_minutes ||
+      notifyEnabled !== initial.notification_enabled ||
+      notifSilent !== initial.notification_silent ||
+      notifTimeout !== initial.notification_timeout ||
+      wsEnabled !== initial.ws_enabled ||
+      Number(reconnectMaxAttempts) !== initial.reconnect_max_attempts ||
+      notifyOnDisconnect !== initial.notify_on_disconnect ||
+      hotkeyEnabled !== initial.global_hotkey_enabled ||
+      hotkeyValue !== initial.global_hotkey
+    );
+  }, [
+    serverUrl, accessToken, language, timezone, theme, weekStart,
+    scheduleStartHour, scheduleEndHour, slotMinutes,
+    notifyEnabled, notifSilent, notifTimeout,
+    wsEnabled, reconnectMaxAttempts, notifyOnDisconnect,
+    hotkeyEnabled, hotkeyValue, initial,
+  ]);
+
+  const canSave = dirty && validScheduleHours;
 
   function handleSave() {
     setError(null);
@@ -329,10 +428,14 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
       global_hotkey_enabled: hotkeyEnabled,
       global_hotkey: hotkeyValue,
       notification_enabled: notifyEnabled,
-      notification_poll_interval: Number(pollInterval),
-      notification_query_window: Number(pollInterval) * 2,
+      notification_poll_interval: initial.notification_poll_interval,
+      notification_query_window: initial.notification_query_window,
       notification_silent: notifSilent,
       notification_timeout: notifTimeout,
+      ws_enabled: wsEnabled,
+      reconnect_max_attempts: Number(reconnectMaxAttempts),
+      notify_on_disconnect: notifyOnDisconnect,
+      ws_reconnect_interval_ms: initial.ws_reconnect_interval_ms,
     };
     onSave(updated);
     if (hotkeyEnabled && hotkeyValue) {
@@ -345,6 +448,63 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
       window.amtodoShell?.unregisterHotkey?.();
     }
   }
+
+  // Connection section state
+  const connLocked = wsEnabled;
+  const urlCheckPassed = urlCheckResult?.kind === "ok";
+  const tokenEditable = urlCheckPassed && !connLocked;
+
+  // Input classes
+  const urlInputClass = [
+    "settings-modal-input",
+    urlCheckResult?.kind === "ok" ? "url-ok" : "",
+    urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" ? "url-err" : "",
+    urlCheckResult?.kind === "fingerprint" ? "url-warn" : "",
+  ].filter(Boolean).join(" ");
+
+  const tokenInputClass = [
+    "settings-modal-input",
+    tokenResult?.ok === true ? "token-ok" : "",
+    tokenResult?.ok === false ? "token-err" : "",
+  ].filter(Boolean).join(" ");
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      onClose();
+    }
+  }
+
+  async function handleClearCache() {
+    const ok = await ask({
+      title: "清除缓存",
+      message: "确定清除所有附件缓存吗？下次查看附件时需要重新下载。",
+      confirmLabel: "清除",
+      danger: true,
+    });
+    if (!ok) return;
+    setClearingCache(true);
+    try {
+      await clearAttachmentCache();
+      await loadCacheSize();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "缓存清除失败");
+    } finally {
+      setClearingCache(false);
+    }
+  }
+
+  // Register/unregister global hotkey when settings change
+  useEffect(() => {
+    if (hotkeyEnabled && hotkeyValue) {
+      window.amtodoShell?.registerHotkey?.(hotkeyValue)?.then?.((result: { ok: boolean; error?: string }) => {
+        if (!result?.ok) {
+          setHotkeyError(result?.error || "快捷键注册失败");
+        }
+      });
+    } else {
+      window.amtodoShell?.unregisterHotkey?.();
+    }
+  }, [hotkeyEnabled, hotkeyValue]);
 
   function formatKeyCombo(e: React.KeyboardEvent): string | null {
     const parts: string[] = [];
@@ -366,7 +526,7 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
     else if (key === "ArrowRight") keyName = "Right";
 
     parts.push(keyName);
-    if (parts.length < 2) return null; // must have at least one modifier
+    if (parts.length < 2) return null;
     return parts.join("+");
   }
 
@@ -381,6 +541,139 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
       setHotkeyError(null);
     }
   }
+
+  // ── Render helpers ──
+
+  function renderUrlStatus() {
+    if (urlChecking) {
+      return (
+        <div className="settings-conn-status">
+          <div className="settings-conn-status-inline" style={{ color: "var(--global-text-secondary)" }}>
+            <span className="settings-modal-spinner" />
+            正在检测连接...
+          </div>
+        </div>
+      );
+    }
+    if (!urlCheckResult) return null;
+
+    switch (urlCheckResult.kind) {
+      case "ok":
+        return (
+          <div className="settings-conn-status">
+            <div className="settings-conn-status-card ok">
+              <div className="settings-conn-card-icon">{CHECK_ICON}</div>
+              <div className="settings-conn-card-body">
+                <div className="settings-conn-card-title">连接成功</div>
+                <div className="settings-conn-card-desc">
+                  服务器 {urlCheckResult.name ?? ""} v{urlCheckResult.version}，一切正常
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "unreachable":
+        return (
+          <div className="settings-conn-status">
+            <div className="settings-conn-status-card err">
+              <div className="settings-conn-card-icon">{CROSS_ICON}</div>
+              <div className="settings-conn-card-body">
+                <div className="settings-conn-card-title">连接失败</div>
+                <div className="settings-conn-card-desc">
+                  {urlCheckResult.message || "无法访问服务器，请检查地址是否正确、网络是否通畅"}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "invalid":
+        return (
+          <div className="settings-conn-status">
+            <div className="settings-conn-status-inline err">
+              {CROSS_ICON}
+              {urlCheckResult.message}
+            </div>
+          </div>
+        );
+      case "fingerprint":
+        return (
+          <div className="settings-conn-status">
+            <div className="settings-conn-status-inline warn">
+              {WARN_ICON}
+              公钥指纹不匹配 — 服务器返回了与本地记录不同的指纹
+            </div>
+            <div className="settings-conn-fp-inline" style={{ marginTop: 6 }}>
+              <div className="settings-conn-fp-title">
+                {WARN_ICON}
+                指纹已变更
+              </div>
+              <div className="settings-conn-fp-hashes">
+                <div className="settings-conn-fp-hash-row">
+                  <span className="settings-conn-fp-hash-label">本地记录</span>
+                  <code className="settings-conn-fp-hash old">{urlCheckResult.old}</code>
+                </div>
+                <div className="settings-conn-fp-hash-row">
+                  <span className="settings-conn-fp-hash-label">服务器新指纹</span>
+                  <code className="settings-conn-fp-hash new">{urlCheckResult.new}</code>
+                </div>
+              </div>
+              <div className="settings-conn-fp-actions">
+                <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-accept" onClick={handleAcceptFingerprint}>
+                  信任新指纹
+                </button>
+                <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-reject" onClick={handleRejectFingerprint}>
+                  拒绝
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  }
+
+  function renderTokenStatus() {
+    if (tokenVerifying) {
+      return (
+        <div className="settings-conn-status">
+          <div className="settings-conn-status-inline" style={{ color: "var(--global-text-secondary)" }}>
+            <span className="settings-modal-spinner" />
+            正在验证令牌...
+          </div>
+        </div>
+      );
+    }
+    if (!tokenResult) return null;
+
+    if (tokenResult.ok) {
+      return (
+        <div className="settings-conn-status">
+          <div className="settings-conn-status-card ok">
+            <div className="settings-conn-card-icon">{CHECK_ICON}</div>
+            <div className="settings-conn-card-body">
+              <div className="settings-conn-card-title">令牌有效</div>
+              <div className="settings-conn-card-desc">用户: {tokenResult.userName}</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="settings-conn-status">
+        <div className="settings-conn-status-card err">
+          <div className="settings-conn-card-icon">{CROSS_ICON}</div>
+          <div className="settings-conn-card-body">
+            <div className="settings-conn-card-title">令牌无效</div>
+            <div className="settings-conn-card-desc">
+              服务器已连接，但拒绝了此访问令牌。请确认令牌正确或重新生成。
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── JSX ──
 
   return (
     <div className="settings-modal-backdrop" onKeyDown={handleKeyDown}>
@@ -398,114 +691,206 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
           </button>
         </div>
 
+        <div className="settings-modal-tabs" role="tablist">
+          {([["general", "通用"], ["connection", "连接"], ["notification", "通知"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={activeSettingsTab === key}
+              className={`settings-modal-tab${activeSettingsTab === key ? " active" : ""}`}
+              onClick={() => setActiveSettingsTab(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="settings-modal-body">
-          {/* Server Connection */}
-          <div className="settings-modal-section-label">服务器连接</div>
+          {/* ══════════════════════════════════════ */}
+          {/* Connection Section (unified block)     */}
+          {/* ══════════════════════════════════════ */}
+          {activeSettingsTab === "connection" && (<>
+          <div className="settings-modal-section-label">连接设置</div>
 
-          <div className="settings-modal-field">
-            <label className="settings-modal-label" htmlFor="lan-addr">内网地址</label>
-            <div className="settings-modal-input-row">
-              <input
-                id="lan-addr"
-                type="text"
-                className={lanInputClass}
-                value={lanAddress}
-                onChange={(e) => { setLanAddress(e.target.value); setLanLoadResult(null); }}
-                placeholder="http://192.168.x.x:8000"
-              />
+          <div className="settings-conn-section">
+            <div className="settings-conn-header">
+              <span className="settings-conn-header-label">连接总开关</span>
               <button
                 type="button"
-                className="settings-modal-inline-btn"
-                disabled={loadingLan || !lanAddress}
-                onClick={handleLoadFromLan}
+                className={`toggle-switch${wsEnabled ? " on" : ""}`}
+                onClick={handleWsToggle}
+                disabled={false}
+                role="switch"
+                aria-checked={wsEnabled}
+                aria-label="连接总开关"
               >
-                {loadingLan ? "加载中..." : "加载"}
+                <span className="toggle-thumb" />
               </button>
             </div>
-            {lanLoadResult ? (
-              <span className={`settings-modal-field-msg ${lanLoadResult.ok ? "ok" : "err"}`}>
-                {lanLoadResult.message}
-              </span>
-            ) : null}
-          </div>
 
-          <div className="settings-modal-field">
-            <label className="settings-modal-label" htmlFor="srv-url">服务器地址</label>
-            <div className="settings-modal-input-row">
-              <input
-                id="srv-url"
-                type="text"
-                className={urlInputClass}
-                value={serverUrl}
-                onChange={(e) => { setServerUrl(e.target.value); setUrlTestResult(null); }}
-              />
-              <button
-                type="button"
-                className="settings-modal-inline-btn"
-                disabled={testingUrl || !serverUrl}
-                onClick={handleTestUrl}
-              >
-                {testingUrl ? "检测中..." : "检测"}
-              </button>
-            </div>
-            {urlTestResult ? (
-              <span className={`settings-modal-field-msg ${urlTestResult.ok ? "ok" : "err"}`}>
-                {urlTestResult.message}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="settings-modal-field">
-            <label className="settings-modal-label" htmlFor="srv-token">访问令牌</label>
-            <div className="settings-modal-input-row">
-              <div className="settings-modal-input-wrap">
-                <input
-                  id="srv-token"
-                  type={showToken ? "text" : "password"}
-                  className={tokenInputClass}
-                  value={accessToken}
-                  onChange={(e) => { setAccessToken(e.target.value); setTokenResult(null); }}
-                />
-                <button
-                  type="button"
-                  className="settings-modal-input-eye"
-                  onClick={() => setShowToken((v) => !v)}
-                  title={showToken ? "隐藏" : "显示"}
-                >
-                  {showToken ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
-                </button>
+            <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
+              {/* LAN Address */}
+              <div className="settings-modal-field">
+                <label className="settings-modal-label" htmlFor="lan-addr">内网地址</label>
+                <div className="settings-conn-lan-row">
+                  <input
+                    id="lan-addr"
+                    type="text"
+                    className="settings-modal-input"
+                    value={lanAddress}
+                    onChange={(e) => setLanAddress(e.target.value)}
+                    placeholder="http://192.168.x.x:8000"
+                    disabled={connLocked}
+                  />
+                  <button
+                    type="button"
+                    className="settings-conn-lan-btn"
+                    onClick={handleLanFetch}
+                    disabled={connLocked || !lanAddress || lanLoading}
+                  >
+                    {lanLoading ? "获取中..." : "获取"}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                className="settings-modal-inline-btn"
-                disabled={verifyingToken || !serverUrl || !accessToken}
-                onClick={handleVerifyToken}
-              >
-                {verifyingToken ? "验证中..." : "验证"}
-              </button>
-            </div>
-            {tokenResult ? (
-              <span className={`settings-modal-field-msg ${tokenResult.ok ? "ok" : "err"}`}>
-                {tokenResult.message}
-              </span>
-            ) : (
-              <span className="settings-modal-hint">修改后需要重新连接服务器</span>
-            )}
-          </div>
 
+              {/* Server URL */}
+              <div className="settings-modal-field">
+                <label className="settings-modal-label" htmlFor="srv-url">服务器地址</label>
+                <div className="settings-conn-input-row">
+                  <input
+                    id="srv-url"
+                    type="text"
+                    className={urlInputClass}
+                    value={serverUrl}
+                    onChange={handleUrlChange}
+                    disabled={connLocked}
+                    placeholder="http://127.0.0.1:8000"
+                  />
+                  <button
+                    type="button"
+                    className="settings-conn-lan-btn"
+                    onClick={() => checkUrl()}
+                    disabled={connLocked || !serverUrl || urlChecking}
+                  >
+                    {urlChecking ? "检测中..." : "检测"}
+                  </button>
+                </div>
+                {renderUrlStatus()}
+              </div>
+
+              {/* Access Token */}
+              <div className={`settings-modal-field${!tokenEditable ? " settings-conn-field-disabled" : ""}`}>
+                <label className="settings-modal-label" htmlFor="srv-token">
+                  访问令牌
+                  {!tokenEditable && !connLocked && (
+                    <span className="settings-conn-field-hint">请先检测服务器地址</span>
+                  )}
+                </label>
+                <div className="settings-conn-input-row">
+                  <div className="settings-modal-input-wrap" style={{ flex: 1 }}>
+                    <input
+                      id="srv-token"
+                      type={showToken ? "text" : "password"}
+                      className={tokenInputClass}
+                      value={accessToken}
+                      onChange={handleTokenChange}
+                      disabled={!tokenEditable}
+                      placeholder={!tokenEditable && !connLocked ? "请先完成服务器地址检测" : "输入访问令牌"}
+                    />
+                    <button
+                      type="button"
+                      className="settings-modal-input-eye"
+                      onClick={() => setShowToken((v) => !v)}
+                      title={showToken ? "隐藏" : "显示"}
+                      disabled={!tokenEditable}
+                    >
+                      {showToken ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-conn-lan-btn"
+                    onClick={() => verifyToken()}
+                    disabled={!tokenEditable || !accessToken || tokenVerifying}
+                  >
+                    {tokenVerifying ? "验证中..." : "验证"}
+                  </button>
+                </div>
+                {renderTokenStatus()}
+              </div>
+
+              {/* Connection sub-settings */}
+              <div className="settings-modal-divider" style={{ margin: "2px 0" }} />
+
+              <div className="notify-sub-card" style={{ background: "transparent", border: "none", padding: 0 }}>
+                <div className="notify-sub-row">
+                  <div className="notify-sub-left">
+                    <span className="notify-sub-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    </span>
+                    <span className="notify-sub-label">最大重连次数</span>
+                  </div>
+                  <div className="notify-sub-right">
+                    <input
+                      type="number"
+                      className="settings-modal-input"
+                      style={{ width: 80, textAlign: "right" }}
+                      value={reconnectMaxAttempts}
+                      min={0}
+                      disabled={connLocked}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
+                      }}
+                      onBlur={handleReconnectBlur}
+                    />
+                    <span className="notify-sub-hint">次 (0=无限)</span>
+                  </div>
+                </div>
+                <div className="notify-sub-row">
+                  <div className="notify-sub-left">
+                    <span className="notify-sub-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </span>
+                    <span className="notify-sub-label">断开时标签提醒</span>
+                  </div>
+                  <div className="notify-sub-right">
+                    <span className="notify-sub-hint">断开连接时在侧边栏显示提醒</span>
+                    <button
+                      type="button"
+                      className={`toggle-switch${notifyOnDisconnect ? " on" : ""}`}
+                      onClick={handleNotifyDisconnectToggle}
+                      disabled={connLocked}
+                      role="switch"
+                      aria-checked={notifyOnDisconnect}
+                      aria-label="断开时标签提醒"
+                    >
+                      <span className="toggle-thumb" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </>)}
+
+          {activeSettingsTab === "general" && (<>
           <div className="settings-modal-divider" />
 
-          {/* Display */}
+          {/* ══════════════════════════════════════ */}
+          {/* Display                                */}
+          {/* ══════════════════════════════════════ */}
           <div className="settings-modal-section-label">显示设置</div>
 
           <div className="settings-modal-field-row">
@@ -556,7 +941,9 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
 
           <div className="settings-modal-divider" />
 
-          {/* Schedule */}
+          {/* ══════════════════════════════════════ */}
+          {/* Schedule                               */}
+          {/* ══════════════════════════════════════ */}
           <div className="settings-modal-section-label">Schedule设置</div>
 
           <div className="settings-modal-field-row">
@@ -599,13 +986,14 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
               />
             </div>
           </div>
+          </>)}
 
-          <div className="settings-modal-divider" />
-
-          {/* Notification — merged */}
+          {/* ══════════════════════════════════════ */}
+          {/* Notification                           */}
+          {/* ══════════════════════════════════════ */}
+          {activeSettingsTab === "notification" && (<>
           <div className="settings-modal-section-label">通知设置</div>
 
-          {/* Master toggle */}
           <div className="notify-master-row">
             <div className="notify-master-left">
               <div className={`notify-master-icon${notifyEnabled ? "" : " off"}`}>
@@ -619,7 +1007,7 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
                   {notifyEnabled ? "启用通知" : "通知已关闭"}
                 </span>
                 <span className="notify-master-sub">
-                  {notifyEnabled ? "自动检查服务器上的新通知并弹窗提醒" : "开启后将自动检查新通知并弹窗提醒"}
+                  {notifyEnabled ? "服务器通过 WebSocket 实时推送新通知" : "开启后将通过 WebSocket 实时接收通知"}
                 </span>
               </div>
             </div>
@@ -635,34 +1023,7 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
             </button>
           </div>
 
-          {/* Sub-settings */}
           <div className={`notify-sub-card${notifyEnabled ? "" : " disabled"}`}>
-            <div className="notify-sub-row">
-              <div className="notify-sub-left">
-                <span className="notify-sub-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                </span>
-                <span className="notify-sub-label">轮询间隔</span>
-              </div>
-              <div className="notify-sub-right">
-                <input
-                  type="number"
-                  className="settings-modal-input"
-                  style={{ width: 80, textAlign: "right" }}
-                  value={pollInterval}
-                  min={1}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "" || /^\d+$/.test(v)) setPollInterval(v);
-                  }}
-                  onBlur={() => {
-                    const n = Number(pollInterval);
-                    if (!n || n < 1) setPollInterval("1");
-                  }}
-                />
-                <span className="notify-sub-hint">秒</span>
-              </div>
-            </div>
             <div className="notify-sub-row">
               <div className="notify-sub-left">
                 <span className="notify-sub-icon">
@@ -703,10 +1064,14 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
               </div>
             </div>
           </div>
+          </>)}
 
+          {activeSettingsTab === "general" && (<>
           <div className="settings-modal-divider" />
 
-          {/* Global Hotkey */}
+          {/* ══════════════════════════════════════ */}
+          {/* Global Hotkey                          */}
+          {/* ══════════════════════════════════════ */}
           <div className="settings-modal-section-label">全局快捷键</div>
 
           <div className="settings-modal-field">
@@ -757,27 +1122,39 @@ export function SettingsModal({ settings: initial, onSave, onClose, focusTarget 
 
           <div className="settings-modal-divider" />
 
-          {/* Cache */}
+          {/* ══════════════════════════════════════ */}
+          {/* Cache                                  */}
+          {/* ══════════════════════════════════════ */}
           <div className="settings-modal-section-label">缓存</div>
 
-          <div className="settings-modal-field">
-            <span className="settings-modal-label">附件缓存</span>
-            <div className="settings-modal-input-row">
-              <span className="settings-modal-cache-info">
-                {cacheSize
-                  ? `${cacheSize.count} 个文件，共 ${formatSize(cacheSize.bytes)}`
-                  : "加载中..."}
-              </span>
-              <button
-                type="button"
-                className="settings-modal-inline-btn settings-modal-cache-clear"
-                disabled={clearingCache || !cacheSize || cacheSize.count === 0}
-                onClick={handleClearCache}
-              >
-                {clearingCache ? "清除中..." : "清除"}
-              </button>
+          <div className="cache-compact-card">
+            <div className="cache-compact-left">
+              <div className="cache-compact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </div>
+              <div className="cache-compact-text">
+                <span className="cache-compact-title">附件缓存</span>
+                <span className="cache-compact-detail">
+                  {cacheSize
+                    ? `${cacheSize.count} 个文件 · ${formatSize(cacheSize.bytes)}`
+                    : "加载中..."}
+                </span>
+              </div>
             </div>
+            <button
+              type="button"
+              className="cache-compact-btn"
+              disabled={clearingCache || !cacheSize || cacheSize.count === 0}
+              onClick={handleClearCache}
+            >
+              {clearingCache ? "清除中..." : "清除"}
+            </button>
           </div>
+          </>)}
         </div>
 
         {error ? <div className="settings-modal-error">{error}</div> : null}

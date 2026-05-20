@@ -1042,6 +1042,46 @@
   color: var(--modals-settings-save-btn);
 }
 
+.settings-modal-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--modals-settings-border);
+}
+
+.settings-modal-tab {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--global-text-muted);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.settings-modal-tab:hover {
+  color: var(--global-text-secondary);
+}
+
+.settings-modal-tab.active {
+  color: var(--modals-settings-save-btn);
+  font-weight: 600;
+}
+
+.settings-modal-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--modals-settings-save-btn);
+  border-radius: 1px 1px 0 0;
+}
+
 .settings-modal-body {
   overflow-y: auto;
   padding: 16px 22px;
@@ -1443,14 +1483,88 @@
   margin-top: 2px;
 }
 
-.settings-modal-cache-info {
-  font-size: var(--font-md);
-  color: var(--global-surface-muted);
-  line-height: 32px;
+/* ── Cache compact card (方案C) ── */
+
+.cache-compact-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--global-surface-bg);
+  border: 1px solid var(--global-surface-line, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  transition: border-color var(--duration-fast);
 }
 
-.settings-modal-cache-clear {
-  min-width: 60px;
+.cache-compact-card:hover {
+  border-color: var(--modals-settings-border);
+}
+
+.cache-compact-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cache-compact-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(74, 111, 165, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cache-compact-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--status-primary-base, #4a6fa5);
+}
+
+.cache-compact-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cache-compact-title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--global-surface-text);
+  letter-spacing: 0.3px;
+}
+
+.cache-compact-detail {
+  font-size: var(--font-xs);
+  color: var(--global-surface-muted);
+}
+
+.cache-compact-btn {
+  font-family: var(--font-family);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border: 1px solid var(--global-surface-line, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--status-primary-base, #4a6fa5);
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.cache-compact-btn:hover:not(:disabled) {
+  background: rgba(74, 111, 165, 0.06);
+  border-color: var(--status-primary-base, #4a6fa5);
+}
+
+.cache-compact-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .settings-modal-field-err {
@@ -1469,7 +1583,7 @@
   padding: 12px 16px;
   background: var(--modals-settings-input-bg);
   border: 1px solid var(--modals-settings-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .notify-master-left {
@@ -1523,8 +1637,10 @@
 .notify-sub-card {
   background: var(--modals-settings-input-bg);
   border: 1px solid var(--modals-settings-border);
-  border-radius: var(--radius-md);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   padding: 14px 16px;
+  margin-top: -1px;
   display: flex;
   flex-direction: column;
   transition: opacity 0.25s, filter 0.25s;
@@ -1583,6 +1699,45 @@
   font-size: var(--font-base);
   color: var(--modals-schedule-text-light);
 }
+
+/* Reconnect interval slider */
+.reconnect-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--modals-settings-border);
+  outline: none;
+  cursor: pointer;
+}
+
+.reconnect-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--modals-settings-save-btn);
+  border: 2px solid var(--surface-card, #fff);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.reconnect-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.reconnect-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--modals-settings-save-btn);
+  border: 2px solid var(--surface-card, #fff);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+}
+
 
 .settings-modal-divider {
   height: 1px;
@@ -1915,4 +2070,591 @@
   margin-top: 2px;
   font-size: var(--font-sm);
   color: var(--status-danger-hover);
+}
+
+/* ── Connection Status Card ── */
+
+.settings-modal-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  margin-top: 6px;
+}
+
+.settings-modal-status-card.ok {
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-primary-base) 20%, transparent);
+}
+
+.settings-modal-status-card.err {
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 20%, transparent);
+}
+
+.settings-modal-status-card.warn {
+  background: color-mix(in srgb, var(--status-warning-base, #d4a030) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warning-base, #d4a030) 20%, transparent);
+}
+
+.settings-modal-status-card.neutral {
+  background: color-mix(in srgb, var(--global-surface-muted, #5a6a60) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--global-surface-muted, #5a6a60) 18%, transparent);
+}
+
+.settings-modal-status-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.settings-modal-status-card.ok .settings-modal-status-icon {
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
+  color: var(--status-primary-base);
+}
+
+.settings-modal-status-card.err .settings-modal-status-icon {
+  background: color-mix(in srgb, var(--status-danger-base) 12%, transparent);
+  color: var(--status-danger-base);
+}
+
+.settings-modal-status-card.warn .settings-modal-status-icon {
+  background: color-mix(in srgb, var(--status-warning-base, #d4a030) 12%, transparent);
+  color: var(--status-warning-base, #d4a030);
+}
+
+.settings-modal-status-card.neutral .settings-modal-status-icon {
+  background: color-mix(in srgb, var(--global-surface-muted, #5a6a60) 12%, transparent);
+  color: var(--global-surface-muted, #5a6a60);
+}
+
+.settings-modal-status-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-modal-status-title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.settings-modal-status-card.ok .settings-modal-status-title { color: var(--status-primary-hover); }
+.settings-modal-status-card.err .settings-modal-status-title { color: var(--status-danger-hover); }
+.settings-modal-status-card.warn .settings-modal-status-title { color: var(--status-warning-base, #d4a030); }
+.settings-modal-status-card.neutral .settings-modal-status-title { color: var(--global-text-secondary); }
+
+.settings-modal-status-desc {
+  font-size: var(--font-base);
+  color: var(--global-text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* ── Fingerprint Mismatch Card ── */
+
+.settings-modal-fp-card {
+  background: var(--components-card-bg, var(--global-shell-bg));
+  border: 1px solid color-mix(in srgb, var(--status-warning-base, #d4a030) 25%, transparent);
+  border-radius: var(--radius-md);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.settings-modal-fp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--status-warning-base, #d4a030) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--status-warning-base, #d4a030) 20%, transparent);
+}
+
+.settings-modal-fp-header-icon {
+  flex-shrink: 0;
+  color: var(--status-warning-base, #d4a030);
+  font-size: 18px;
+}
+
+.settings-modal-fp-header-text {
+  flex: 1;
+}
+
+.settings-modal-fp-header-title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--status-warning-base, #d4a030);
+}
+
+.settings-modal-fp-header-sub {
+  font-size: var(--font-base);
+  color: var(--global-text-secondary);
+  margin-top: 1px;
+}
+
+.settings-modal-fp-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-modal-fp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-modal-fp-row-label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--global-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-modal-fp-hash {
+  font-family: "JetBrainsMono Nerd Font", "Cascadia Code", "Fira Code", monospace;
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
+.settings-modal-fp-hash.old {
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  color: var(--status-danger-base);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 18%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--status-danger-base) 40%, transparent);
+}
+
+.settings-modal-fp-hash.new {
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  color: var(--status-primary-base);
+  border: 1px solid color-mix(in srgb, var(--status-primary-base) 18%, transparent);
+}
+
+.settings-modal-fp-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--global-text-muted);
+  font-size: 18px;
+}
+
+.settings-modal-fp-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+
+.settings-modal-fp-btn {
+  flex: 1;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font: inherit;
+  font-size: var(--font-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.settings-modal-fp-btn:active {
+  transform: scale(0.97);
+}
+
+.settings-modal-fp-btn-accept {
+  background: var(--status-warning-base, #d4a030);
+  color: #fff;
+}
+
+.settings-modal-fp-btn-accept:hover {
+  background: var(--status-warning-hover, #b8922a);
+}
+
+.settings-modal-fp-btn-reject {
+  background: transparent;
+  color: var(--global-text-secondary);
+  border: 1px solid var(--components-input-border, rgba(255, 255, 255, 0.12));
+}
+
+.settings-modal-fp-btn-reject:hover {
+  background: color-mix(in srgb, var(--global-text-primary) 3%, transparent);
+}
+
+/* ── Connection Toggle Row ── */
+
+.settings-modal-conn-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--global-surface-muted, #5a6a60) 6%, transparent);
+  border: 1px solid var(--global-surface-line, rgba(255, 255, 255, 0.06));
+}
+
+.settings-modal-conn-toggle-label {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--global-text-primary);
+}
+
+.settings-modal-conn-toggle-desc {
+  font-size: var(--font-sm);
+  color: var(--global-text-secondary);
+  margin-top: 1px;
+}
+
+/* ── Spinner ── */
+
+.settings-modal-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, var(--global-text-secondary) 25%, transparent);
+  border-top-color: var(--global-text-secondary);
+  border-radius: 50%;
+  animation: settings-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes settings-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Connection Section (unified block) ── */
+
+.settings-conn-section {
+  border: 1px solid var(--global-surface-line, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: min-content;
+}
+
+.settings-conn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--global-surface-muted, #5a6a60) 6%, transparent);
+  border-bottom: 1px solid var(--global-surface-line, rgba(255, 255, 255, 0.06));
+}
+
+.settings-conn-header-label {
+  font-size: var(--font-md);
+  font-weight: 700;
+  color: var(--global-text-primary);
+}
+
+.settings-conn-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-conn-body.locked {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ── Disabled field hint (e.g. token locked until URL checked) ── */
+
+.settings-conn-field-disabled {
+  opacity: 0.5;
+}
+
+.settings-conn-field-disabled .settings-modal-input {
+  background: color-mix(in srgb, var(--global-surface-muted, #8c8277) 8%, transparent);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.settings-conn-field-hint {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--global-text-muted);
+  margin-left: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── LAN Address Row ── */
+
+.settings-conn-lan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-conn-lan-row .settings-modal-input {
+  flex: 1;
+}
+
+.settings-conn-lan-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--components-input-border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md);
+  background: var(--components-input-bg, rgba(255, 255, 255, 0.04));
+  color: var(--global-text-secondary);
+  padding: 7px 12px;
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-conn-lan-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  border-color: var(--status-primary-base);
+  color: var(--status-primary-base);
+}
+
+.settings-conn-lan-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Input Row with Spinner ── */
+
+.settings-conn-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-conn-input-row .settings-modal-input {
+  flex: 1;
+}
+
+/* ── Input State Borders ── */
+
+.settings-modal-input.url-ok {
+  border-color: color-mix(in srgb, var(--status-primary-base) 50%, transparent);
+}
+
+.settings-modal-input.url-err {
+  border-color: color-mix(in srgb, var(--status-danger-base) 50%, transparent);
+}
+
+.settings-modal-input.url-warn {
+  border-color: color-mix(in srgb, var(--status-warning-base, #d4a030) 50%, transparent);
+}
+
+.settings-modal-input.token-ok {
+  border-color: color-mix(in srgb, var(--status-primary-base) 50%, transparent);
+}
+
+.settings-modal-input.token-err {
+  border-color: color-mix(in srgb, var(--status-danger-base) 50%, transparent);
+}
+
+/* ── Status Indicator (below input) ── */
+
+.settings-conn-status {
+  margin-top: 4px;
+}
+
+/* ── Status Card (方案B) — reuse from existing ── */
+
+.settings-conn-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+
+.settings-conn-status-card.ok {
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-primary-base) 20%, transparent);
+}
+
+.settings-conn-status-card.err {
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 20%, transparent);
+}
+
+.settings-conn-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.settings-conn-status-card.ok .settings-conn-card-icon {
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
+  color: var(--status-primary-base);
+}
+
+.settings-conn-status-card.err .settings-conn-card-icon {
+  background: color-mix(in srgb, var(--status-danger-base) 12%, transparent);
+  color: var(--status-danger-base);
+}
+
+.settings-conn-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-conn-card-title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.settings-conn-status-card.ok .settings-conn-card-title { color: var(--status-primary-hover); }
+.settings-conn-status-card.err .settings-conn-card-title { color: var(--status-danger-hover); }
+
+.settings-conn-card-desc {
+  font-size: var(--font-base);
+  color: var(--global-text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* ── Status Inline (方案A) — warn / err ── */
+
+.settings-conn-status-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-base);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.settings-conn-status-inline.warn {
+  color: color-mix(in srgb, var(--status-warning-base, #d4a030) 85%, #000);
+  background: color-mix(in srgb, var(--status-warning-base, #d4a030) 8%, transparent);
+}
+
+.settings-conn-status-inline.err {
+  color: color-mix(in srgb, var(--status-danger-base) 85%, #000);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+}
+
+.settings-conn-status-inline svg {
+  flex-shrink: 0;
+}
+
+/* ── Fingerprint Inline Card ── */
+
+.settings-conn-fp-inline {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--status-warning-base, #d4a030) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warning-base, #d4a030) 20%, transparent);
+}
+
+.settings-conn-fp-title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--status-warning-base, #d4a030);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.settings-conn-fp-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.settings-conn-fp-hash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-conn-fp-hash-label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--global-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-conn-fp-hash {
+  font-family: "JetBrainsMono Nerd Font", "Cascadia Code", "Fira Code", monospace;
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+}
+
+.settings-conn-fp-hash.old {
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  color: var(--status-danger-base);
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 15%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--status-danger-base) 40%, transparent);
+}
+
+.settings-conn-fp-hash.new {
+  background: color-mix(in srgb, var(--status-primary-base) 8%, transparent);
+  color: var(--status-primary-base);
+  border: 1px solid color-mix(in srgb, var(--status-primary-base) 15%, transparent);
+}
+
+.settings-conn-fp-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-conn-fp-btn {
+  flex: 1;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-conn-fp-btn:active {
+  transform: scale(0.97);
+}
+
+.settings-conn-fp-btn-accept {
+  background: var(--status-warning-base, #d4a030);
+  color: #fff;
+}
+
+.settings-conn-fp-btn-accept:hover {
+  background: var(--status-warning-hover, #b8922a);
+}
+
+.settings-conn-fp-btn-reject {
+  background: transparent;
+  color: var(--global-text-secondary);
+  border: 1px solid var(--components-input-border, rgba(255, 255, 255, 0.12));
+}
+
+.settings-conn-fp-btn-reject:hover {
+  background: color-mix(in srgb, var(--global-text-primary) 3%, transparent);
 }
