@@ -31,6 +31,27 @@ class AdminConfigRequest(AdminAuthMixin):
     pass
 
 
+class AdminUserCreateRequest(AdminAuthMixin):
+    name: str
+
+
+class AdminUserListRequest(AdminAuthMixin):
+    pass
+
+
+class AdminUserDeleteRequest(AdminAuthMixin):
+    user_id: int
+
+
+class AdminUserUpdateRequest(AdminAuthMixin):
+    user_id: int
+    name: str
+
+
+class AdminUserRegenTokenRequest(AdminAuthMixin):
+    user_id: int
+
+
 # ── User ──
 
 class UserMeRequest(UserAuthMixin):
@@ -39,6 +60,10 @@ class UserMeRequest(UserAuthMixin):
 
 class UserTokenRegenerateRequest(UserAuthMixin):
     pass
+
+
+class UserUpdateRequest(UserAuthMixin):
+    name: str
 
 
 # ── ToDo ──
