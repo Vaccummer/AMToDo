@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "../api/client";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
-import { importP256PublicKey } from "../crypto/envelope";
+import { importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
@@ -136,6 +136,16 @@ export function App() {
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
 
+      // TOFU: verify server public key fingerprint
+      let currentFingerprint = settings.known_key_fingerprint;
+      if (result.public_key) {
+        currentFingerprint = await verifyOrEnrollKey(result.public_key, currentFingerprint);
+        if (currentFingerprint !== settings.known_key_fingerprint) {
+          setSettings((prev) => ({ ...prev, known_key_fingerprint: currentFingerprint }));
+          shell.writeSettings({ known_key_fingerprint: currentFingerprint }).catch(() => {});
+        }
+      }
+
       const limits = result.limits;
       let readyApi = baseApi;
       if (result.public_key) {
@@ -202,36 +212,30 @@ export function App() {
     });
   }, [settings.timezone]);
 
-  const handleSettingsSave = useCallback((newSettings: UISettings) => {
+  const flushSettings = useCallback((s: UISettings) => {
     shell.writeSettings({
-      server_url: newSettings.server_url,
-      lan_address: newSettings.lan_address,
-      access_token: newSettings.access_token,
-      admin_token: newSettings.admin_token,
-      language: newSettings.language,
-      timezone: newSettings.timezone,
-      font_family: newSettings.font_family,
-      font_size: String(newSettings.font_size),
-      theme: newSettings.theme,
-      calendar_days: String(newSettings.calendar_days),
-      week_start: String(newSettings.week_start),
-      scheduler_start_hour: String(newSettings.scheduler_start_hour),
-      scheduler_end_hour: String(newSettings.scheduler_end_hour),
-      scheduler_slot_minutes: String(newSettings.scheduler_slot_minutes),
-      notification_enabled: String(newSettings.notification_enabled),
-      notification_poll_interval: String(newSettings.notification_poll_interval),
-      notification_query_window: String(newSettings.notification_query_window),
-      global_hotkey_enabled: String(newSettings.global_hotkey_enabled),
-      global_hotkey: newSettings.global_hotkey,
-      notification_silent: String(newSettings.notification_silent),
-      notification_timeout: newSettings.notification_timeout,
+      server_url: s.server_url,
+      lan_address: s.lan_address,
+      access_token: s.access_token,
+      admin_token: s.admin_token,
+      language: s.language,
+      timezone: s.timezone,
+      font_family: s.font_family,
+      font_size: String(s.font_size),
+      theme: s.theme,
+      calendar_days: String(s.calendar_days),
+      week_start: String(s.week_start),
+      scheduler_start_hour: String(s.scheduler_start_hour),
+      scheduler_end_hour: String(s.scheduler_end_hour),
+      scheduler_slot_minutes: String(s.scheduler_slot_minutes),
+      notification_enabled: String(s.notification_enabled),
+      notification_poll_interval: String(s.notification_poll_interval),
+      notification_query_window: String(s.notification_query_window),
+      global_hotkey_enabled: String(s.global_hotkey_enabled),
+      global_hotkey: s.global_hotkey,
+      notification_silent: String(s.notification_silent),
+      notification_timeout: s.notification_timeout,
     }).catch(() => {});
-    setSettings(newSettings);
-    setDefaultTimezone(newSettings.timezone);
-    applyTheme(getTheme(newSettings.theme));
-    document.documentElement.style.setProperty("--app-font-family", newSettings.font_family);
-    document.documentElement.style.setProperty("--app-font-size", `${newSettings.font_size}px`);
-    setShowSettings(false);
   }, []);
 
   const connectionOk = connectionStatus === "online";
@@ -316,7 +320,15 @@ export function App() {
       {showSettings && (
         <SettingsModal
           settings={settings}
-          onSave={handleSettingsSave}
+          onSave={(newSettings) => {
+            flushSettings(newSettings);
+            setSettings(newSettings);
+            setDefaultTimezone(newSettings.timezone);
+            applyTheme(getTheme(newSettings.theme));
+            document.documentElement.style.setProperty("--app-font-family", newSettings.font_family);
+            document.documentElement.style.setProperty("--app-font-size", `${newSettings.font_size}px`);
+            setShowSettings(false);
+          }}
           onClose={() => setShowSettings(false)}
         />
       )}

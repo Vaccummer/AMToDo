@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMToDoApi, TodoItem } from "../api/client";
-import { API_NETWORK_STATUS_EVENT } from "../api/client";
+import type { ConnectionStatusSnapshot } from "../api/connection-status";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
@@ -16,7 +16,6 @@ import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { TodoDetailModal } from "./TodoDetailModal";
 import addIcon from "../assets/add.svg";
-import lockIcon from "../assets/lock.svg";
 
 type Props = {
   api: AMToDoApi;
@@ -27,9 +26,9 @@ type Props = {
   pendingAction?: { type: "todo" | "schedule" | "notify"; id: number; action: "jump" | "edit"; dateKey?: string } | null;
   onPendingActionConsumed?: () => void;
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
+  connectionStatus?: ConnectionStatusSnapshot;
+  onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
 };
-
-type ErrorKind = "network" | "token";
 
 function EditIcon() {
   return (
@@ -75,14 +74,13 @@ function overdueDurationLabel(fromEpoch: number, toEpoch = Math.floor(Date.now()
   return `${minutes} 分钟`;
 }
 
-export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings }: Props) {
+export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const [selectedDayKey, setSelectedDayKey] = useState(cachedDateKey ?? todayKey);
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
-  const [connectionUrl, setConnectionUrl] = useState<string>("");
+  const todosRef = useRef(todos);
+  useEffect(() => { todosRef.current = todos; }, [todos]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -96,24 +94,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const { ask, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
-    function onNetworkStatus(e: Event) {
-      const { online } = (e as CustomEvent).detail as { online: boolean; message?: string };
-      if (!online) {
-        setErrorKind("network");
-        setErrorMessage("无法与服务器通信");
-        setConnectionUrl(api.serverUrl);
-      } else if (errorKind === "network") {
-        setErrorKind(null);
-        setErrorMessage("");
-        setConnectionUrl("");
-        setTodoRefreshKey((k) => k + 1);
-      }
-    }
-    window.addEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
-    return () => window.removeEventListener(API_NETWORK_STATUS_EVENT, onNetworkStatus);
-  }, [errorKind, api.serverUrl]);
-
-  useEffect(() => {
     if (cachedDateKey) setSelectedDayKey(cachedDateKey);
   }, [cachedDateKey]);
 
@@ -123,13 +103,13 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       setSelectedDayKey(pendingAction.dateKey);
     }
     if (pendingAction.action === "edit") {
-      const item = todos.find((t) => t.id === pendingAction.id);
+      const item = todosRef.current.find((t) => t.id === pendingAction.id);
       if (item) {
         setDetailId(pendingAction.id);
       }
     }
     onPendingActionConsumed?.();
-  }, [pendingAction, todos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingAction]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const weekStartKey = useMemo(
     () => startOfWeekDateKey(selectedDayKey, normalizedWeekStart),
@@ -157,48 +137,23 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     const end = startOfDateKeyEpoch(addDaysToDateKey(selectedDayKey, 1));
     api
       .listTodos(start, end)
-      .then(async (result) => {
+      .then((result) => {
         if (cancelled) return;
-        const todosWithDefaultCounts = result.todos.map((todo) => ({
+        setTodos(result.todos.map((todo) => ({
           ...todo,
-          attachment_count: todo.attachment_count ?? 0
-        }));
-        setTodos(todosWithDefaultCounts);
-        setErrorKind(null);
-        setErrorMessage("");
+          attachment_count: todo.attachment_count ?? 0,
+        })));
+        onConnectionError?.(null);
         setIsLoading(false);
-        const counts = await Promise.allSettled(
-          result.todos.map(async (todo) => ({
-            todoId: todo.id,
-            count: (await api.listTodoAttachments(todo.id)).count
-          }))
-        );
-        if (cancelled) return;
-        const countByTodoId = new Map<number, number>();
-        counts.forEach((entry) => {
-          if (entry.status === "fulfilled") {
-            countByTodoId.set(entry.value.todoId, entry.value.count);
-          }
-        });
-        setTodos((items) =>
-          items.map((item) => ({
-            ...item,
-            attachment_count: countByTodoId.get(item.id) ?? item.attachment_count ?? 0
-          }))
-        );
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         setTodos([]);
         setIsLoading(false);
         if (error instanceof TypeError) {
-          setErrorKind("network");
-          setErrorMessage("无法与服务器通信");
-          setConnectionUrl(api.serverUrl);
+          onConnectionError?.("network", "无法与服务器通信");
         } else {
-          setErrorKind("token");
-          setErrorMessage(error instanceof Error ? error.message : "身份验证失败");
-          setConnectionUrl("");
+          onConnectionError?.("token", error instanceof Error ? error.message : "身份验证失败");
         }
       });
     return () => {
@@ -230,16 +185,12 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       setTodos((items) => [...items, { ...result.todo, attachment_count: 0 }]);
       setEditingId(result.todo.id);
       setEditText("");
-      setErrorKind(null);
-      setErrorMessage("");
+      onConnectionError?.(null);
     } catch (error: unknown) {
       if (error instanceof TypeError) {
-        setErrorKind("network");
-        setErrorMessage("无法与服务器通信");
-        setConnectionUrl(api.serverUrl);
+        onConnectionError?.("network", "无法与服务器通信");
       } else {
-        setErrorKind("token");
-        setErrorMessage(error instanceof Error ? error.message : "无法创建 ToDo");
+        onConnectionError?.("token", error instanceof Error ? error.message : "无法创建 ToDo");
       }
     }
   }
@@ -416,51 +367,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             </div>
           );
         })()}
-        {errorKind ? (
-          <div className={`empty-state-error${errorKind === "token" ? " token-error" : ""}`}>
-            <div className="error-illustration">
-              {errorKind === "network" ? (
-                <>
-                  <div className="error-cloud" />
-                  <div className="error-bolt">⚡</div>
-                </>
-              ) : (
-                <img className="error-lock-icon" src={lockIcon} alt="" />
-              )}
-            </div>
-            <p className="error-title">{errorKind === "network" ? "连接中断" : "身份验证失败"}</p>
-            <p className="error-subtitle">{errorMessage}</p>
-            {errorKind === "network" && connectionUrl && (
-              <p className="error-url">{connectionUrl}</p>
-            )}
-            <button
-              type="button"
-              className="error-retry-btn"
-              onClick={() => {
-                if (onOpenSettings) {
-                  onOpenSettings(errorKind === "network" ? "url" : "token");
-                } else {
-                  setErrorKind(null);
-                  setErrorMessage("");
-                  setTodoRefreshKey((k) => k + 1);
-                }
-              }}
-            >
-              {errorKind === "network" ? (
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z"/>
-                  <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-              )}
-              {errorKind === "network" ? "检查连接设置" : "更新访问令牌"}
-            </button>
-          </div>
-        ) : isLoading ? (
+        {isLoading ? (
           <>
             {Array.from({ length: 4 }, (_, i) => (
               <div className="skel-row" key={i}>
@@ -489,7 +396,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             <p className="empty-state-subtitle">还没有待办事项</p>
           </div>
         ) : null}
-        {!errorKind && todos
+        {(!connectionStatus || connectionStatus.status === "online" || connectionStatus.status === "idle" || connectionStatus.status === "checking" || connectionStatus.status === "reconnecting") && todos
           .filter((t) => !hideCompleted || !t.completed)
           .map((todo) => {
           const isEditing = editingId === todo.id;
