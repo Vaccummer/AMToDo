@@ -40,7 +40,7 @@ type TokenResult =
 
 type Props = {
   settings: UISettings;
-  onSave: (settings: UISettings) => void;
+  onUpdateField?: (fields: Partial<UISettings>) => void;
   onSaveConnection?: (fields: Partial<UISettings>) => void;
   onClose: () => void;
   focusTarget?: "url" | "token";
@@ -75,7 +75,7 @@ const WARN_ICON = (
 
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onSave, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -87,8 +87,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
   const [scheduleEndHour, setScheduleEndHour] = useState(String(initial.scheduler_end_hour));
   const [slotMinutes, setSlotMinutes] = useState(String(initial.scheduler_slot_minutes));
   const [showToken, setShowToken] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("general");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("connection");
 
   // Connection
   const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
@@ -135,6 +134,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
   function handleThemeChange(name: string) {
     setTheme(name);
     applyTheme(getTheme(name));
+    onUpdateField?.({ theme: name });
   }
 
   const formatSize = useCallback((bytes: number): string => {
@@ -278,11 +278,17 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
     const n = Number(reconnectMaxAttempts);
     if (!Number.isFinite(n) || n < 0) {
       setReconnectMaxAttempts("3");
+      onUpdateField?.({ reconnect_max_attempts: 3 });
+    } else {
+      onUpdateField?.({ reconnect_max_attempts: n });
     }
   }
 
   function handleNotifyDisconnectToggle() {
-    setNotifyOnDisconnect((v) => !v);
+    setNotifyOnDisconnect((v) => {
+      onUpdateField?.({ notify_on_disconnect: !v });
+      return !v;
+    });
   }
 
   function handleTokenChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -376,79 +382,6 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
 
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
-  const dirty = useMemo(() => {
-    return (
-      serverUrl !== initial.server_url ||
-      accessToken !== initial.access_token ||
-      language !== initial.language ||
-      timezone !== initial.timezone ||
-      theme !== initial.theme ||
-      Number(weekStart) !== initial.week_start ||
-      Number(scheduleStartHour) !== initial.scheduler_start_hour ||
-      Number(scheduleEndHour) !== initial.scheduler_end_hour ||
-      Number(slotMinutes) !== initial.scheduler_slot_minutes ||
-      notifyEnabled !== initial.notification_enabled ||
-      notifSilent !== initial.notification_silent ||
-      notifTimeout !== initial.notification_timeout ||
-      wsEnabled !== initial.ws_enabled ||
-      Number(reconnectMaxAttempts) !== initial.reconnect_max_attempts ||
-      notifyOnDisconnect !== initial.notify_on_disconnect ||
-      hotkeyEnabled !== initial.global_hotkey_enabled ||
-      hotkeyValue !== initial.global_hotkey
-    );
-  }, [
-    serverUrl, accessToken, language, timezone, theme, weekStart,
-    scheduleStartHour, scheduleEndHour, slotMinutes,
-    notifyEnabled, notifSilent, notifTimeout,
-    wsEnabled, reconnectMaxAttempts, notifyOnDisconnect,
-    hotkeyEnabled, hotkeyValue, initial,
-  ]);
-
-  const canSave = dirty && validScheduleHours;
-
-  function handleSave() {
-    setError(null);
-    if (!validScheduleHours) {
-      setError("Schedule 默认起始时间必须早于终止时间");
-      return;
-    }
-    if (!canSave) return;
-    const updated: UISettings = {
-      ...initial,
-      server_url: serverUrl,
-      lan_address: lanAddress,
-      access_token: accessToken,
-      language,
-      timezone,
-      theme,
-      week_start: Number(weekStart),
-      scheduler_start_hour: Number(scheduleStartHour),
-      scheduler_end_hour: Number(scheduleEndHour),
-      scheduler_slot_minutes: Number(slotMinutes),
-      global_hotkey_enabled: hotkeyEnabled,
-      global_hotkey: hotkeyValue,
-      notification_enabled: notifyEnabled,
-      notification_poll_interval: initial.notification_poll_interval,
-      notification_query_window: initial.notification_query_window,
-      notification_silent: notifSilent,
-      notification_timeout: notifTimeout,
-      ws_enabled: wsEnabled,
-      reconnect_max_attempts: Number(reconnectMaxAttempts),
-      notify_on_disconnect: notifyOnDisconnect,
-      ws_reconnect_interval_ms: initial.ws_reconnect_interval_ms,
-    };
-    onSave(updated);
-    if (hotkeyEnabled && hotkeyValue) {
-      window.amtodoShell?.registerHotkey?.(hotkeyValue)?.then?.((result: { ok: boolean; error?: string }) => {
-        if (!result?.ok) {
-          setHotkeyError(result?.error || "快捷键注册失败");
-        }
-      });
-    } else {
-      window.amtodoShell?.unregisterHotkey?.();
-    }
-  }
-
   // Connection section state
   const connLocked = wsEnabled;
   const urlCheckPassed = urlCheckResult?.kind === "ok";
@@ -486,8 +419,8 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
     try {
       await clearAttachmentCache();
       await loadCacheSize();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "缓存清除失败");
+    } catch {
+      // ignore clear-cache errors
     } finally {
       setClearingCache(false);
     }
@@ -539,6 +472,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
       setHotkeyValue(combo);
       setRecording(false);
       setHotkeyError(null);
+      onUpdateField?.({ global_hotkey: combo });
     }
   }
 
@@ -692,7 +626,17 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
         </div>
 
         <div className="settings-modal-tabs" role="tablist">
-          {([["general", "通用"], ["connection", "连接"], ["notification", "通知"]] as const).map(([key, label]) => (
+          {([
+            ["connection", "连接",
+              <svg key="link" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
+            ],
+            ["general", "通用",
+              <svg key="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+            ],
+            ["notification", "通知",
+              <svg key="bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+            ],
+          ] as const).map(([key, label, icon]) => (
             <button
               key={key}
               type="button"
@@ -701,6 +645,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
               className={`settings-modal-tab${activeSettingsTab === key ? " active" : ""}`}
               onClick={() => setActiveSettingsTab(key)}
             >
+              {icon}
               {label}
             </button>
           ))}
@@ -740,6 +685,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                     className="settings-modal-input"
                     value={lanAddress}
                     onChange={(e) => setLanAddress(e.target.value)}
+                    onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
                     placeholder="http://192.168.x.x:8000"
                     disabled={connLocked}
                   />
@@ -764,6 +710,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                     className={urlInputClass}
                     value={serverUrl}
                     onChange={handleUrlChange}
+                    onBlur={() => onUpdateField?.({ server_url: serverUrl })}
                     disabled={connLocked}
                     placeholder="http://127.0.0.1:8000"
                   />
@@ -795,6 +742,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                       className={tokenInputClass}
                       value={accessToken}
                       onChange={handleTokenChange}
+                      onBlur={() => onUpdateField?.({ access_token: accessToken })}
                       disabled={!tokenEditable}
                       placeholder={!tokenEditable && !connLocked ? "请先完成服务器地址检测" : "输入访问令牌"}
                     />
@@ -833,52 +781,50 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
               {/* Connection sub-settings */}
               <div className="settings-modal-divider" style={{ margin: "2px 0" }} />
 
-              <div className="notify-sub-card" style={{ background: "transparent", border: "none", padding: 0 }}>
-                <div className="notify-sub-row">
-                  <div className="notify-sub-left">
-                    <span className="notify-sub-icon">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                    </span>
-                    <span className="notify-sub-label">最大重连次数</span>
-                  </div>
-                  <div className="notify-sub-right">
-                    <input
-                      type="number"
-                      className="settings-modal-input"
-                      style={{ width: 80, textAlign: "right" }}
-                      value={reconnectMaxAttempts}
-                      min={0}
-                      disabled={connLocked}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
-                      }}
-                      onBlur={handleReconnectBlur}
-                    />
-                    <span className="notify-sub-hint">次 (0=无限)</span>
+              <div className="settings-conn-sub-row">
+                <div className="settings-conn-sub-left">
+                  <span className="settings-conn-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                  </span>
+                  <span className="settings-conn-sub-label">最大重连次数</span>
+                </div>
+                <div className="settings-conn-sub-right">
+                  <input
+                    type="number"
+                    className="settings-conn-sub-input"
+                    value={reconnectMaxAttempts}
+                    min={0}
+                    disabled={connLocked}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
+                    }}
+                    onBlur={handleReconnectBlur}
+                  />
+                </div>
+              </div>
+
+              <div className="settings-conn-sub-row">
+                <div className="settings-conn-sub-left">
+                  <span className="settings-conn-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  </span>
+                  <div className="settings-conn-sub-text">
+                    <span className="settings-conn-sub-label">断开时标签提醒</span>
                   </div>
                 </div>
-                <div className="notify-sub-row">
-                  <div className="notify-sub-left">
-                    <span className="notify-sub-icon">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    </span>
-                    <span className="notify-sub-label">断开时标签提醒</span>
-                  </div>
-                  <div className="notify-sub-right">
-                    <span className="notify-sub-hint">断开连接时在侧边栏显示提醒</span>
-                    <button
-                      type="button"
-                      className={`toggle-switch${notifyOnDisconnect ? " on" : ""}`}
-                      onClick={handleNotifyDisconnectToggle}
-                      disabled={connLocked}
-                      role="switch"
-                      aria-checked={notifyOnDisconnect}
-                      aria-label="断开时标签提醒"
-                    >
-                      <span className="toggle-thumb" />
-                    </button>
-                  </div>
+                <div className="settings-conn-sub-right">
+                  <button
+                    type="button"
+                    className={`toggle-switch${notifyOnDisconnect ? " on" : ""}`}
+                    onClick={handleNotifyDisconnectToggle}
+                    disabled={connLocked}
+                    role="switch"
+                    aria-checked={notifyOnDisconnect}
+                    aria-label="断开时标签提醒"
+                  >
+                    <span className="toggle-thumb" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -900,7 +846,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                 id="sui-lang"
                 value={language}
                 options={[{ value: "zh-CN", label: "中文 (zh-CN)" }]}
-                onChange={setLanguage}
+                onChange={(v) => { setLanguage(v); onUpdateField?.({ language: v }); }}
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
@@ -909,7 +855,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                 id="sui-tz"
                 value={timezone}
                 options={TIMEZONE_OPTIONS}
-                onChange={setTimezone}
+                onChange={(v) => { setTimezone(v); onUpdateField?.({ timezone: v }); }}
                 searchable
               />
             </div>
@@ -925,7 +871,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                   { value: "0", label: "周日" },
                   { value: "1", label: "周一" },
                 ]}
-                onChange={setWeekStart}
+                onChange={(v) => { setWeekStart(v); onUpdateField?.({ week_start: Number(v) }); }}
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
@@ -953,7 +899,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                 id="sui-schedule-start"
                 value={scheduleStartHour}
                 options={SCHEDULE_START_HOUR_OPTIONS}
-                onChange={setScheduleStartHour}
+                onChange={(v) => { setScheduleStartHour(v); onUpdateField?.({ scheduler_start_hour: Number(v) }); }}
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
@@ -962,7 +908,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                 id="sui-schedule-end"
                 value={scheduleEndHour}
                 options={SCHEDULE_END_HOUR_OPTIONS}
-                onChange={setScheduleEndHour}
+                onChange={(v) => { setScheduleEndHour(v); onUpdateField?.({ scheduler_end_hour: Number(v) }); }}
               />
             </div>
           </div>
@@ -982,7 +928,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                   { value: "45", label: "45 分钟" },
                   { value: "60", label: "60 分钟" },
                 ]}
-                onChange={setSlotMinutes}
+                onChange={(v) => { setSlotMinutes(v); onUpdateField?.({ scheduler_slot_minutes: Number(v) }); }}
               />
             </div>
           </div>
@@ -994,73 +940,92 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
           {activeSettingsTab === "notification" && (<>
           <div className="settings-modal-section-label">通知设置</div>
 
-          <div className="notify-master-row">
-            <div className="notify-master-left">
-              <div className={`notify-master-icon${notifyEnabled ? "" : " off"}`}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
+          <div className={`notify-card${notifyEnabled ? " on" : " off"}`}>
+            {/* Header: master toggle */}
+            <div className="settings-notify-header">
+              <div className="settings-notify-header-left">
+                <div className={`settings-notify-bell${notifyEnabled ? " on" : " off"}`}>
+                  <svg key={String(notifyEnabled)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                </div>
+                <div className="settings-notify-header-info">
+                  <span className={`settings-notify-header-title${notifyEnabled ? "" : " off"}`}>
+                    {notifyEnabled ? "启用通知" : "通知已关闭"}
+                  </span>
+                  <span className="settings-notify-header-sub">
+                    {notifyEnabled ? "服务器通过 WebSocket 实时推送新通知" : "开启后将通过 WebSocket 实时接收通知"}
+                  </span>
+                </div>
               </div>
-              <div className="notify-master-info">
-                <span className={`notify-master-title${notifyEnabled ? "" : " off"}`}>
-                  {notifyEnabled ? "启用通知" : "通知已关闭"}
-                </span>
-                <span className="notify-master-sub">
-                  {notifyEnabled ? "服务器通过 WebSocket 实时推送新通知" : "开启后将通过 WebSocket 实时接收通知"}
-                </span>
-              </div>
+              <button
+                type="button"
+                className={`toggle-switch${notifyEnabled ? " on" : ""}`}
+                onClick={() => setNotifyEnabled((v) => { onUpdateField?.({ notification_enabled: !v }); return !v; })}
+                role="switch"
+                aria-checked={notifyEnabled}
+                aria-label="通知总开关"
+              >
+                <span className="toggle-thumb" />
+              </button>
             </div>
-            <button
-              type="button"
-              className={`toggle-switch${notifyEnabled ? " on" : ""}`}
-              onClick={() => setNotifyEnabled((v) => !v)}
-              role="switch"
-              aria-checked={notifyEnabled}
-              aria-label="通知总开关"
-            >
-              <span className="toggle-thumb" />
-            </button>
-          </div>
 
-          <div className={`notify-sub-card${notifyEnabled ? "" : " disabled"}`}>
-            <div className="notify-sub-row">
-              <div className="notify-sub-left">
-                <span className="notify-sub-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>
-                </span>
-                <span className="notify-sub-label">静默模式</span>
+            {/* Options */}
+            <div className={`notify-options${notifyEnabled ? "" : " hidden"}`}>
+              {/* Silent Mode */}
+              <div className="notify-row">
+                <div className="notify-row-left">
+                  <div className={`notify-row-icon mute${notifSilent ? " active" : ""}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                      <line x1="23" y1="9" x2="17" y2="15" />
+                      <line x1="17" y1="9" x2="23" y2="15" />
+                    </svg>
+                  </div>
+                  <div className="notify-row-text">
+                    <span className="notify-row-label">静默模式</span>
+                    <span className="notify-row-hint">不播放提示音</span>
+                  </div>
+                </div>
+                <div className="notify-row-right">
+                  <button
+                    type="button"
+                    className={`toggle-switch${notifSilent ? " on" : ""}`}
+                    onClick={() => setNotifSilent((v) => { onUpdateField?.({ notification_silent: !v }); return !v; })}
+                    role="switch"
+                    aria-checked={notifSilent}
+                    aria-label="静默模式"
+                  >
+                    <span className="toggle-thumb" />
+                  </button>
+                </div>
               </div>
-              <div className="notify-sub-right">
-                <span className="notify-sub-hint">不播放提示音</span>
-                <button
-                  type="button"
-                  className={`toggle-switch${notifSilent ? " on" : ""}`}
-                  onClick={() => setNotifSilent((v) => !v)}
-                  role="switch"
-                  aria-checked={notifSilent}
-                  aria-label="静默模式"
-                >
-                  <span className="toggle-thumb" />
-                </button>
-              </div>
-            </div>
-            <div className="notify-sub-row">
-              <div className="notify-sub-left">
-                <span className="notify-sub-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="2" /><polygon points="23 7 16 12 23 17" /></svg>
-                </span>
-                <span className="notify-sub-label">消失时间</span>
-              </div>
-              <div className="notify-sub-right">
-                <Dropdown
-                  value={notifTimeout}
-                  options={[
-                    { value: "default", label: "自动消失" },
-                    { value: "never", label: "常驻不消失" },
-                  ]}
-                  onChange={(v) => setNotifTimeout(v as "default" | "never")}
-                />
+
+              {/* Timeout */}
+              <div className="notify-row">
+                <div className="notify-row-left">
+                  <div className="notify-row-icon timeout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1" y="3" width="15" height="13" rx="2" />
+                      <polygon points="23 7 16 12 23 17" />
+                    </svg>
+                  </div>
+                  <div className="notify-row-text">
+                    <span className="notify-row-label">消失时间</span>
+                    <span className="notify-row-hint">通知弹窗的显示策略</span>
+                  </div>
+                </div>
+                <div className="notify-row-right">
+                  <Dropdown
+                    value={notifTimeout}
+                    options={[
+                      { value: "default", label: "自动消失" },
+                      { value: "never", label: "常驻不消失" },
+                    ]}
+                    onChange={(v) => { setNotifTimeout(v as "default" | "never"); onUpdateField?.({ notification_timeout: v as "default" | "never" }); }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1081,8 +1046,11 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                 type="button"
                 className={`toggle-switch${hotkeyEnabled ? " on" : ""}`}
                 onClick={() => {
-                  setHotkeyEnabled((v) => !v);
-                  if (hotkeyEnabled) setHotkeyError(null);
+                  setHotkeyEnabled((v) => {
+                    onUpdateField?.({ global_hotkey_enabled: !v });
+                    if (v) setHotkeyError(null);
+                    return !v;
+                  });
                 }}
                 role="switch"
                 aria-checked={hotkeyEnabled}
@@ -1108,7 +1076,7 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
                   type="button"
                   className="settings-modal-inline-btn"
                   disabled={!hotkeyEnabled}
-                  onClick={() => { setHotkeyValue(""); setHotkeyError(null); }}
+                  onClick={() => { setHotkeyValue(""); setHotkeyError(null); onUpdateField?.({ global_hotkey: "" }); }}
                 >
                   清除
                 </button>
@@ -1157,25 +1125,6 @@ export function SettingsModal({ settings: initial, onSave, onSaveConnection, onC
           </>)}
         </div>
 
-        {error ? <div className="settings-modal-error">{error}</div> : null}
-
-        <div className="settings-modal-actions">
-          <button
-            type="button"
-            className="settings-modal-btn settings-modal-btn-save"
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            保存更改
-          </button>
-          <button
-            type="button"
-            className="settings-modal-btn settings-modal-btn-cancel"
-            onClick={onClose}
-          >
-            取消
-          </button>
-        </div>
       </div>
       {confirmDialog}
     </div>

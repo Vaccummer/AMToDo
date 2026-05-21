@@ -82,6 +82,17 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const todosRef = useRef(todos);
   useEffect(() => { todosRef.current = todos; }, [todos]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowSkeleton(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowSkeleton(true), 300);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
@@ -367,7 +378,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             </div>
           );
         })()}
-        {isLoading ? (
+        {isLoading ? showSkeleton ? (
           <>
             {Array.from({ length: 4 }, (_, i) => (
               <div className="skel-row" key={i}>
@@ -380,7 +391,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
               </div>
             ))}
           </>
-        ) : todos.length === 0 ? (
+        ) : null : todos.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-illustration">
               <div className="paper">
