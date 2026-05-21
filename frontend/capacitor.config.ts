@@ -4,6 +4,9 @@ const config: CapacitorConfig = {
   appId: 'com.amtodo.app',
   appName: 'AMToDo',
   webDir: 'dist-mobile',
+  server: {
+    androidScheme: 'http',
+  },
   plugins: {
     StatusBar: {
       style: 'DARK',

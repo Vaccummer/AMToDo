@@ -111,7 +111,6 @@ export function App() {
     let hasBeenOnline = mgr.getSnapshot().status === "online";
     return mgr.onChange((snap) => {
       if (snap.status === "online") hasBeenOnline = true;
-      console.log("[Notify] status:", snap.status, "hasBeenOnline=", hasBeenOnline, "notify=", settings.notify_on_disconnect);
       if (!settings.notify_on_disconnect) return;
       if (!hasBeenOnline) return;
       if (snap.status === "offline") {

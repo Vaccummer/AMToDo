@@ -115,7 +115,6 @@ export class ConnectionStatusManager {
 
   /** Reconnect attempts exhausted — stop retrying. */
   reportReconnectExhausted(): void {
-    console.log("[ConnMgr] reportReconnectExhausted, prev status=", this._status);
     this._wsConnected = false;
     this._reconnectExhausted = true;
     this._errorMessage = "ws.reconnectFailed";
