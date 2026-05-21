@@ -42,6 +42,8 @@ export const en: Record<string, string> = {
   "common.updatedAt": "Updated At",
   "common.completedAt": "Completed At",
   "common.completedStatus": "Completion",
+  "common.remaining": "Remaining",
+  "common.done": "Done",
   "common.completed": "Completed",
   "common.notCompleted": "Not Completed",
   "common.inProgress": "In Progress",
@@ -235,6 +237,8 @@ export const en: Record<string, string> = {
   "connection.replayDetectedDesc": "Server detected a duplicate request, connection refused",
 
   // Todo
+  "todo.todayTasks": "Today's Tasks",
+  "todo.taskList": "Task List",
   "todo.newTodo": "New Todo",
   "todo.addTodo": "Add Todo",
   "todo.deleteTodo": "Delete Todo",
