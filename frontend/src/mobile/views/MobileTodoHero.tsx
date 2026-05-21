@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import type { TodoItem } from "../api/client";
-import { isOverdueTodo } from "../lib/time";
-import { useI18n } from "../i18n";
+import type { TodoItem } from "../../api/client";
+import { isOverdueTodo } from "../../lib/time";
+import { useI18n } from "../../i18n";
 
 type Props = {
   todos: TodoItem[];
