@@ -6,6 +6,7 @@ import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
+import { useI18n } from "../i18n";
 
 type Props = {
   schedule: ScheduleItem;
@@ -51,6 +52,7 @@ function AttachmentMissingIcon() {
 }
 
 export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete, onUpdate }: Props) {
+  const { t } = useI18n();
   const [schedule, setSchedule] = useState<ScheduleItem>(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
@@ -128,7 +130,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           });
           setAttachmentErrors((prev) => ({
             ...prev,
-            [attachment.id]: err instanceof Error ? err.message : "附件数据加载失败",
+            [attachment.id]: err instanceof Error ? err.message : t("common.attachmentDataLoadFailed"),
           }));
         } finally {
           setAttachmentLoading((prev) => {
@@ -143,7 +145,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   useEffect(() => {
     loadAttachments().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "附件加载失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentLoadFailed"));
     });
   }, [loadAttachments]);
 
@@ -172,13 +174,13 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
     for (const file of selected) {
       if (file.size > api.maxAttachmentSize) {
-        setError(`文件 "${file.name}" 大小 (${formatSize(file.size)}) 超过上限 (${formatSize(api.maxAttachmentSize)})`);
+        setError(t("common.fileTooLarge", { name: file.name, size: formatSize(file.size), limit: formatSize(api.maxAttachmentSize) }));
         return;
       }
     }
 
     if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
-      setError(`附件总数将超过上限 (${api.maxAttachmentsPerTodo})`);
+      setError(t("common.attachmentCountExceeded", { max: api.maxAttachmentsPerTodo }));
       return;
     }
 
@@ -191,7 +193,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       setAttachmentsChanged(true);
       await loadAttachments();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "附件上传失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
     } finally {
       setAttachmentBusy(false);
       setDragActive(false);
@@ -220,7 +222,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         return next;
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "附件打开失败";
+      const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setError(message);
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
@@ -230,9 +232,9 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   async function removeAttachment(attachment: ScheduleAttachmentMetadata) {
     const ok = await ask({
-      title: "删除附件",
-      message: `确定删除附件「${attachment.filename}」吗？`,
-      confirmLabel: "删除",
+      title: t("common.deleteAttachment"),
+      message: t("common.deleteAttachmentConfirm", { name: attachment.filename }),
+      confirmLabel: t("common.delete"),
       danger: true,
     });
     if (!ok) return;
@@ -243,7 +245,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       setAttachmentsChanged(true);
       await loadAttachments();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "附件删除失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentDeleteFailed"));
     } finally {
       setAttachmentBusy(false);
     }
@@ -295,9 +297,9 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     if (e.key === "Escape") {
       if (dirty) {
         const ok = await ask({
-          title: "放弃更改",
-          message: "有未保存的更改，确定关闭吗？",
-          confirmLabel: "关闭",
+          title: t("common.discardChanges"),
+          message: t("common.unsavedChanges"),
+          confirmLabel: t("common.close"),
           danger: true,
         });
         if (!ok) return;
@@ -355,7 +357,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       } catch {
         // Can't reach server either, keep current state
       }
-      setError(err instanceof Error ? err.message : "保存失败");
+      setError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -365,9 +367,9 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   async function handleDelete() {
     const ok = await ask({
-      title: "删除日程",
-      message: "确定将这条日程移入回收站吗？之后可以在 Trash 中恢复。",
-      confirmLabel: "移入回收站",
+      title: t("schedule.deleteSchedule"),
+      message: t("schedule.deleteScheduleConfirm"),
+      confirmLabel: t("common.moveToTrash"),
       danger: true,
     });
     if (!ok) return;
@@ -378,7 +380,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       onDelete(schedule.id);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      setError(err instanceof Error ? err.message : t("common.deleteFailed"));
       setDeleting(false);
     }
   }
@@ -391,18 +393,18 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       onClick={handleBackdrop}
       onKeyDown={handleKeyDown}
     >
-      <div className="schedule-modal-card" role="dialog" aria-label="日程详情">
+      <div className="schedule-modal-card" role="dialog" aria-label={t("schedule.detail")}>
         {/* Header */}
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">日程详情<span className="schedule-modal-id-badge">#{schedule.id}</span></h2>
+            <h2 className="schedule-modal-title">{t("schedule.detail")}<span className="schedule-modal-id-badge">#{schedule.id}</span></h2>
           </div>
           <button
             type="button"
             className="schedule-modal-close"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <svg
               width="18"
@@ -422,11 +424,11 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         {/* Body */}
         <div className="schedule-modal-body">
           {/* Editable fields */}
-          <div className="schedule-modal-section-label">可编辑字段</div>
+          <div className="schedule-modal-section-label">{t("common.editableFields")}</div>
 
           <div className="schedule-modal-field">
             <label className="schedule-modal-label" htmlFor="smd-title">
-              标题
+              {t("common.title")}
             </label>
             <input
               id="smd-title"
@@ -439,7 +441,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
           <div className="schedule-modal-field">
             <label className="schedule-modal-label" htmlFor="smd-desc">
-              描述
+              {t("common.description")}
             </label>
             <textarea
               id="smd-desc"
@@ -453,7 +455,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           {/* Start datetime */}
           <div className="schedule-modal-field">
             <label className="schedule-modal-label">
-              开始时间
+              {t("common.startTime")}
             </label>
             <div className="schedule-modal-datetime-row">
               <DatePicker
@@ -473,7 +475,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           {/* End datetime */}
           <div className="schedule-modal-field">
             <label className="schedule-modal-label">
-              结束时间
+              {t("common.endTime")}
             </label>
             <div className="schedule-modal-datetime-row">
               <DatePicker
@@ -517,7 +519,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               </span>
               {timeline.durMins ? (
                 <span className="schedule-modal-timeline-dur">
-                  {timeline.durMins} 分钟
+                  {timeline.durMins} {t("common.minutes")}
                 </span>
               ) : null}
             </div>
@@ -527,7 +529,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           <div className="schedule-modal-field-row">
             <div className="schedule-modal-field">
               <label className="schedule-modal-label" htmlFor="smd-location">
-                地点
+                {t("common.location")}
               </label>
               <input
                 id="smd-location"
@@ -539,7 +541,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             </div>
             <div className="schedule-modal-field">
               <label className="schedule-modal-label" htmlFor="smd-category">
-                分类
+                {t("common.category")}
               </label>
               <input
                 id="smd-category"
@@ -554,7 +556,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           {/* Divider */}
           <div className="schedule-modal-divider" />
 
-          <div className="schedule-modal-section-label">附件</div>
+          <div className="schedule-modal-section-label">{t("common.attachments")}</div>
           <div
             className={`attachment-dropzone${dragActive ? " active" : ""}`}
             onDragOver={(e) => {
@@ -567,9 +569,9 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               uploadFiles(e.dataTransfer.files);
             }}
           >
-            <span>{attachmentBusy ? "处理中..." : "拖拽文件到这里"}</span>
+            <span>{attachmentBusy ? t("common.attachmentProcessing") : t("common.dropFilesHere")}</span>
             <label className="attachment-upload-button" htmlFor="schedule-attachment-input">
-              选择文件
+              {t("common.selectFile")}
             </label>
             <input
               id="schedule-attachment-input"
@@ -582,7 +584,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               }}
             />
           </div>
-          {attachmentBusy ? <div className="attachment-progress-bar" aria-label="附件处理中" /> : null}
+          {attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
 
           <div className="attachment-list">
             {attachments.map((attachment) => {
@@ -605,7 +607,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                         setPreview(attachment);
                       }
                     }}
-                    aria-label={`打开 ${attachment.filename}`}
+                    aria-label={t("common.openFile", { name: attachment.filename })}
                   >
                     {orphaned || loadError ? (
                       <AttachmentMissingIcon />
@@ -628,9 +630,9 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                     <span className="attachment-filename">{attachment.filename}</span>
                     <span className="attachment-size">
                       {orphaned
-                        ? "文件丢失"
+                        ? t("common.fileMissing")
                         : downloadingId === attachment.id
-                          ? "下载中..."
+                          ? t("common.downloading")
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
@@ -639,7 +641,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                     className="attachment-remove"
                     disabled={attachmentBusy || downloadingId !== null}
                     onClick={() => removeAttachment(attachment)}
-                    aria-label={`删除 ${attachment.filename}`}
+                    aria-label={t("common.deleteFile", { name: attachment.filename })}
                   >
                     <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor">
                       <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
@@ -657,21 +659,21 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           <div className="schedule-modal-divider" />
 
           {/* Read-only fields */}
-          <div className="schedule-modal-section-label">只读信息</div>
+          <div className="schedule-modal-section-label">{t("common.readonlyInfo")}</div>
 
           <div className="schedule-modal-ro-field">
-            <span className="schedule-modal-ro-label">创建时间</span>
+            <span className="schedule-modal-ro-label">{t("common.createdAt")}</span>
             <span className="schedule-modal-ro-value">{fmtDatetime(schedule.created_at)}</span>
           </div>
 
           <div className="schedule-modal-ro-field">
-            <span className="schedule-modal-ro-label">更新时间</span>
+            <span className="schedule-modal-ro-label">{t("common.updatedAt")}</span>
             <span className="schedule-modal-ro-value">{fmtDatetime(schedule.updated_at)}</span>
           </div>
 
           <div className="schedule-modal-divider" />
 
-          <div className="schedule-modal-section-label">历史记录</div>
+          <div className="schedule-modal-section-label">{t("common.history")}</div>
           <ChangelogPanel api={api} entityId={schedule.id} kind="schedule" />
         </div>
 
@@ -686,7 +688,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             disabled={saveDisabled}
             onClick={handleSave}
           >
-            {saving ? "保存中..." : "保存更改"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
           <button
             type="button"
@@ -710,10 +712,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               <path d="M14 11v6" />
               <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
-            {deleting ? "删除中..." : "删除"}
+            {deleting ? t("common.deleting") : t("common.delete")}
           </button>
         </div>
-        {saving ? <div className="modal-save-progress" aria-label="保存中" /> : null}
+        {saving ? <div className="modal-save-progress" aria-label={t("common.saving")} /> : null}
       </div>
       {preview ? (
         <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
@@ -722,7 +724,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               type="button"
               className="schedule-modal-close attachment-preview-close"
               onClick={() => setPreview(null)}
-              aria-label="关闭预览"
+              aria-label={t("common.close")}
             >
               ×
             </button>

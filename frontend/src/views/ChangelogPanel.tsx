@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AMToDoApi, ChangelogEntry } from "../api/client";
+import { useI18n } from "../i18n";
 import { Dropdown } from "./Dropdown";
 
 type EntityKind = "todo" | "schedule" | "notification";
@@ -10,53 +11,54 @@ type Props = {
   kind: EntityKind;
 };
 
-const ACTION_OPTIONS = [
-  { value: "", label: "全部记录" },
-  { value: "update", label: "修改" },
-  { value: "delete", label: "移入回收站" },
-  { value: "restore", label: "恢复" },
-  { value: "attachment_add", label: "附件新增" },
-  { value: "attachment_remove", label: "附件删除" },
-  { value: "create", label: "创建" },
-  { value: "purge", label: "永久删除" }
-];
-
-const ACTION_LABELS: Record<string, string> = {
-  create: "创建",
-  update: "修改",
-  delete: "移入回收站",
-  restore: "恢复",
-  purge: "永久删除",
-  attachment_add: "附件新增",
-  attachment_remove: "附件删除"
-};
-
-const FIELD_LABELS: Record<string, string> = {
-  title: "标题",
-  description: "描述",
-  planned_at: "计划时间",
-  due_at: "截止时间",
-  completed: "完成状态",
-  priority: "优先级",
-  tag: "标签",
-  start_at: "开始时间",
-  end_at: "结束时间",
-  timezone: "时区",
-  location: "地点",
-  category: "分类",
-  attachment: "附件"
-};
-
 export function ChangelogPanel({ api, entityId, kind }: Props) {
+  const { t } = useI18n();
   const [action, setAction] = useState("");
   const [entries, setEntries] = useState<ChangelogEntry[]>([]);
   const [total, setTotal] = useState(0);
-  const [status, setStatus] = useState("加载中");
+  const [status, setStatus] = useState(t("common.loadingEllipsis"));
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  const actionOptions = [
+    { value: "", label: t("changelog.allRecords") },
+    { value: "update", label: t("changelog.update") },
+    { value: "delete", label: t("changelog.moveToTrash") },
+    { value: "restore", label: t("changelog.restore") },
+    { value: "attachment_add", label: t("changelog.attachmentAdd") },
+    { value: "attachment_remove", label: t("changelog.attachmentRemove") },
+    { value: "create", label: t("changelog.create") },
+    { value: "purge", label: t("changelog.purge") }
+  ];
+
+  const actionLabels: Record<string, string> = {
+    create: t("changelog.create"),
+    update: t("changelog.update"),
+    delete: t("changelog.moveToTrash"),
+    restore: t("changelog.restore"),
+    purge: t("changelog.purge"),
+    attachment_add: t("changelog.attachmentAdd"),
+    attachment_remove: t("changelog.attachmentRemove")
+  };
+
+  const fieldLabels: Record<string, string> = {
+    title: t("common.title"),
+    description: t("common.description"),
+    planned_at: t("common.plannedTime"),
+    due_at: t("common.dueTime"),
+    completed: t("common.completedStatus"),
+    priority: t("common.priority"),
+    tag: t("common.tag"),
+    start_at: t("common.startTime"),
+    end_at: t("common.endTime"),
+    timezone: t("common.timezone"),
+    location: t("common.location"),
+    category: t("common.category"),
+    attachment: t("common.attachments")
+  };
 
   useEffect(() => {
     let cancelled = false;
-    setStatus("加载中");
+    setStatus(t("common.loadingEllipsis"));
     setExpanded({});
     const params = { entity_id: entityId, action: action || null, limit: 50, offset: 0 };
     const request = kind === "todo" ? api.todoChangelog(params) : kind === "schedule" ? api.scheduleChangelog(params) : api.notificationChangelog(params);
@@ -65,25 +67,25 @@ export function ChangelogPanel({ api, entityId, kind }: Props) {
         if (cancelled) return;
         setEntries(result.entries.map(normalizeEntry));
         setTotal(result.total);
-        setStatus(result.entries.length ? "" : "暂无历史记录");
+        setStatus(result.entries.length ? "" : t("common.noHistory"));
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         setEntries([]);
         setTotal(0);
-        setStatus(error instanceof Error ? error.message : "历史记录加载失败");
+        setStatus(error instanceof Error ? error.message : t("common.historyLoadFailed"));
       });
     return () => {
       cancelled = true;
     };
-  }, [api, action, entityId, kind]);
+  }, [api, action, entityId, kind, t]);
 
   return (
     <section className="changelog-panel">
       <div className="changelog-toolbar">
-        <span>{status || `${entries.length}/${total} 条`}</span>
+        <span>{status || `${entries.length}/${total} ${t("common.items")}`}</span>
         <div className="changelog-filter">
-          <Dropdown value={action} options={ACTION_OPTIONS} onChange={setAction} />
+          <Dropdown value={action} options={actionOptions} onChange={setAction} />
         </div>
       </div>
 
@@ -100,9 +102,9 @@ export function ChangelogPanel({ api, entityId, kind }: Props) {
                 disabled={!canExpand}
                 onClick={() => setExpanded((prev) => ({ ...prev, [entry.id]: !open }))}
               >
-                <span className="changelog-action">{ACTION_LABELS[entry.action] ?? entry.action}</span>
+                <span className="changelog-action">{actionLabels[entry.action] ?? entry.action}</span>
                 <span className="changelog-copy">
-                  <strong>{entryTitle(entry, fields)}</strong>
+                  <strong>{entryTitle(entry, fields, actionLabels, fieldLabels, t)}</strong>
                   <span>{formatDateTime(entry.created_at)}</span>
                 </span>
                 {canExpand ? <span className={`changelog-arrow${open ? " open" : ""}`}>⌄</span> : null}
@@ -112,15 +114,15 @@ export function ChangelogPanel({ api, entityId, kind }: Props) {
                   {fields.length > 0 ? (
                     fields.map((field) => (
                       <div className="changelog-diff-row" key={field}>
-                        <span className="changelog-field-name">{FIELD_LABELS[field] ?? field}</span>
-                        <span className="changelog-before">旧：{formatSnapshotValue(entry.before_snapshot?.[field])}</span>
-                        <span className="changelog-after">新：{formatSnapshotValue(entry.after_snapshot?.[field])}</span>
+                        <span className="changelog-field-name">{fieldLabels[field] ?? field}</span>
+                        <span className="changelog-before">{t("changelog.oldValue")}{formatSnapshotValue(entry.before_snapshot?.[field], t)}</span>
+                        <span className="changelog-after">{t("changelog.newValue")}{formatSnapshotValue(entry.after_snapshot?.[field], t)}</span>
                       </div>
                     ))
                   ) : (
                     <div className="changelog-diff-row">
-                      <span className="changelog-field-name">摘要</span>
-                      <span className="changelog-after">{snapshotSummary(entry) ?? "无字段差异"}</span>
+                      <span className="changelog-field-name">{t("changelog.summary")}</span>
+                      <span className="changelog-after">{snapshotSummary(entry) ?? t("changelog.noDiff")}</span>
                     </div>
                   )}
                 </div>
@@ -160,14 +162,21 @@ function changedFields(entry: ChangelogEntry): string[] {
   return Array.from(keys).filter((key) => entry.before_snapshot?.[key] !== entry.after_snapshot?.[key]);
 }
 
-function entryTitle(entry: ChangelogEntry, fields: string[]): string {
+function entryTitle(
+  entry: ChangelogEntry,
+  fields: string[],
+  actionLabels: Record<string, string>,
+  fieldLabels: Record<string, string>,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
   if (entry.action === "update" && fields.length > 0) {
-    return `修改了 ${fields.map((field) => FIELD_LABELS[field] ?? field).join("、")}`;
+    const fieldNames = fields.map((field) => fieldLabels[field] ?? field).join(t("changelog.fieldSeparator"));
+    return t("changelog.updatedFields", { fields: fieldNames });
   }
   if (entry.action === "attachment_add" || entry.action === "attachment_remove") {
-    return attachmentName(entry) ?? (ACTION_LABELS[entry.action] ?? entry.action);
+    return attachmentName(entry) ?? (actionLabels[entry.action] ?? entry.action);
   }
-  return ACTION_LABELS[entry.action] ?? entry.action;
+  return actionLabels[entry.action] ?? entry.action;
 }
 
 function attachmentName(entry: ChangelogEntry): string | null {
@@ -186,9 +195,9 @@ function snapshotSummary(entry: ChangelogEntry): string | null {
   return null;
 }
 
-function formatSnapshotValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "空";
-  if (typeof value === "boolean") return value ? "是" : "否";
+function formatSnapshotValue(value: unknown, t: (key: string) => string): string {
+  if (value === null || value === undefined || value === "") return t("common.empty");
+  if (typeof value === "boolean") return value ? t("common.yes") : t("common.no");
   if (typeof value === "number" && value > 1_000_000_000 && value < 4_102_444_800) {
     return formatDateTime(value);
   }

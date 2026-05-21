@@ -5,6 +5,7 @@ import { importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
+import { I18nProvider, createTranslator } from "../i18n";
 import { SettingsModal } from "../views/SettingsModal";
 import { ScheduleView } from "../views/ScheduleView";
 import { SearchView } from "../views/SearchView";
@@ -28,14 +29,6 @@ const tabIcons: Record<Tab, string> = {
   search: searchIcon,
   trash: trashIcon,
   notify: notifyIcon,
-};
-
-const tabLabels: Record<Tab, string> = {
-  todo: "待办",
-  schedule: "日程",
-  search: "搜索",
-  trash: "回收站",
-  notify: "通知",
 };
 
 const shell = window.amtodoShell!;
@@ -182,7 +175,7 @@ export function App() {
         if (cancelled) return;
         wasOffline = true;
         setHealth(null);
-        setHealthError(error instanceof Error ? error.message : "无法连接后端");
+        setHealthError(error instanceof Error ? error.message : "common.connectionFailed");
         setConnectionStatus("offline");
         retryTimer = window.setTimeout(() => void runBootstrap(), 2000);
       }
@@ -239,15 +232,24 @@ export function App() {
   }, []);
 
   const connectionOk = connectionStatus === "online";
+  const tApp = createTranslator(settings.language);
+  const tabLabels: Record<Tab, string> = {
+    todo: tApp("tab.todo"),
+    schedule: tApp("tab.schedule"),
+    search: tApp("tab.search"),
+    trash: tApp("tab.trash"),
+    notify: tApp("tab.notify"),
+  };
 
   return (
+    <I18nProvider locale={settings.language}>
     <div className="mobile-shell">
       <header className="mobile-header">
         <div className="mobile-header-left">
           <div className={connectionOk ? "brand-dot ok" : "brand-dot"} />
           <span className="brand-title">AMToDo</span>
           <span className={connectionOk ? "server-pill ok" : "server-pill"}>
-            {connectionOk ? (health ? `v${health.version}` : "在线") : healthError ? "离线" : "..."}
+            {connectionOk ? (health ? `v${health.version}` : tApp("settings.connectionSuccess")) : healthError ? tApp("common.networkError") : "..."}
           </span>
         </div>
         <div className="mobile-header-right">
@@ -256,7 +258,7 @@ export function App() {
             type="button"
             className="mobile-settings-btn"
             onClick={() => setShowSettings(true)}
-            aria-label="设置"
+            aria-label={tApp("settings.title")}
           >
             <img src={gearIcon} alt="" />
           </button>
@@ -347,5 +349,6 @@ export function App() {
         />
       )}
     </div>
+    </I18nProvider>
   );
 }

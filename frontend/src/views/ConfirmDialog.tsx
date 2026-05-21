@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n";
 
 export type ConfirmConfig = {
   title: string;
@@ -18,12 +19,13 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "确定",
+  confirmLabel,
   danger = false,
   busy = false,
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useI18n();
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
           >
-            {busy ? "处理中..." : confirmLabel}
+            {busy ? t("common.processing") : (confirmLabel ?? t("common.confirm"))}
           </button>
           <button
             type="button"
@@ -84,7 +86,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             disabled={busy}
           >
-            取消
+            {t("common.cancel")}
           </button>
         </div>
       </div>

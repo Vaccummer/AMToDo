@@ -371,7 +371,7 @@ async function fetchWithNetworkStatus(
     const response = await fetch(input, init);
     return response;
   } catch (error: unknown) {
-    notifyNetworkStatus(false, error instanceof Error ? error.message : "网络错误");
+    notifyNetworkStatus(false, error instanceof Error ? error.message : "client.networkError");
     throw error;
   }
 }

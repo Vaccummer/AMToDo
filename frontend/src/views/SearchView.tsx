@@ -9,6 +9,7 @@ import { Dropdown } from "./Dropdown";
 import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { TodoDetailModal } from "./TodoDetailModal";
 import { useConfirm } from "./ConfirmDialog";
+import { useI18n } from "../i18n";
 
 type Props = {
   api: AMToDoApi;
@@ -55,67 +56,85 @@ type ResultItem =
   | { type: "schedule"; item: ScheduleItem }
   | { type: "notify"; item: NotificationItem };
 
-const TODO_FIELD_OPTIONS = [
-  { value: "title", label: "标题" },
-  { value: "description", label: "描述" },
-  { value: "tag", label: "标签" }
-];
+function getTodoFieldOptions(t: (key: string) => string) {
+  return [
+    { value: "title", label: t("common.title") },
+    { value: "description", label: t("common.description") },
+    { value: "tag", label: t("common.tags") }
+  ];
+}
 
-const SCHEDULE_FIELD_OPTIONS = [
-  { value: "title", label: "标题" },
-  { value: "description", label: "描述" },
-  { value: "location", label: "地点" },
-  { value: "category", label: "分类" }
-];
+function getScheduleFieldOptions(t: (key: string) => string) {
+  return [
+    { value: "title", label: t("common.title") },
+    { value: "description", label: t("common.description") },
+    { value: "location", label: t("common.location") },
+    { value: "category", label: t("common.category") }
+  ];
+}
 
-const TODO_TIME_OPTIONS = [
-  { value: "planned", label: "计划时间" },
-  { value: "due", label: "截止时间" },
-  { value: "created", label: "创建时间" },
-  { value: "updated", label: "修改时间" }
-];
+function getTodoTimeOptions(t: (key: string) => string) {
+  return [
+    { value: "planned", label: t("common.plannedTime") },
+    { value: "due", label: t("common.dueTime") },
+    { value: "created", label: t("common.createdAt") },
+    { value: "updated", label: t("common.updatedAt") }
+  ];
+}
 
-const SCHEDULE_TIME_OPTIONS = [
-  { value: "overlap", label: "日程时间" },
-  { value: "created", label: "创建时间" },
-  { value: "updated", label: "修改时间" }
-];
+function getScheduleTimeOptions(t: (key: string) => string) {
+  return [
+    { value: "overlap", label: t("search.scheduleTime") },
+    { value: "created", label: t("common.createdAt") },
+    { value: "updated", label: t("common.updatedAt") }
+  ];
+}
 
-const NOTIFY_TIME_OPTIONS = [
-  { value: "trigger", label: "触发时间" },
-  { value: "created", label: "创建时间" },
-  { value: "updated", label: "修改时间" }
-];
+function getNotifyTimeOptions(t: (key: string) => string) {
+  return [
+    { value: "trigger", label: t("common.triggerTime") },
+    { value: "created", label: t("common.createdAt") },
+    { value: "updated", label: t("common.updatedAt") }
+  ];
+}
 
-const NOTIFY_FIELD_OPTIONS = [
-  { value: "title", label: "标题" },
-  { value: "description", label: "描述" }
-];
+function getNotifyFieldOptions(t: (key: string) => string) {
+  return [
+    { value: "title", label: t("common.title") },
+    { value: "description", label: t("common.description") }
+  ];
+}
 
-const NOTIFY_SORT_OPTIONS = [
-  { value: "trigger_at", label: "触发时间" },
-  { value: "created_at", label: "最新创建" },
-  { value: "updated_at", label: "最新修改" },
-  { value: "title", label: "标题" }
-];
+function getNotifySortOptions(t: (key: string) => string) {
+  return [
+    { value: "trigger_at", label: t("common.triggerTime") },
+    { value: "created_at", label: t("search.latestCreated") },
+    { value: "updated_at", label: t("search.latestModified") },
+    { value: "title", label: t("common.title") }
+  ];
+}
 
-const TODO_SORT_OPTIONS = [
-  { value: "updated_at", label: "最新修改" },
-  { value: "created_at", label: "最新创建" },
-  { value: "planned_at", label: "计划时间" },
-  { value: "due_at", label: "截止时间" },
-  { value: "priority", label: "优先级" },
-  { value: "title", label: "标题" }
-];
+function getTodoSortOptions(t: (key: string) => string) {
+  return [
+    { value: "updated_at", label: t("search.latestModified") },
+    { value: "created_at", label: t("search.latestCreated") },
+    { value: "planned_at", label: t("common.plannedTime") },
+    { value: "due_at", label: t("common.dueTime") },
+    { value: "priority", label: t("common.priority") },
+    { value: "title", label: t("common.title") }
+  ];
+}
 
-const SCHEDULE_SORT_OPTIONS = [
-  { value: "updated_at", label: "最新修改" },
-  { value: "created_at", label: "最新创建" },
-  { value: "start_at", label: "开始时间" },
-  { value: "end_at", label: "结束时间" },
-  { value: "duration", label: "时长" },
-  { value: "title", label: "标题" }
-];
+function getScheduleSortOptions(t: (key: string) => string) {
+  return [
+    { value: "updated_at", label: t("search.latestModified") },
+    { value: "created_at", label: t("search.latestCreated") },
+    { value: "start_at", label: t("common.startTime") },
+    { value: "end_at", label: t("common.endTime") },
+    { value: "duration", label: t("common.duration") },
+    { value: "title", label: t("common.title") }
+  ];
+}
 
 const EMPTY_TIME_RANGES = { start: "", end: "" };
 
@@ -243,14 +262,15 @@ function formatEpoch(epoch: number | null): string {
   return `${year}-${month}-${day} ${hm}`;
 }
 
-function overdueDurationLabel(fromEpoch: number, toEpoch = Math.floor(Date.now() / 1000)): string {
-  const seconds = Math.max(0, toEpoch - fromEpoch);
+function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
+  const effectiveToEpoch = toEpoch ?? Math.floor(Date.now() / 1000);
+  const seconds = Math.max(0, effectiveToEpoch - fromEpoch);
   const days = Math.floor(seconds / 86400);
-  if (days > 0) return `${days} 天`;
+  if (days > 0) return `${days} ${t("common.days")}`;
   const hours = Math.floor(seconds / 3600);
-  if (hours > 0) return `${hours} 小时`;
+  if (hours > 0) return `${hours} ${t("common.hours")}`;
   const minutes = Math.max(1, Math.floor(seconds / 60));
-  return `${minutes} 分钟`;
+  return `${minutes} ${t("common.minutes")}`;
 }
 
 function AttachmentCountIcon() {
@@ -276,6 +296,7 @@ function updateFields(fields: string[], value: string, checked: boolean): string
 }
 
 export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+  const { t } = useI18n();
   const initialConfig = useMemo(() => cloneSearchConfig(searchSessionConfig), []);
   const [mode, setMode] = useState<SearchMode>(initialConfig.mode);
   const [query, setQuery] = useState(initialConfig.query);
@@ -304,7 +325,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   const [sortOrder, setSortOrder] = useState<SortOrder>(initialConfig.sortOrder);
   const [results, setResults] = useState<ResultItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [status, setStatus] = useState("尚未搜索");
+  const [status, setStatus] = useState(t("search.notSearched"));
   const [busy, setBusy] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -314,7 +335,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   const { ask, dialog: confirmDialog } = useConfirm();
 
   const currentFields = mode === "todo" ? todoFields : mode === "schedule" ? scheduleFields : notifyFields;
-  const currentSortOptions = mode === "todo" ? TODO_SORT_OPTIONS : mode === "schedule" ? SCHEDULE_SORT_OPTIONS : NOTIFY_SORT_OPTIONS;
+  const currentSortOptions = mode === "todo" ? getTodoSortOptions(t) : mode === "schedule" ? getScheduleSortOptions(t) : getNotifySortOptions(t);
   const currentSortBy = mode === "todo" ? todoSortBy : mode === "schedule" ? scheduleSortBy : notifySortBy;
 
   const contextItem = useMemo(
@@ -383,14 +404,14 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
   async function runSearch() {
     setBusy(true);
-    setStatus("搜索中");
+    setStatus(t("search.searching"));
     try {
       if (idSearch) {
         const ids = query.split(/\s+/).map((s) => parseInt(s, 10)).filter((n) => !isNaN(n) && n > 0);
         if (ids.length === 0) {
           setResults([]);
           setTotal(0);
-          setStatus("请输入有效的数字 ID");
+          setStatus(t("search.invalidId"));
           return;
         }
         if (mode === "todo") {
@@ -401,7 +422,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
           }
           setResults(items);
           setTotal(items.length);
-          setStatus(items.length ? "" : "没有匹配结果");
+          setStatus(items.length ? "" : t("search.noMatch"));
         } else if (mode === "schedule") {
           const fetched = await Promise.allSettled(ids.map((id) => api.getSchedule(id)));
           const items: ResultItem[] = [];
@@ -410,7 +431,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
           }
           setResults(items);
           setTotal(items.length);
-          setStatus(items.length ? "" : "没有匹配结果");
+          setStatus(items.length ? "" : t("search.noMatch"));
         } else {
           const fetched = await Promise.allSettled(ids.map((id) => api.getNotification(id)));
           const items: ResultItem[] = [];
@@ -419,7 +440,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
           }
           setResults(items);
           setTotal(items.length);
-          setStatus(items.length ? "" : "没有匹配结果");
+          setStatus(items.length ? "" : t("search.noMatch"));
         }
         return;
       }
@@ -453,7 +474,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         setResults(response.todos.map((item) => ({ type: "todo", item })));
         setTotal(response.total);
         onConnectionError?.(null);
-        setStatus(response.total ? "" : "没有匹配结果");
+        setStatus(response.total ? "" : t("search.noMatch"));
       } else if (mode === "schedule") {
         const params: Parameters<AMToDoApi["searchSchedules"]>[1] = {
           fields: scheduleFields,
@@ -479,7 +500,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         setResults(response.schedules.map((item) => ({ type: "schedule", item })));
         setTotal(response.total);
         onConnectionError?.(null);
-        setStatus(response.total ? "" : "没有匹配结果");
+        setStatus(response.total ? "" : t("search.noMatch"));
       } else {
         // Notify mode: fetch all and client-side filter
         let startAt: number | null = null;
@@ -523,16 +544,16 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         const resultItems: ResultItem[] = items.map((item) => ({ type: "notify", item }));
         setResults(resultItems);
         setTotal(resultItems.length);
-        setStatus(resultItems.length ? "" : "没有匹配结果");
+        setStatus(resultItems.length ? "" : t("search.noMatch"));
       }
     } catch (error: unknown) {
       setResults([]);
       setTotal(0);
       if (error instanceof TypeError) {
-        onConnectionError?.("network", "无法与服务器通信");
-        setStatus("连接失败");
+        onConnectionError?.("network", t("connection.cannotConnectDesc"));
+        setStatus(t("common.connectionFailed"));
       } else {
-        const msg = error instanceof Error ? error.message : "搜索失败";
+        const msg = error instanceof Error ? error.message : t("common.searchFailed");
         onConnectionError?.("token", msg);
         setStatus(msg);
       }
@@ -570,7 +591,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         replaceResult({ type: "schedule", item: response.schedule });
       }
     } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : "保存失败");
+      setStatus(error instanceof Error ? error.message : t("common.saveFailed"));
     }
     cancelRename();
   }
@@ -583,9 +604,9 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
   async function deleteResult(result: ResultItem) {
     const ok = await ask({
-      title: result.type === "todo" ? "删除待办" : result.type === "schedule" ? "删除日程" : "删除通知",
-      message: "确定将这个项目移入回收站吗？之后可以在 Trash 中恢复。",
-      confirmLabel: "移入回收站",
+      title: result.type === "todo" ? t("todo.deleteTodo") : result.type === "schedule" ? t("schedule.deleteSchedule") : t("schedule.deleteNotification"),
+      message: t("common.moveToTrashConfirm"),
+      confirmLabel: t("common.moveToTrash"),
       danger: true
     });
     if (!ok) return;
@@ -602,7 +623,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
       setTotal((value) => Math.max(0, value - 1));
       setDetail((current) => (current && resultKey(current) === key ? null : current));
     } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : "删除失败");
+      setStatus(error instanceof Error ? error.message : t("common.deleteFailed"));
     }
   }
 
@@ -627,7 +648,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     setMode(next);
     setResults([]);
     setTotal(0);
-    setStatus("尚未搜索");
+    setStatus(t("search.notSearched"));
     setContextMenu(null);
     setDetail(null);
     setEditingNotifyId(null);
@@ -707,21 +728,21 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
             className={mode === "todo" ? "active" : ""}
             onClick={() => handleModeChange("todo")}
           >
-            ToDo
+            {t("tab.todo")}
           </button>
           <button
             type="button"
             className={mode === "schedule" ? "active" : ""}
             onClick={() => handleModeChange("schedule")}
           >
-            Schedule
+            {t("tab.schedule")}
           </button>
           <button
             type="button"
             className={mode === "notify" ? "active" : ""}
             onClick={() => handleModeChange("notify")}
           >
-            Notify
+            {t("tab.notify")}
           </button>
         </div>
       </div>
@@ -736,11 +757,11 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void runSearch(); } }}
-                placeholder={idSearch ? "输入 ID，空格分隔" : mode === "todo" ? "搜索待办" : mode === "schedule" ? "搜索日程" : "搜索通知"}
+                placeholder={idSearch ? t("search.inputIdPlaceholder") : mode === "todo" ? t("search.searchTodos") : mode === "schedule" ? t("search.searchSchedules") : t("search.searchNotifications")}
               />
             </div>
             <button type="button" className="search-sidebar-btn" disabled={busy} onClick={() => void runSearch()}>
-              搜索
+              {t("common.search")}
             </button>
           </div>
 
@@ -748,7 +769,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
           <details className={`opt-collapsible${matchHasValue ? " has-group-value" : ""}`} open>
             <summary>
               <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                匹配
+                {t("search.match")}
                 <span className="has-value-dot" />
               </span>
               <button
@@ -756,18 +777,18 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 className={`opt-reset-btn${matchHasValue ? " has-value" : ""}`}
                 onClick={(e) => { e.stopPropagation(); resetMatch(); }}
               >
-                <ResetIcon /> 重置
+                <ResetIcon /> {t("common.reset")}
               </button>
             </summary>
             <div className="opt-body">
               <div className="search-toggle-row">
                 <label className="search-toggle">
                   <input type="checkbox" checked={useRegex} onChange={(e) => setUseRegex(e.target.checked)} disabled={idSearch} />
-                  <span>正则</span>
+                  <span>{t("common.regex")}</span>
                 </label>
                 <label className="search-toggle">
                   <input type="checkbox" checked={ignoreCase} onChange={(e) => setIgnoreCase(e.target.checked)} disabled={idSearch} />
-                  <span>忽略大小写</span>
+                  <span>{t("common.ignoreCase")}</span>
                 </label>
                 <label className="search-toggle">
                   <input type="checkbox" checked={idSearch} onChange={(e) => setIdSearch(e.target.checked)} />
@@ -776,7 +797,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               </div>
               {!idSearch ? (
                 <div className="field-chip-row" style={{ marginTop: 6 }}>
-                  {(mode === "todo" ? TODO_FIELD_OPTIONS : mode === "schedule" ? SCHEDULE_FIELD_OPTIONS : NOTIFY_FIELD_OPTIONS).map((field) => (
+                  {(mode === "todo" ? getTodoFieldOptions(t) : mode === "schedule" ? getScheduleFieldOptions(t) : getNotifyFieldOptions(t)).map((field) => (
                     <label className="field-chip" key={field.value}>
                       <input
                         type="checkbox"
@@ -792,7 +813,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                   ))}
                 </div>
               ) : (
-                <div className="search-id-hint">多个 ID 用空格分隔，非数字将被忽略</div>
+                <div className="search-id-hint">{t("search.idHint")}</div>
               )}
             </div>
           </details>
@@ -803,7 +824,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               <details className={`opt-collapsible${timeHasValue ? " has-group-value" : ""}`}>
                 <summary>
                   <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    时间
+                    {t("search.time")}
                     <span className="has-value-dot" />
                   </span>
                   <button
@@ -811,7 +832,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     className={`opt-reset-btn${timeHasValue ? " has-value" : ""}`}
                     onClick={(e) => { e.stopPropagation(); resetTime(); }}
                   >
-                    <ResetIcon /> 重置
+                    <ResetIcon /> {t("common.reset")}
                   </button>
                 </summary>
                 <div className="opt-body">
@@ -819,14 +840,14 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     <>
                       <Dropdown
                         value={todoTimeField}
-                        options={timeOptionsWithValues(TODO_TIME_OPTIONS, todoTimeRanges)}
+                        options={timeOptionsWithValues(getTodoTimeOptions(t), todoTimeRanges)}
                         onChange={(v) => setTodoTimeField(v as TodoTimeField)}
                       />
                       <div className="time-stack" style={{ marginTop: 6 }}>
                         <div className={`time-row${todoTimeRanges[todoTimeField].start || todoTimeRanges[todoTimeField].end ? " has-value" : ""}`}>
                           <div className="time-row-singles">
-                            <DatePicker value={todoTimeRanges[todoTimeField].start} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], start: v } }))} placeholder="开始日期" />
-                            <DatePicker value={todoTimeRanges[todoTimeField].end} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], end: v } }))} placeholder="结束日期" />
+                            <DatePicker value={todoTimeRanges[todoTimeField].start} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], start: v } }))} placeholder={t("common.startDate")} />
+                            <DatePicker value={todoTimeRanges[todoTimeField].end} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], end: v } }))} placeholder={t("common.endDate")} />
                           </div>
                         </div>
                       </div>
@@ -835,14 +856,14 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     <>
                       <Dropdown
                         value={scheduleTimeField}
-                        options={timeOptionsWithValues(SCHEDULE_TIME_OPTIONS, scheduleTimeRanges)}
+                        options={timeOptionsWithValues(getScheduleTimeOptions(t), scheduleTimeRanges)}
                         onChange={(v) => setScheduleTimeField(v as ScheduleTimeField)}
                       />
                       <div className="time-stack" style={{ marginTop: 6 }}>
                         <div className={`time-row${scheduleTimeRanges[scheduleTimeField].start || scheduleTimeRanges[scheduleTimeField].end ? " has-value" : ""}`}>
                           <div className="time-row-singles">
-                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].start} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], start: v } }))} placeholder="开始日期" />
-                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].end} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], end: v } }))} placeholder="结束日期" />
+                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].start} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], start: v } }))} placeholder={t("common.startDate")} />
+                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].end} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], end: v } }))} placeholder={t("common.endDate")} />
                           </div>
                         </div>
                       </div>
@@ -851,14 +872,14 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     <>
                       <Dropdown
                         value={notifyTimeField}
-                        options={timeOptionsWithValues(NOTIFY_TIME_OPTIONS, notifyTimeRanges)}
+                        options={timeOptionsWithValues(getNotifyTimeOptions(t), notifyTimeRanges)}
                         onChange={(v) => setNotifyTimeField(v as NotifyTimeField)}
                       />
                       <div className="time-stack" style={{ marginTop: 6 }}>
                         <div className={`time-row${notifyTimeRanges[notifyTimeField].start || notifyTimeRanges[notifyTimeField].end ? " has-value" : ""}`}>
                           <div className="time-row-singles">
-                            <DatePicker value={notifyTimeRanges[notifyTimeField].start} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], start: v } }))} placeholder="开始日期" />
-                            <DatePicker value={notifyTimeRanges[notifyTimeField].end} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], end: v } }))} placeholder="结束日期" />
+                            <DatePicker value={notifyTimeRanges[notifyTimeField].start} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], start: v } }))} placeholder={t("common.startDate")} />
+                            <DatePicker value={notifyTimeRanges[notifyTimeField].end} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], end: v } }))} placeholder={t("common.endDate")} />
                           </div>
                         </div>
                       </div>
@@ -872,7 +893,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 <details className={`opt-collapsible${todoHasValue ? " has-group-value" : ""}`}>
                   <summary>
                     <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      待办
+                      {t("tab.todo")}
                       <span className="has-value-dot" />
                     </span>
                     <button
@@ -880,16 +901,16 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       className={`opt-reset-btn${todoHasValue ? " has-value" : ""}`}
                       onClick={(e) => { e.stopPropagation(); resetTodoFilters(); }}
                     >
-                      <ResetIcon /> 重置
+                      <ResetIcon /> {t("common.reset")}
                     </button>
                   </summary>
                   <div className="opt-body">
                     <Dropdown
                       value={todoStatus}
                       options={[
-                        { value: "all", label: "全部状态" },
-                        { value: "open", label: "未完成" },
-                        { value: "completed", label: "已完成" }
+                        { value: "all", label: t("search.allStatus") },
+                        { value: "open", label: t("search.uncompleted") },
+                        { value: "completed", label: t("search.completed") }
                       ]}
                       onChange={setTodoStatus}
                     />
@@ -899,28 +920,28 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         min={0}
                         value={priorityMin}
                         onChange={(e) => setPriorityMin(e.target.value)}
-                        placeholder="最低优先级"
+                        placeholder={t("search.minPriority")}
                       />
                       <input
                         type="number"
                         min={0}
                         value={priorityMax}
                         onChange={(e) => setPriorityMax(e.target.value)}
-                        placeholder="最高优先级"
+                        placeholder={t("search.maxPriority")}
                       />
                     </div>
                     <input
                       className="search-filter-input"
                       value={tag}
                       onChange={(e) => setTag(e.target.value)}
-                      placeholder="标签"
+                      placeholder={t("common.tags")}
                       style={{ marginTop: 6 }}
                     />
                     <input
                       className="search-filter-input"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="描述"
+                      placeholder={t("common.description")}
                       style={{ marginTop: 6 }}
                     />
                   </div>
@@ -929,7 +950,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 <details className={`opt-collapsible${scheduleHasValue ? " has-group-value" : ""}`}>
                   <summary>
                     <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      日程
+                      {t("tab.schedule")}
                       <span className="has-value-dot" />
                     </span>
                     <button
@@ -937,7 +958,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       className={`opt-reset-btn${scheduleHasValue ? " has-value" : ""}`}
                       onClick={(e) => { e.stopPropagation(); resetScheduleFilters(); }}
                     >
-                      <ResetIcon /> 重置
+                      <ResetIcon /> {t("common.reset")}
                     </button>
                   </summary>
                   <div className="opt-body">
@@ -945,13 +966,13 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       className="search-filter-input"
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      placeholder="分类"
+                      placeholder={t("common.category")}
                     />
                     <input
                       className="search-filter-input"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
-                      placeholder="地点"
+                      placeholder={t("common.location")}
                       style={{ marginTop: 6 }}
                     />
                   </div>
@@ -960,7 +981,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 <details className={`opt-collapsible${notifyHasValue ? " has-group-value" : ""}`}>
                   <summary>
                     <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      通知
+                      {t("tab.notify")}
                       <span className="has-value-dot" />
                     </span>
                     <button
@@ -968,7 +989,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       className={`opt-reset-btn${notifyHasValue ? " has-value" : ""}`}
                       onClick={(e) => { e.stopPropagation(); resetNotifyFilters(); }}
                     >
-                      <ResetIcon /> 重置
+                      <ResetIcon /> {t("common.reset")}
                     </button>
                   </summary>
                   <div className="opt-body">
@@ -976,7 +997,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       className="search-filter-input"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="描述"
+                      placeholder={t("common.description")}
                     />
                   </div>
                 </details>
@@ -987,7 +1008,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
         <section className="search-results">
           <div className="search-results-toolbar">
-            <span>{connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error") ? (connectionStatus.status === "offline" ? "连接失败" : "认证失败") : status || `${results.length}/${total} 项`}</span>
+            <span>{connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error") ? (connectionStatus.status === "offline" ? t("common.connectionFailed") : t("common.authFailed")) : status || `${results.length}/${total} ${t("common.items")}`}</span>
             <div className="search-sort-controls">
               <Dropdown
                 value={currentSortBy}
@@ -1002,8 +1023,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 type="button"
                 className="sort-order-btn"
                 onClick={() => setSortOrder((value) => (value === "desc" ? "asc" : "desc"))}
-                aria-label={sortOrder === "desc" ? "降序" : "升序"}
-                title={sortOrder === "desc" ? "降序" : "升序"}
+                aria-label={sortOrder === "desc" ? t("common.descending") : t("common.ascending")}
+                title={sortOrder === "desc" ? t("common.descending") : t("common.ascending")}
               >
                 {sortOrder === "desc" ? "↓" : "↑"}
               </button>
@@ -1020,12 +1041,12 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
                 const hasDue = todo.due_at !== null;
                 const statusLabel = overdue
-                  ? `逾期 ${overdueDurationLabel(todo.due_at!)}`
+                  ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, undefined, t)}`
                   : lateDone
-                    ? `逾期 ${overdueDurationLabel(todo.due_at!, todo.completed_at!)}完成`
+                    ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, todo.completed_at!, t)}${t("common.completed")}`
                     : todo.completed
-                      ? "已完成"
-                      : "进行中";
+                      ? t("common.completed")
+                      : t("common.inProgress");
                 const rowClass = [
                   "todo-row",
                   todo.completed ? "completed" : "",
@@ -1045,7 +1066,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       type="button"
                       className="check-button"
                       onClick={(e) => { e.stopPropagation(); void toggleTodo(result); }}
-                      title={todo.completed ? "取消完成" : "标记完成"}
+                      title={todo.completed ? t("common.cancelComplete") : t("common.markComplete")}
                     >
                       {todo.completed ? "✓" : ""}
                     </button>
@@ -1076,8 +1097,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       )}
                       <div className="todo-meta">
                         <span className="todo-status-badge">{statusLabel}</span>
-                        {hasDue ? <span className="due-time">截止 {formatDueTime(todo.due_at!)}</span> : <span className="due-time">无截止时间</span>}
-                        {todo.completed_at ? <span className="todo-completed-time">完成于 {formatDueTime(todo.completed_at)}</span> : null}
+                        {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
+                        {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
                       </div>
                     </div>
                     <div className="todo-right">
@@ -1085,7 +1106,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         <IdIcon />
                         <span>{todo.id}</span>
                       </span>
-                      <span className="todo-attachment-count" title={`附件 ${todo.attachment_count ?? 0}`}>
+                      <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
                         <AttachmentCountIcon />
                         <span>{todo.attachment_count ?? 0}</span>
                       </span>
@@ -1142,7 +1163,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       type="button"
                       className="search-delete-btn"
                       onClick={(e) => { e.stopPropagation(); void deleteResult(result); }}
-                      title="删除"
+                      title={t("common.delete")}
                     >
                       <TrashIcon />
                     </button>
@@ -1186,7 +1207,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       </button>
                     )}
                     <div className="search-result-meta">
-                      <span>触发 {formatEpoch(notify.trigger_at)}</span>
+                      <span>{t("common.trigger")} {formatEpoch(notify.trigger_at)}</span>
                       {notify.description ? <span>{notify.description}</span> : null}
                       <span className="search-result-id">id:{notify.id}</span>
                     </div>
@@ -1195,7 +1216,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     type="button"
                     className="search-delete-btn"
                     onClick={(e) => { e.stopPropagation(); void deleteResult(result); }}
-                    title="删除"
+                    title={t("common.delete")}
                   >
                     <TrashIcon />
                   </button>
@@ -1203,18 +1224,18 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               );
             })}
             {results.length === 0 && (
-              status === "尚未搜索" ? (
+              status === t("search.notSearched") ? (
                 <div className="search-empty search-empty-initial">
-                  <span className="search-empty-title">选择搜索维度</span>
-                  <span className="search-empty-sub">可通过以下方式查找内容</span>
+                  <span className="search-empty-title">{t("search.searchDimension")}</span>
+                  <span className="search-empty-sub">{t("search.searchDimensionHint")}</span>
                   <div className="search-cards">
                     <button type="button" className="search-card card-todo" onClick={() => setMode("todo")}>
                       <div className="card-icon">
                         <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                       </div>
                       <div className="card-text">
-                        <span className="card-label">待办事项</span>
-                        <span className="card-hint">标题 · 描述 · 标签</span>
+                        <span className="card-label">{t("tab.todo")}</span>
+                        <span className="card-hint">{t("search.todoHint")}</span>
                       </div>
                     </button>
                     <button type="button" className="search-card card-schedule" onClick={() => setMode("schedule")}>
@@ -1222,8 +1243,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                       </div>
                       <div className="card-text">
-                        <span className="card-label">日程安排</span>
-                        <span className="card-hint">标题 · 地点 · 分类</span>
+                        <span className="card-label">{t("tab.schedule")}</span>
+                        <span className="card-hint">{t("search.scheduleHint")}</span>
                       </div>
                     </button>
                     <button type="button" className="search-card card-notify" onClick={() => setMode("notify")}>
@@ -1231,8 +1252,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
                       </div>
                       <div className="card-text">
-                        <span className="card-label">通知提醒</span>
-                        <span className="card-hint">描述 · 触发时间</span>
+                        <span className="card-label">{t("tab.notify")}</span>
+                        <span className="card-hint">{t("search.notificationHint")}</span>
                       </div>
                     </button>
                     <button type="button" className="search-card card-id" onClick={() => setIdSearch(true)}>
@@ -1240,8 +1261,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                       </div>
                       <div className="card-text">
-                        <span className="card-label">ID 精确查找</span>
-                        <span className="card-hint">空格分隔多个 ID</span>
+                        <span className="card-label">{t("search.idLookup")}</span>
+                        <span className="card-hint">{t("search.idLookupHint")}</span>
                       </div>
                     </button>
                   </div>
@@ -1254,11 +1275,11 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
                   </div>
-                  <span className="search-empty-title">未找到匹配项</span>
-                  <span className="search-empty-sub">{query ? `没有包含「${query}」的结果` : "请尝试不同的搜索条件"}</span>
+                  <span className="search-empty-title">{t("search.noMatchFound")}</span>
+                  <span className="search-empty-sub">{query ? t("search.noResultsFor", { query }) : t("search.tryDifferent")}</span>
                   <div className="search-empty-badge">
                     <div className="search-empty-badge-dot" />
-                    0 条匹配
+                    {t("search.matchCount", { count: 0 })}
                   </div>
                 </div>
               )
@@ -1279,12 +1300,12 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               disabled: true
             },
             {
-              label: "跳转",
+              label: t("common.jump"),
               icon: <JumpIcon />,
               action: () => onNavigate(contextItem.type === "notify" ? "todo" : contextItem.type, resultDateKey(contextItem))
             },
             {
-              label: "编辑",
+              label: t("common.edit"),
               icon: <EditIcon />,
               action: () => {
                 if (contextItem.type === "notify") setEditingNotifyId(contextItem.item.id);
@@ -1292,7 +1313,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               }
             },
             {
-              label: "删除",
+              label: t("common.delete"),
               icon: <TrashIcon />,
               danger: true,
               action: () => void deleteResult(contextItem)

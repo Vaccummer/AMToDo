@@ -16,6 +16,13 @@ import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { TodoDetailModal } from "./TodoDetailModal";
 import addIcon from "../assets/add.svg";
+import { useI18n } from "../i18n";
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 type Props = {
   api: AMToDoApi;
@@ -64,14 +71,15 @@ function IdIcon() {
   );
 }
 
-function overdueDurationLabel(fromEpoch: number, toEpoch = Math.floor(Date.now() / 1000)): string {
-  const seconds = Math.max(0, toEpoch - fromEpoch);
+function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
+  const effectiveToEpoch = toEpoch ?? Math.floor(Date.now() / 1000);
+  const seconds = Math.max(0, effectiveToEpoch - fromEpoch);
   const days = Math.floor(seconds / 86400);
-  if (days > 0) return `${days} 天`;
+  if (days > 0) return t("common.days", { count: days });
   const hours = Math.floor(seconds / 3600);
-  if (hours > 0) return `${hours} 小时`;
+  if (hours > 0) return t("common.hours", { count: hours });
   const minutes = Math.max(1, Math.floor(seconds / 60));
-  return `${minutes} 分钟`;
+  return t("common.minutes", { count: minutes });
 }
 
 export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
@@ -103,6 +111,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [todoRefreshKey, setTodoRefreshKey] = useState(0);
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+  const { t, locale } = useI18n();
 
   useEffect(() => {
     if (cachedDateKey) setSelectedDayKey(cachedDateKey);
@@ -136,9 +145,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const weekLabel = useMemo(() => {
     const [year, month] = weekStartKey.split("-").map(Number);
     const wn = weekOfMonth(weekStartKey, normalizedWeekStart);
-    const labels = ["一", "二", "三", "四", "五", "六"];
-    return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
-  }, [normalizedWeekStart, weekStartKey]);
+    const weekStr = locale === "en" ? ordinal(wn) : String(wn);
+    return t("common.weekOfYear", { year, month, week: weekStr });
+  }, [normalizedWeekStart, weekStartKey, t, locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,9 +171,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         setTodos([]);
         setIsLoading(false);
         if (error instanceof TypeError) {
-          onConnectionError?.("network", "无法与服务器通信");
+          onConnectionError?.("network", t("connection.cannotConnectDesc"));
         } else {
-          onConnectionError?.("token", error instanceof Error ? error.message : "身份验证失败");
+          onConnectionError?.("token", error instanceof Error ? error.message : t("connection.authFailed"));
         }
       });
     return () => {
@@ -189,7 +198,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   }
 
   async function addTodo() {
-    const title = "新待办";
+    const title = t("todo.newTodo");
     try {
       const plannedAt = startOfDateKeyEpoch(selectedDayKey);
       const result = await api.createTodo(title, plannedAt);
@@ -199,9 +208,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       onConnectionError?.(null);
     } catch (error: unknown) {
       if (error instanceof TypeError) {
-        onConnectionError?.("network", "无法与服务器通信");
+        onConnectionError?.("network", t("connection.cannotConnectDesc"));
       } else {
-        onConnectionError?.("token", error instanceof Error ? error.message : "无法创建 ToDo");
+        onConnectionError?.("token", error instanceof Error ? error.message : t("todo.createFailed"));
       }
     }
   }
@@ -269,9 +278,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
 
   async function askDeleteTodo(id: number) {
     const ok = await ask({
-      title: "删除待办",
-      message: "确定将这条待办移入回收站吗？之后可以在 Trash 中恢复。",
-      confirmLabel: "移入回收站",
+      title: t("todo.deleteTodo"),
+      message: t("todo.deleteTodoConfirm"),
+      confirmLabel: t("common.moveToTrash"),
       danger: true,
     });
     if (ok) deleteTodo(id);
@@ -307,7 +316,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             type="button"
             className="datebar-side-btn datebar-add-btn"
             onClick={() => void addTodo()}
-            title="添加待办"
+            title={t("todo.addTodo")}
           >
             <img src={addIcon} alt="" />
           </button>
@@ -366,12 +375,12 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
               <div className="stats-col">
                 <div className="stat-row">
                   <div className="stat-dot green" />
-                  <span className="stat-label">按时完成</span>
+                  <span className="stat-label">{t("common.onTime")}</span>
                   <span className="stat-value">{onTimeCompleted}</span>
                 </div>
                 <div className="stat-row">
                   <div className="stat-dot amber" />
-                  <span className="stat-label">逾期完成</span>
+                  <span className="stat-label">{t("common.overdueCompleted")}</span>
                   <span className="stat-value">{lateCompleted.length}</span>
                 </div>
               </div>
@@ -403,8 +412,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                 <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
             </div>
-            <p className="empty-state-title">今天很清爽</p>
-            <p className="empty-state-subtitle">还没有待办事项</p>
+            <p className="empty-state-title">{t("todo.emptyTitle")}</p>
+            <p className="empty-state-subtitle">{t("todo.emptySubtitle")}</p>
           </div>
         ) : null}
         {(!connectionStatus || connectionStatus.status === "online" || connectionStatus.status === "idle" || connectionStatus.status === "checking" || connectionStatus.status === "reconnecting") && todos
@@ -415,12 +424,12 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
           const hasDue = todo.due_at !== null;
           const statusLabel = overdue
-            ? `逾期 ${overdueDurationLabel(todo.due_at!)}`
+            ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, undefined, t)}`
             : lateDone
-              ? `逾期 ${overdueDurationLabel(todo.due_at!, todo.completed_at!)}完成`
+              ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, todo.completed_at!, t)}${t("common.completed")}`
               : todo.completed
-                ? "已完成"
-                : "进行中";
+                ? t("common.completed")
+                : t("common.inProgress");
           const rowClass = [
             "todo-row",
             todo.completed ? "completed" : "",
@@ -453,15 +462,15 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                 <span
                   className="todo-title"
                   onDoubleClick={() => startEdit(todo)}
-                  title="双击编辑"
+                  title={t("common.doubleClickEdit")}
                 >
                   {todo.title}
                 </span>
               )}
               <div className="todo-meta">
                 <span className="todo-status-badge">{statusLabel}</span>
-                {hasDue ? <span className="due-time">截止 {formatDueTime(todo.due_at!)}</span> : <span className="due-time">无截止时间</span>}
-                {todo.completed_at ? <span className="todo-completed-time">完成于 {formatDueTime(todo.completed_at)}</span> : null}
+                {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
+                {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
               </div>
             </div>
             <div className="todo-right">
@@ -469,7 +478,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                 <IdIcon />
                 <span>{todo.id}</span>
               </span>
-              <span className="todo-attachment-count" title={`附件 ${todo.attachment_count ?? 0}`}>
+              <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
                 <AttachmentCountIcon />
                 <span>{todo.attachment_count ?? 0}</span>
               </span>
@@ -481,13 +490,13 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       <div className="todo-bottom-bar">
         <button type="button" className="add-todo-button todo-bottom-primary" onClick={() => void addTodo()}>
           <img src={addIcon} alt="" />
-          添加待办
+          {t("todo.addTodo")}
         </button>
         <button
           type="button"
           className="todo-bottom-icon-btn"
           onClick={() => setTodoRefreshKey((k) => k + 1)}
-          title="刷新当天"
+          title={t("todo.refreshDay")}
         >
           <svg width="18" height="18" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
             <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor"/>
@@ -498,7 +507,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           type="button"
           className={`todo-bottom-icon-btn${hideCompleted ? " active" : ""}`}
           onClick={() => setHideCompleted((v) => !v)}
-          title={hideCompleted ? "显示已完成" : "隐藏已完成"}
+          title={hideCompleted ? t("todo.showCompleted") : t("todo.hideCompleted")}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 11 12 14 22 4" />
@@ -537,12 +546,12 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
               disabled: true
             },
             {
-              label: "编辑",
+              label: t("common.edit"),
               icon: <EditIcon />,
               action: () => setDetailId(contextMenu.id)
             },
             {
-              label: "删除",
+              label: t("common.delete"),
               icon: <TrashIcon />,
               danger: true,
               action: () => askDeleteTodo(contextMenu.id)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AMToDoApi, NotificationItem } from "../api/client";
 import type { UISettings } from "../lib/settings";
+import { useI18n } from "../i18n";
 
 function formatDateTime(epoch: number, timezone: string): string {
   const d = new Date(epoch * 1000);
@@ -41,6 +42,7 @@ export function NotifyDetailModal({
   const [mentions, setMentions] = useState<MentionDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +90,7 @@ export function NotifyDetailModal({
         if (!cancelled) setMentions(results);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "加载失败");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("common.loadFailed"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -113,17 +115,17 @@ export function NotifyDetailModal({
       onClick={handleBackdrop}
       onKeyDown={handleKeyDown}
     >
-      <div className="schedule-modal-card" role="dialog" aria-label="通知详情">
+      <div className="schedule-modal-card" role="dialog" aria-label={t("notify.detail")}>
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">通知详情<span className="notify-modal-id-badge">#{notificationId}</span></h2>
+            <h2 className="schedule-modal-title">{t("notify.detail")}<span className="notify-modal-id-badge">#{notificationId}</span></h2>
           </div>
           <button
             type="button"
             className="schedule-modal-close"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -134,21 +136,21 @@ export function NotifyDetailModal({
 
         <div className="schedule-modal-body">
           {loading ? (
-            <div style={{ textAlign: "center", padding: "2rem" }}>加载中...</div>
+            <div style={{ textAlign: "center", padding: "2rem" }}>{t("common.loadingEllipsis")}</div>
           ) : error ? (
             <div className="schedule-modal-error">{error}</div>
           ) : notification ? (
             <>
-              <div className="schedule-modal-section-label">基本信息</div>
+              <div className="schedule-modal-section-label">{t("notify.basicInfo")}</div>
 
               <div className="schedule-modal-field">
-                <span className="schedule-modal-label">标题</span>
+                <span className="schedule-modal-label">{t("common.title")}</span>
                 <span style={{ fontSize: "1rem" }}>{notification.title}</span>
               </div>
 
               {notification.description ? (
                 <div className="schedule-modal-field">
-                  <span className="schedule-modal-label">描述</span>
+                  <span className="schedule-modal-label">{t("common.description")}</span>
                   <span style={{ fontSize: "0.95rem", whiteSpace: "pre-wrap" }}>
                     {notification.description}
                   </span>
@@ -156,29 +158,29 @@ export function NotifyDetailModal({
               ) : null}
 
               <div className="schedule-modal-field">
-                <span className="schedule-modal-label">触发时间</span>
+                <span className="schedule-modal-label">{t("common.triggerTime")}</span>
                 <span>{formatDateTime(notification.trigger_at, settings.timezone)}</span>
               </div>
 
               <div className="schedule-modal-field">
-                <span className="schedule-modal-label">创建时间</span>
+                <span className="schedule-modal-label">{t("common.createdAt")}</span>
                 <span>{formatDateTime(notification.created_at, settings.timezone)}</span>
               </div>
 
               {notification.updated_at ? (
                 <div className="schedule-modal-field">
-                  <span className="schedule-modal-label">更新时间</span>
+                  <span className="schedule-modal-label">{t("common.updatedAt")}</span>
                   <span>{formatDateTime(notification.updated_at, settings.timezone)}</span>
                 </div>
               ) : null}
 
               <div className="schedule-modal-divider" />
 
-              <div className="schedule-modal-section-label">关联项目</div>
+              <div className="schedule-modal-section-label">{t("notify.relatedItems")}</div>
 
               {mentions.length === 0 ? (
                 <div style={{ color: "var(--text-muted, #888)", padding: "0.25rem 0" }}>
-                  无关联项目
+                  {t("notify.noRelatedItems")}
                 </div>
               ) : (
                 mentions.map((m, i) => (
@@ -188,7 +190,7 @@ export function NotifyDetailModal({
                     </span>
                     <span>
                       {m.error
-                        ? `[已删除的 ${m.target_type === "todo" ? "ToDo" : "Schedule"} #${m.target_id}]`
+                        ? `[${t("notify.deletedTarget")} ${m.target_type === "todo" ? "ToDo" : "Schedule"} #${m.target_id}]`
                         : m.title ?? `#${m.target_id}`}
                     </span>
                   </div>
@@ -207,14 +209,14 @@ export function NotifyDetailModal({
               if (notification) onEdit(notification.id);
             }}
           >
-            编辑
+            {t("common.edit")}
           </button>
           <button
             type="button"
             className="schedule-modal-btn schedule-modal-btn-delete"
             onClick={onClose}
           >
-            关闭
+            {t("common.close")}
           </button>
         </div>
       </div>

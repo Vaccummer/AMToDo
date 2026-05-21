@@ -1,4 +1,5 @@
 import type { ConnectionStatusSnapshot, UnifiedStatus } from "../api/connection-status";
+import { useI18n } from "../i18n";
 
 type Props = {
   snapshot: ConnectionStatusSnapshot;
@@ -8,8 +9,18 @@ type Props = {
   onRetry?: () => void;
 };
 
+/** Translate snapshot error messages that are stored as i18n keys. */
+function translateError(msg: string | null, t: (key: string, params?: Record<string, string | number>) => string): string | null {
+  if (!msg) return null;
+  if (msg.includes(".") && !msg.includes(" ")) {
+    const translated = t(msg);
+    return translated !== msg ? translated : msg;
+  }
+  return msg;
+}
+
 /** Returns null when status is healthy — caller should render nothing. */
-function resolve(status: UnifiedStatus) {
+function resolve(status: UnifiedStatus, t: (key: string, params?: Record<string, string | number>) => string) {
   switch (status) {
     case "online":
     case "idle":
@@ -18,49 +29,49 @@ function resolve(status: UnifiedStatus) {
     case "reconnecting":
       return {
         color: "bad" as const,
-        title: "正在重新连接",
-        desc: "WebSocket 连接中断，正在尝试重连…",
-        btnLabel: "检查设置",
+        title: t("connection.reconnecting"),
+        desc: t("connection.reconnectingDesc"),
+        btnLabel: t("connection.checkSettings"),
         focusTarget: "url" as const,
       };
     case "offline":
       return {
         color: "net" as const,
-        title: "无法连接到服务器",
-        desc: "请检查服务器地址和网络连接",
-        btnLabel: "检查设置",
+        title: t("connection.cannotConnect"),
+        desc: t("connection.cannotConnectDesc"),
+        btnLabel: t("connection.checkSettings"),
         focusTarget: "url" as const,
       };
     case "token-error":
       return {
         color: "tok" as const,
-        title: "身份验证失败",
-        desc: "访问令牌无效或已过期",
-        btnLabel: "更新令牌",
+        title: t("connection.authFailed"),
+        desc: t("connection.authFailedDesc"),
+        btnLabel: t("connection.updateToken"),
         focusTarget: "token" as const,
       };
     case "fingerprint":
       return {
         color: "fp" as const,
-        title: "公钥指纹不匹配",
-        desc: "服务器公钥已变更，可能是重新部署",
-        btnLabel: "查看详情",
+        title: t("connection.fingerprintMismatch"),
+        desc: t("connection.fingerprintMismatchDesc"),
+        btnLabel: t("connection.viewDetails"),
         focusTarget: "url" as const,
       };
     case "key-mismatch":
       return {
         color: "fp" as const,
-        title: "密钥不匹配",
-        desc: "服务端解密失败，客户端密钥与服务器不一致",
-        btnLabel: "检查设置",
+        title: t("connection.keyMismatch"),
+        desc: t("connection.keyMismatchDesc"),
+        btnLabel: t("connection.checkSettings"),
         focusTarget: "url" as const,
       };
     case "replay-detected":
       return {
         color: "net" as const,
-        title: "重放攻击检测",
-        desc: "服务器检测到重复请求，连接已拒绝",
-        btnLabel: "检查设置",
+        title: t("connection.replayDetected"),
+        desc: t("connection.replayDetectedDesc"),
+        btnLabel: t("connection.checkSettings"),
         focusTarget: "url" as const,
       };
     default:
@@ -119,12 +130,13 @@ function iconForColor(color: string) {
 
 // ── Full-page variant ──
 
-function FullPageBanner({ info, snapshot, serverUrl, onOpenSettings, onRetry }: {
+function FullPageBanner({ info, snapshot, serverUrl, onOpenSettings, onRetry, translatedError }: {
   info: NonNullable<ReturnType<typeof resolve>>;
   snapshot: ConnectionStatusSnapshot;
   serverUrl?: string;
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   onRetry?: () => void;
+  translatedError?: string | null;
 }) {
   const handleClick = () => {
     if (onOpenSettings) {
@@ -134,7 +146,7 @@ function FullPageBanner({ info, snapshot, serverUrl, onOpenSettings, onRetry }: 
     }
   };
 
-  const desc = snapshot.errorMessage || info.desc;
+  const desc = translatedError || info.desc;
 
   return (
     <div className={`conn-error-fullpage conn-error-${info.color}`}>
@@ -155,11 +167,12 @@ function FullPageBanner({ info, snapshot, serverUrl, onOpenSettings, onRetry }: 
 
 // ── Bar variant (schedule, Style A from demo) ──
 
-function BarBanner({ info, snapshot, onOpenSettings, onRetry }: {
+function BarBanner({ info, snapshot, onOpenSettings, onRetry, translatedError }: {
   info: NonNullable<ReturnType<typeof resolve>>;
   snapshot: ConnectionStatusSnapshot;
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   onRetry?: () => void;
+  translatedError?: string | null;
 }) {
   const handleClick = () => {
     if (onOpenSettings) {
@@ -169,7 +182,7 @@ function BarBanner({ info, snapshot, onOpenSettings, onRetry }: {
     }
   };
 
-  const desc = snapshot.errorMessage || info.desc;
+  const desc = translatedError || info.desc;
 
   return (
     <div className={`conn-error-bar conn-error-${info.color}`}>
@@ -190,11 +203,14 @@ function BarBanner({ info, snapshot, onOpenSettings, onRetry }: {
 // ── Main component ──
 
 export function ConnectionErrorBanner({ snapshot, variant, serverUrl, onOpenSettings, onRetry }: Props) {
-  const info = resolve(snapshot.status);
+  const { t } = useI18n();
+  const info = resolve(snapshot.status, t);
   if (!info) return null;
 
+  const translatedError = translateError(snapshot.errorMessage, t);
+
   if (variant === "bar") {
-    return <BarBanner info={info} snapshot={snapshot} onOpenSettings={onOpenSettings} onRetry={onRetry} />;
+    return <BarBanner info={info} snapshot={snapshot} onOpenSettings={onOpenSettings} onRetry={onRetry} translatedError={translatedError} />;
   }
-  return <FullPageBanner info={info} snapshot={snapshot} serverUrl={serverUrl} onOpenSettings={onOpenSettings} onRetry={onRetry} />;
+  return <FullPageBanner info={info} snapshot={snapshot} serverUrl={serverUrl} onOpenSettings={onOpenSettings} onRetry={onRetry} translatedError={translatedError} />;
 }

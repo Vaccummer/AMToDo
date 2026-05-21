@@ -23,6 +23,13 @@ import { getEventColors, getNotifyEventColors } from "../themes";
 import { useGlassTooltip, GlassTooltip } from "../hooks/useGlassTooltip";
 import scheduleNormalIcon from "../assets/schedule-normal.svg";
 import scheduleFullIcon from "../assets/schedule-full.svg";
+import { useI18n } from "../i18n";
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 type Props = {
   api: AMToDoApi;
@@ -134,6 +141,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
   const dateBarRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+  const { t, locale } = useI18n();
 
   useEffect(() => {
     if (!pendingAction) return;
@@ -211,9 +219,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const weekLabel = useMemo(() => {
     const [year, month] = weekStartKey.split("-").map(Number);
     const wn = weekOfMonth(weekStartKey, normalizedWeekStart);
-    const labels = ["一", "二", "三", "四", "五", "六"];
-    return `${year}年${month}月 第${labels[wn - 1] ?? wn}周`;
-  }, [normalizedWeekStart, weekStartKey]);
+    const weekStr = locale === "en" ? ordinal(wn) : String(wn);
+    return t("common.weekOfYear", { year, month, week: weekStr });
+  }, [normalizedWeekStart, weekStartKey, t, locale]);
 
   const renderItems = useMemo(
     () => (editing ? items.map((item) => (item.id === editing.id ? editing.draft : item)) : items),
@@ -276,9 +284,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
         setItems([]);
         setIsLoading(false);
         if (error instanceof TypeError) {
-          onConnectionError?.("network", "无法与服务器通信");
+          onConnectionError?.("network", t("connection.cannotConnectDesc"));
         } else {
-          onConnectionError?.("token", error instanceof Error ? error.message : "无法加载日程");
+          onConnectionError?.("token", error instanceof Error ? error.message : t("connection.authFailed"));
         }
       });
   }, [api, days, refreshKey]);
@@ -438,9 +446,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
 
   async function askDeleteSchedule(id: number) {
     const ok = await ask({
-      title: "删除日程",
-      message: "确定将这条日程移入回收站吗？之后可以在 Trash 中恢复。",
-      confirmLabel: "移入回收站",
+      title: t("schedule.deleteSchedule"),
+      message: t("schedule.deleteScheduleConfirm"),
+      confirmLabel: t("common.moveToTrash"),
       danger: true,
     });
     if (ok) deleteSchedule(id);
@@ -459,9 +467,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
 
   async function askDeleteNotification(id: number) {
     const ok = await ask({
-      title: "删除通知",
-      message: "确定删除这条通知吗？",
-      confirmLabel: "删除",
+      title: t("schedule.deleteNotification"),
+      message: t("schedule.deleteNotificationConfirm"),
+      confirmLabel: t("common.delete"),
       danger: true,
     });
     if (ok) deleteNotification(id);
@@ -570,7 +578,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           setEditing(clearWhenDone ? null : { ...target, draft: target.original, dirty: false, saving: false });
         }
       }
-      setEditStatus(error instanceof Error ? `日程保存失败，已恢复服务器状态：${error.message}` : "日程保存失败，已恢复服务器状态");
+      setEditStatus(error instanceof Error ? `${t("schedule.saveFailedRestore")}: ${error.message}` : t("schedule.saveFailedRestore"));
     }
   }
 
@@ -884,7 +892,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
             type="button"
             className="datebar-side-btn"
             onClick={() => setFullHours((v) => !v)}
-            title="切换时间范围"
+            title={t("schedule.toggleTimeRange")}
           >
             <img src={fullHours ? scheduleFullIcon : scheduleNormalIcon} alt="" />
           </button>
@@ -1087,7 +1095,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               disabled: true
             },
             {
-              label: "编辑",
+              label: t("common.edit"),
               icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -1097,7 +1105,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               action: () => openScheduleDetail(contextMenu.id)
             },
             {
-              label: "删除",
+              label: t("common.delete"),
               icon: <TrashIcon />,
               danger: true,
               action: () => askDeleteSchedule(contextMenu.id)
@@ -1112,7 +1120,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           y={emptyContextMenu.y}
           items={[
             {
-              label: "新建日程",
+              label: t("schedule.newSchedule"),
               icon: <PlusIcon />,
               action: () => {
                 setCreateDraft({
@@ -1122,7 +1130,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               }
             },
             {
-              label: "新建通知",
+              label: t("schedule.newNotification"),
               icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1136,7 +1144,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               }
             },
             {
-              label: "刷新",
+              label: t("common.refresh"),
               icon: <RefreshIcon />,
               action: () => {
                 setRefreshKey((k) => k + 1);
@@ -1158,7 +1166,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               disabled: true
             },
             {
-              label: "编辑",
+              label: t("common.edit"),
               icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -1168,7 +1176,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               action: () => setNotifyEditId(notifyContextMenu.id)
             },
             {
-              label: "删除",
+              label: t("common.delete"),
               icon: <TrashIcon />,
               danger: true,
               action: () => askDeleteNotification(notifyContextMenu.id)
@@ -1253,6 +1261,7 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
   onContextMenu?: (e: React.MouseEvent) => void;
 }>(function ScheduleEventBlock({ block, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onResizePointerDown, onContextMenu }, ref) {
   const tooltip = useGlassTooltip();
+  const { t } = useI18n();
   const style = {
     top: `${block.top}px`,
     height: `${block.height}px`,
@@ -1314,10 +1323,10 @@ const ScheduleEventBlock = forwardRef<HTMLButtonElement, {
           title: block.item.title,
           id: block.item.id,
           fields: [
-            { icon: "\u{1F552}", label: "时长", value: formatDuration(block.item.duration) },
-            { icon: "\u{1F4DD}", label: "描述", value: block.item.description || "-" },
-            { icon: "\u{1F4C2}", label: "分类", value: block.item.category || "-" },
-            { icon: "\u{1F4CD}", label: "地点", value: block.item.location || "-" },
+            { icon: "\u{1F552}", label: t("common.duration"), value: formatDuration(block.item.duration) },
+            { icon: "\u{1F4DD}", label: t("common.description"), value: block.item.description || "-" },
+            { icon: "\u{1F4C2}", label: t("common.category"), value: block.item.category || "-" },
+            { icon: "\u{1F4CD}", label: t("common.location"), value: block.item.location || "-" },
           ],
         }}
         onMouseEnter={tooltip.keepVisible}
@@ -1341,6 +1350,7 @@ const NotifyEventBlock = forwardRef<HTMLButtonElement, {
   onContextMenu?: (e: React.MouseEvent) => void;
 }>(function NotifyEventBlock({ item, top, backgroundColor, selected, saving, onClick, onDoubleClick, onKeyDown, onPointerDown, onContextMenu }, ref) {
   const tooltip = useGlassTooltip();
+  const { t } = useI18n();
   const timeText = formatTime(item.trigger_at);
   const className = [
     "notify-event",
@@ -1375,8 +1385,8 @@ const NotifyEventBlock = forwardRef<HTMLButtonElement, {
           title: item.title,
           id: item.id,
           fields: [
-            { icon: "\u{1F552}", label: "触发时间", value: timeText },
-            { icon: "\u{1F4DD}", label: "描述", value: item.description || "-" },
+            { icon: "\u{1F552}", label: t("common.triggerTime"), value: timeText },
+            { icon: "\u{1F4DD}", label: t("common.description"), value: item.description || "-" },
           ],
         }}
         onMouseEnter={tooltip.keepVisible}

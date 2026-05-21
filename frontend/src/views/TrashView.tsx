@@ -3,6 +3,7 @@ import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../api
 import type { ConnectionStatusSnapshot } from "../api/connection-status";
 import { formatTime } from "../lib/time";
 import { useConfirm } from "./ConfirmDialog";
+import { useI18n } from "../i18n";
 
 type Props = {
   api: AMToDoApi;
@@ -17,12 +18,14 @@ type TrashResult =
   | { type: "schedule"; item: ScheduleItem }
   | { type: "notify"; item: NotificationItem };
 
-const FILTER_TABS: { value: TrashMode; label: string; dotClass?: string }[] = [
-  { value: "all", label: "全部" },
-  { value: "todo", label: "ToDo", dotClass: "todo" },
-  { value: "schedule", label: "Schedule", dotClass: "sch" },
-  { value: "notify", label: "Notify", dotClass: "notify" },
-];
+function getFilterTabs(t: (key: string) => string) {
+  return [
+    { value: "all" as TrashMode, label: t("common.all") },
+    { value: "todo" as TrashMode, label: t("tab.todo"), dotClass: "todo" },
+    { value: "schedule" as TrashMode, label: t("tab.schedule"), dotClass: "sch" },
+    { value: "notify" as TrashMode, label: t("tab.notify"), dotClass: "notify" },
+  ];
+}
 
 function TodoIcon() {
   return (
@@ -106,16 +109,17 @@ function SearchSmallIcon() {
 }
 
 export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<TrashMode>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<TrashResult[]>([]);
-  const [status, setStatus] = useState("加载中");
+  const [status, setStatus] = useState<string>("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     let cancelled = false;
-    setStatus("加载中");
+    setStatus(t("common.loading"));
     setItems([]);
 
     const requests: Promise<TrashResult[]>[] = [];
@@ -139,16 +143,16 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
         });
         setItems(merged);
         onConnectionError?.(null);
-        setStatus(merged.length ? "" : "回收站为空");
+        setStatus(merged.length ? "" : t("trash.empty"));
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         setItems([]);
         if (error instanceof TypeError) {
-          onConnectionError?.("network", "无法与服务器通信");
-          setStatus("连接失败");
+          onConnectionError?.("network", t("connection.cannotConnectDesc"));
+          setStatus(t("common.connectionFailed"));
         } else {
-          const msg = error instanceof Error ? error.message : "回收站加载失败";
+          const msg = error instanceof Error ? error.message : t("trash.loadFailed");
           onConnectionError?.("token", msg);
           setStatus(msg);
         }
@@ -187,30 +191,30 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
       if (entry.type === "todo") {
         const result = await api.restoreTodos([entry.item.id]);
         const failed = result.results.find((r) => !r.ok);
-        if (failed) { setStatus(failed.error?.message ?? "恢复失败"); return; }
+        if (failed) { setStatus(failed.error?.message ?? t("trash.restoreFailed")); return; }
       } else if (entry.type === "schedule") {
         const result = await api.restoreSchedules([entry.item.id]);
         const failed = result.results.find((r) => !r.ok);
-        if (failed) { setStatus(failed.error?.message ?? "恢复失败"); return; }
+        if (failed) { setStatus(failed.error?.message ?? t("trash.restoreFailed")); return; }
       } else {
         const result = await api.restoreNotification(entry.item.id);
-        if (!result.ok) { setStatus("恢复失败"); return; }
+        if (!result.ok) { setStatus(t("trash.restoreFailed")); return; }
       }
       setItems((prev) => prev.filter((item) => resultKey(item) !== key));
-      setStatus("已恢复");
+      setStatus(t("trash.restored"));
     } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : "恢复失败");
+      setStatus(error instanceof Error ? error.message : t("trash.restoreFailed"));
     } finally {
       setBusyKey(null);
     }
   }
 
   async function purge(entry: TrashResult) {
-    const typeLabel = entry.type === "todo" ? "待办" : entry.type === "schedule" ? "日程" : "通知";
+    const typeLabel = entry.type === "todo" ? t("trash.todo") : entry.type === "schedule" ? t("trash.schedule") : t("trash.notification");
     const ok = await ask({
-      title: `永久删除${typeLabel}`,
-      message: "永久删除后无法恢复，相关附件也会被清除。",
-      confirmLabel: "永久删除",
+      title: `${t("common.purge")}${typeLabel}`,
+      message: t("trash.purgeConfirm"),
+      confirmLabel: t("common.purge"),
       danger: true,
     });
     if (!ok) return;
@@ -221,19 +225,19 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
       if (entry.type === "todo") {
         const result = await api.purgeTodos([entry.item.id]);
         const failed = result.results.find((r) => !r.ok);
-        if (failed) { setStatus(failed.error?.message ?? "永久删除失败"); return; }
+        if (failed) { setStatus(failed.error?.message ?? t("trash.purgeFailed")); return; }
       } else if (entry.type === "schedule") {
         const result = await api.purgeSchedules([entry.item.id]);
         const failed = result.results.find((r) => !r.ok);
-        if (failed) { setStatus(failed.error?.message ?? "永久删除失败"); return; }
+        if (failed) { setStatus(failed.error?.message ?? t("trash.purgeFailed")); return; }
       } else {
         const result = await api.purgeNotification(entry.item.id);
-        if (!result.ok) { setStatus("永久删除失败"); return; }
+        if (!result.ok) { setStatus(t("trash.purgeFailed")); return; }
       }
       setItems((prev) => prev.filter((item) => resultKey(item) !== key));
-      setStatus("已永久删除");
+      setStatus(t("trash.purged"));
     } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : "永久删除失败");
+      setStatus(error instanceof Error ? error.message : t("trash.purgeFailed"));
     } finally {
       setBusyKey(null);
     }
@@ -244,13 +248,13 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
     const counts = { todo: 0, schedule: 0, notify: 0 };
     for (const entry of filteredItems) counts[entry.type]++;
     const parts: string[] = [];
-    if (counts.todo) parts.push(`${counts.todo} 个待办`);
-    if (counts.schedule) parts.push(`${counts.schedule} 个日程`);
-    if (counts.notify) parts.push(`${counts.notify} 个通知`);
+    if (counts.todo) parts.push(t("trash.todoCount", { count: counts.todo }));
+    if (counts.schedule) parts.push(t("trash.scheduleCount", { count: counts.schedule }));
+    if (counts.notify) parts.push(t("trash.notificationCount", { count: counts.notify }));
     const ok = await ask({
-      title: "永久删除筛选结果",
-      message: `即将永久删除 ${parts.join("、")}，共 ${filteredItems.length} 项。此操作不可撤销，相关附件也会被清除。`,
-      confirmLabel: "永久删除",
+      title: t("trash.purgeFilterTitle"),
+      message: t("trash.purgeFilterConfirm", { list: parts.join(t("common.separator")), count: filteredItems.length }),
+      confirmLabel: t("common.purge"),
       danger: true,
     });
     if (!ok) return;
@@ -267,9 +271,9 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
       await Promise.all(promises);
       const deletedKeys = new Set(filteredItems.map(resultKey));
       setItems((prev) => prev.filter((item) => !deletedKeys.has(resultKey(item))));
-      setStatus(`已永久删除 ${filteredItems.length} 项`);
+      setStatus(t("trash.purgedCount", { count: filteredItems.length }));
     } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : "批量删除失败");
+      setStatus(error instanceof Error ? error.message : t("common.batchDeleteFailed"));
     } finally {
       setBusyKey(null);
     }
@@ -279,7 +283,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
     <div className="trash-view">
       <div className="trash-filter-bar">
         <div className="filter-tabs" role="tablist">
-          {FILTER_TABS.map((tab) => (
+          {getFilterTabs(t).map((tab) => (
             <button
               key={tab.value}
               type="button"
@@ -300,7 +304,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索回收站..."
+            placeholder={t("trash.searchTrash")}
           />
         </div>
         <button
@@ -308,7 +312,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
           className="trash-clear-btn"
           disabled={filteredItems.length === 0 || busyKey === "purge-all"}
           onClick={() => void purgeAll()}
-          title="清除全部筛选结果"
+          title={t("trash.clearAllFilters")}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <polyline points="3 6 5 6 21 6" />
@@ -330,20 +334,20 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                 <div className="trash-item-title">{entry.item.title}</div>
                 <div className="trash-item-meta">
                   <span className={`trash-item-type-tag ${entry.type}`}>
-                    {entry.type === "todo" ? "ToDo" : entry.type === "schedule" ? "Schedule" : "Notify"}
+                    {entry.type === "todo" ? t("tab.todo") : entry.type === "schedule" ? t("tab.schedule") : t("tab.notify")}
                   </span>
                   <span className="trash-item-id" title={`id:${entry.item.id}`}>#{entry.item.id}</span>
-                  {renderMeta(entry)}
+                  {renderMeta(entry, t)}
                 </div>
               </div>
-              <span className="trash-item-deleted">{formatDeletedAt(entry.item.deleted_at)}</span>
+              <span className="trash-item-deleted">{formatDeletedAt(entry.item.deleted_at, t)}</span>
               <div className="trash-item-actions">
                 <button
                   type="button"
                   className="trash-action-btn restore"
                   disabled={busy}
                   onClick={() => void restore(entry)}
-                  title="恢复"
+                  title={t("common.restore")}
                 >
                   <RestoreIcon />
                 </button>
@@ -352,7 +356,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                   className="trash-action-btn purge"
                   disabled={busy}
                   onClick={() => void purge(entry)}
-                  title="永久删除"
+                  title={t("common.purge")}
                 >
                   <PurgeIcon />
                 </button>
@@ -361,7 +365,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
           );
         })}
         {status ? (
-          status === "回收站为空" ? (
+          status === t("trash.empty") ? (
             <div className="trash-empty">
               <div className="trash-ghost-scene">
                 <div className="trash-sparkle"></div>
@@ -381,8 +385,8 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                   <div className="trash-bin-line"></div>
                 </div>
               </div>
-              <div className="trash-empty-title">回收站为空</div>
-              <div className="trash-empty-desc">连灰尘都飘走了</div>
+              <div className="trash-empty-title">{t("trash.empty")}</div>
+              <div className="trash-empty-desc">{t("trash.emptyDesc")}</div>
             </div>
           ) : (
             <div className="trash-empty">
@@ -409,8 +413,8 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                 <div className="trash-bin-line"></div>
               </div>
             </div>
-            <div className="trash-empty-title">没有匹配的项目</div>
-            <div className="trash-empty-desc">试试其他关键词</div>
+            <div className="trash-empty-title">{t("trash.noMatch")}</div>
+            <div className="trash-empty-desc">{t("trash.noMatchDesc")}</div>
           </div>
         ) : null}
       </div>
@@ -424,12 +428,12 @@ function resultKey(entry: TrashResult): string {
   return `${entry.type}:${entry.item.id}`;
 }
 
-function renderMeta(entry: TrashResult) {
+function renderMeta(entry: TrashResult, t: (key: string) => string) {
   if (entry.type === "todo") {
     const todo = entry.item as TodoItem;
     return (
       <>
-        {todo.due_at ? <span>截止 {formatShortDate(todo.due_at)}</span> : null}
+        {todo.due_at ? <span>{t("common.due")} {formatShortDate(todo.due_at)}</span> : null}
         {todo.tag ? <span>{todo.tag}</span> : null}
       </>
     );
@@ -439,18 +443,18 @@ function renderMeta(entry: TrashResult) {
     return <span>{formatShortDate(sch.start_at)} - {formatShortDate(sch.end_at)}</span>;
   }
   const n = entry.item as NotificationItem;
-  return <span>触发 {formatShortDate(n.trigger_at)}</span>;
+  return <span>{t("common.trigger")} {formatShortDate(n.trigger_at)}</span>;
 }
 
-function formatDeletedAt(epoch?: number | null): string {
+function formatDeletedAt(epoch: number | null | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (!epoch) return "";
   const now = Math.floor(Date.now() / 1000);
   const diff = Math.max(0, now - epoch);
-  if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  if (diff < 60) return t("common.justNow");
+  if (diff < 3600) return t("common.minutesAgo", { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t("common.hoursAgo", { count: Math.floor(diff / 3600) });
   const days = Math.floor(diff / 86400);
-  if (days <= 30) return `${days} 天前`;
+  if (days <= 30) return t("common.daysAgo", { count: days });
   return formatDateTime(epoch);
 }
 

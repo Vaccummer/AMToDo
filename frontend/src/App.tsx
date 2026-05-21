@@ -7,6 +7,7 @@ import { ACCESS_TOKEN, SERVER_URL } from "./config";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "./lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "./lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "./themes";
+import { I18nProvider, createTranslator } from "./i18n";
 import { SettingsModal } from "./views/SettingsModal";
 import { ScheduleView } from "./views/ScheduleView";
 import { SearchView } from "./views/SearchView";
@@ -34,14 +35,6 @@ const tabIcons: Record<Tab, string> = {
   search: searchIcon,
   trash: trashIcon,
   notify: notifyIcon,
-};
-
-const tabLabels: Record<Tab, string> = {
-  todo: "ToDo",
-  schedule: "Schedule",
-  search: "Search",
-  trash: "Trash",
-  notify: "Notify",
 };
 
 const shell = window.amtodoShell ?? {
@@ -95,7 +88,7 @@ export function App() {
     if (kind === null) {
       mgr.reportApiOk();
     } else {
-      mgr.reportApiError(kind, message ?? (kind === "token" ? "身份验证失败" : "无法与服务器通信"));
+      mgr.reportApiError(kind, message ?? (kind === "token" ? "common.authFailed" : "common.connectionFailed"));
     }
   }, []);
 
@@ -110,6 +103,50 @@ export function App() {
   }));
 
   const [api, setApi] = useState<AMToDoApi | null>(null);
+
+  // Fire system notification when reconnect attempts are exhausted (respects notify_on_disconnect)
+  useEffect(() => {
+    const mgr = connectionManagerRef.current;
+    const t = createTranslator(settings.language);
+    let hasBeenOnline = mgr.getSnapshot().status === "online";
+    return mgr.onChange((snap) => {
+      if (snap.status === "online") hasBeenOnline = true;
+      console.log("[Notify] status:", snap.status, "hasBeenOnline=", hasBeenOnline, "notify=", settings.notify_on_disconnect);
+      if (!settings.notify_on_disconnect) return;
+      if (!hasBeenOnline) return;
+      if (snap.status === "offline") {
+        fireDisconnectNotice(t("disconnect.interrupted"), snap.errorMessage ? t(snap.errorMessage) || snap.errorMessage : t("common.connectionFailed"));
+      } else if (snap.status === "token-error" || snap.status === "key-mismatch" || snap.status === "fingerprint" || snap.status === "replay-detected") {
+        fireDisconnectNotice(t("disconnect.authError"), snap.errorMessage ? t(snap.errorMessage) || snap.errorMessage : t("disconnect.authErrorDesc"));
+      }
+    });
+  }, [settings.notify_on_disconnect, settings.language]);
+
+  function fireDisconnectNotice(title: string, body: string) {
+    const handleClick = () => {
+      window.focus();
+      setShowSettings(true);
+    };
+    // Use Electron IPC notification (supports click → open settings via onNotificationClicked)
+    if (shell.showSystemNotification) {
+      shell.showSystemNotification({ title, body, id: -1, trigger_at: 0 })
+        .then((r: { ok: boolean }) => { if (!r.ok) throw 0; })
+        .catch(() => {
+          // Fallback to Web Notification API
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification(title, { body }).onclick = handleClick;
+          }
+        });
+    } else if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") {
+        new Notification(title, { body }).onclick = handleClick;
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then((p) => {
+          if (p === "granted") new Notification(title, { body }).onclick = handleClick;
+        });
+      }
+    }
+  }
 
   const handleTodoDateChange = useCallback((key: string) => {
     setSelectedDateCache((prev) => prev.todo === key ? prev : { ...prev, todo: key });
@@ -371,7 +408,9 @@ export function App() {
         if (cancelled) return;
         setHealth(null);
         const mgr = connectionManagerRef.current;
-        const message = error instanceof Error ? error.message : "无法连接后端";
+        const message = error instanceof FingerprintMismatchError
+          ? error.messageKey
+          : error instanceof Error ? error.message : "common.connectionFailed";
         if (error instanceof FingerprintMismatchError) {
           mgr.reportFingerprintMismatch(message);
         } else {
@@ -400,7 +439,9 @@ export function App() {
       ? ""
       : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
     const desc = notification.description ?? "";
-    const body = desc ? `${desc}\n触发: ${timeStr}` : `触发: ${timeStr}`;
+    const t = createTranslator(settings.language);
+    const triggerLabel = t("common.trigger");
+    const body = desc ? `${desc}\n${triggerLabel}: ${timeStr}` : `${triggerLabel}: ${timeStr}`;
 
     const handleClick = () => {
       window.focus();
@@ -459,9 +500,13 @@ export function App() {
     return shell.onMaximizedChange(setMaximized);
   }, []);
 
-  // Listen for notification clicks → navigate to schedule & open edit
+  // Listen for notification clicks → navigate to schedule & open edit, or open settings for disconnect
   useEffect(() => {
     return shell.onNotificationClicked?.((data: { id: number; trigger_at: number }) => {
+      if (data.id === -1) {
+        setShowSettings(true);
+        return;
+      }
       const { id, trigger_at } = data;
       const dateKey = dateKeyFromEpoch(trigger_at, settings.timezone);
       navigateTab("schedule");
@@ -514,17 +559,26 @@ export function App() {
     : connStatus.status === "idle" ? " idle"
     : " network-error";
 
+  const tApp = createTranslator(settings.language);
+  const tabLabels: Record<Tab, string> = {
+    todo: tApp("tab.todo"),
+    schedule: tApp("tab.schedule"),
+    search: tApp("tab.search"),
+    trash: tApp("tab.trash"),
+    notify: tApp("tab.notify"),
+  };
   const pillText = connStatus.status === "online"
-    ? (connStatus.serverVersion ? `API ${connStatus.serverVersion}` : "API 在线")
-    : connStatus.status === "checking" ? "API 检查中"
-    : connStatus.status === "token-error" ? "令牌无效"
-    : connStatus.status === "fingerprint" ? "指纹不匹配"
-    : connStatus.status === "key-mismatch" ? "密钥不匹配"
-    : connStatus.status === "replay-detected" ? "重放检测"
-    : connStatus.status === "idle" ? "已断开"
-    : "API 离线";
+    ? (connStatus.serverVersion ? `API ${connStatus.serverVersion}` : `API ${tApp("settings.connectionSuccess")}`)
+    : connStatus.status === "checking" ? `API ${tApp("settings.checking")}`
+    : connStatus.status === "token-error" ? tApp("settings.tokenInvalid")
+    : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatch")
+    : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatch")
+    : connStatus.status === "replay-detected" ? tApp("connection.replayDetected")
+    : connStatus.status === "idle" ? tApp("disconnect.disconnected")
+    : `API ${tApp("common.networkError")}`;
 
   return (
+    <I18nProvider locale={settings.language}>
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar-drag">
@@ -543,25 +597,25 @@ export function App() {
         <div className="window-controls">
           <button
             type="button"
-            aria-label="设置"
+            aria-label={tApp("settings.title")}
             className="settings-btn"
             onClick={() => setShowSettings(true)}
           >
             <img src={gearIcon} alt="" />
           </button>
-          <button type="button" aria-label="最小化" onClick={() => shell.minimize()}>
+          <button type="button" aria-label="Minimize" onClick={() => shell.minimize()}>
             <img src={minimumIcon} alt="" />
           </button>
           <button
             type="button"
-            aria-label={maximized ? "还原" : "最大化"}
+            aria-label={maximized ? "Restore" : "Maximize"}
             onClick={() => shell.toggleMaximize()}
           >
             <img src={maximized ? windowlizeIcon : maximumIcon} alt="" />
           </button>
           <button
             type="button"
-            aria-label="关闭"
+            aria-label="Close"
             className="close"
             onClick={() => shell.close()}
           >
@@ -591,14 +645,14 @@ export function App() {
             }`}>
               <div className="ws-dot" />
               <span className="ws-text">
-                {connStatus.status === "reconnecting" ? "正在重连..."
-                  : connStatus.status === "idle" ? "已手动断开"
-                  : connStatus.status === "token-error" ? "令牌无效"
-                  : connStatus.status === "fingerprint" ? "指纹不匹配"
-                  : connStatus.status === "key-mismatch" ? "密钥不匹配"
-                  : connStatus.status === "replay-detected" ? "重放检测"
-                  : connStatus.status === "offline" ? "服务不可达"
-                  : "服务断开"}
+                {connStatus.status === "reconnecting" ? tApp("connection.reconnectingDesc")
+                  : connStatus.status === "idle" ? tApp("disconnect.disconnected")
+                  : connStatus.status === "token-error" ? tApp("connection.authFailed")
+                  : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatch")
+                  : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatch")
+                  : connStatus.status === "replay-detected" ? tApp("connection.replayDetected")
+                  : connStatus.status === "offline" ? tApp("connection.cannotConnect")
+                  : tApp("disconnect.disconnected")}
               </span>
             </div>
           )}
@@ -698,15 +752,15 @@ export function App() {
                 </svg>
               </div>
               <span className="signal-overlay-title">
-                {connStatus.status === "idle" ? "信号已关闭" : "信号中断"}
+                {connStatus.status === "idle" ? tApp("disconnect.disconnected") : tApp("disconnect.interrupted")}
               </span>
               <span className="signal-overlay-sub">
-                {connStatus.status === "idle" ? "WebSocket 已手动断开"
-                  : connStatus.status === "token-error" ? "访问令牌无效或已过期"
-                  : connStatus.status === "fingerprint" ? "服务器公钥指纹不匹配"
-                  : connStatus.status === "key-mismatch" ? "服务端解密失败，密钥不一致"
-                  : connStatus.status === "replay-detected" ? "检测到重放攻击，连接已拒绝"
-                  : "与服务器的连接丢失"}
+                {connStatus.status === "idle" ? tApp("connection.reconnectingDesc")
+                  : connStatus.status === "token-error" ? tApp("connection.authFailedDesc")
+                  : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatchDesc")
+                  : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatchDesc")
+                  : connStatus.status === "replay-detected" ? tApp("connection.replayDetectedDesc")
+                  : tApp("connection.cannotConnectDesc")}
               </span>
             </div>
           )}
@@ -759,5 +813,6 @@ export function App() {
         />
       ) : null}
     </div>
+    </I18nProvider>
   );
 }

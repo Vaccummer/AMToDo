@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n";
 import {
   addDaysToDateKey,
   dateKeyFromParts,
@@ -8,9 +9,6 @@ import {
   monthLabelFromDateKey
 } from "../lib/time";
 import toTodayIcon from "../assets/ToToday.svg";
-
-const WEEKDAY_LABELS_SUN = ["日", "一", "二", "三", "四", "五", "六"];
-const WEEKDAY_LABELS_MON = ["一", "二", "三", "四", "五", "六", "日"];
 
 type Props = {
   selectedDateKey: string;
@@ -22,6 +20,11 @@ type Props = {
 };
 
 export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect, onClose, weekStart = 0 }: Props) {
+  const { t } = useI18n();
+
+  const WEEKDAY_LABELS_SUN = [t("common.weekdaySun"), t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat")];
+  const WEEKDAY_LABELS_MON = [t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat"), t("common.weekdaySun")];
+
   const [initialYear, initialMonth] = useMemo(() => {
     const [y, m] = selectedDateKey.split("-").map(Number);
     return [y, m];
@@ -126,13 +129,13 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
     >
       <div className="calendar-popup-inner date-picker-panel theme-green">
         <div className="dp-panel-header">
-          <button type="button" className="dp-nav" aria-label="上一月" onClick={prevMonth}>
+          <button type="button" className="dp-nav" aria-label={t("common.previousMonth")} onClick={prevMonth}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
           <span className="dp-panel-label">{monthLabel}</span>
-          <button type="button" className="dp-nav" aria-label="下一月" onClick={nextMonth}>
+          <button type="button" className="dp-nav" aria-label={t("common.nextMonth")} onClick={nextMonth}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
@@ -169,7 +172,7 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
         <div className="dp-footer">
           <button type="button" className="dp-today-btn" onClick={goToToday}>
             <img src={toTodayIcon} alt="" />
-            回到今天
+            {t("common.backToToday")}
           </button>
         </div>
       </div>

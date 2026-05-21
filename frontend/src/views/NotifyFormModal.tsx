@@ -6,6 +6,7 @@ import { Dropdown } from "./Dropdown";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
+import { useI18n } from "../i18n";
 
 type MentionDraft = {
   target_type: "todo" | "schedule";
@@ -46,6 +47,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
   const [loading, setLoading] = useState(Boolean(editId));
   const [mentionErrors, setMentionErrors] = useState<Record<number, string>>({});
   const { ask, dialog: confirmDialog } = useConfirm();
+  const { t } = useI18n();
 
   const isEdit = editId !== null;
 
@@ -135,7 +137,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
       }
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      setError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -144,9 +146,9 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
   async function handleDelete() {
     if (editId === null) return;
     const ok = await ask({
-      title: "删除通知",
-      message: "确定要删除这条通知吗？此操作不可撤销。",
-      confirmLabel: "删除",
+      title: t("notify.deleteNotification"),
+      message: t("notify.deleteNotificationConfirm"),
+      confirmLabel: t("common.delete"),
       danger: true,
     });
     if (!ok) return;
@@ -154,7 +156,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
       await api.deleteNotification(editId);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      setError(err instanceof Error ? err.message : t("common.deleteFailed"));
     }
   }
 
@@ -166,9 +168,9 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
     const m = mentions[index];
     if (m && m.target_id.trim()) {
       const ok = await ask({
-        title: "移除关联",
-        message: `确定要移除 ${m.target_type === "todo" ? "ToDo" : "Schedule"} #${m.target_id} 的关联吗？`,
-        confirmLabel: "移除",
+        title: t("notify.removeRelation"),
+        message: t("notify.removeRelationConfirm", { name: `${m.target_type === "todo" ? "ToDo" : "Schedule"} #${m.target_id}` }),
+        confirmLabel: t("common.remove"),
         danger: true,
       });
       if (!ok) return;
@@ -216,7 +218,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
         onNavigate(m.target_type, id, action);
       }
     } catch {
-      setMentionErrors((prev) => ({ ...prev, [index]: "ID 不存在" }));
+      setMentionErrors((prev) => ({ ...prev, [index]: t("notify.idNotExist") }));
     }
   }
 
@@ -233,9 +235,9 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
   if (loading) {
     return (
       <div className="schedule-modal-backdrop" onClick={handleBackdrop}>
-        <div className="schedule-modal-card" role="dialog" aria-label="通知">
+        <div className="schedule-modal-card" role="dialog" aria-label={t("notify.title")}>
           <div className="schedule-modal-body" style={{ textAlign: "center", padding: "2rem" }}>
-            加载中...
+            {t("common.loadingEllipsis")}
           </div>
         </div>
       </div>
@@ -248,17 +250,17 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
       onClick={handleBackdrop}
       onKeyDown={handleKeyDown}
     >
-      <div className="schedule-modal-card" role="dialog" aria-label={isEdit ? "编辑通知" : "创建通知"}>
+      <div className="schedule-modal-card" role="dialog" aria-label={isEdit ? t("notify.editNotification") : t("notify.createNotification")}>
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">{isEdit ? "编辑通知" : "创建通知"}{isEdit && editId != null && <span className="notify-modal-id-badge">#{editId}</span>}</h2>
+            <h2 className="schedule-modal-title">{isEdit ? t("notify.editNotification") : t("notify.createNotification")}{isEdit && editId != null && <span className="notify-modal-id-badge">#{editId}</span>}</h2>
           </div>
           <button
             type="button"
             className="schedule-modal-close"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -268,10 +270,10 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
         </div>
 
         <div className="schedule-modal-body">
-          <div className="schedule-modal-section-label">基本信息</div>
+          <div className="schedule-modal-section-label">{t("notify.basicInfo")}</div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="nfm-title">标题</label>
+            <label className="schedule-modal-label" htmlFor="nfm-title">{t("common.title")}</label>
             <input
               id="nfm-title"
               type="text"
@@ -283,7 +285,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           </div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="nfm-desc">描述</label>
+            <label className="schedule-modal-label" htmlFor="nfm-desc">{t("common.description")}</label>
             <textarea
               id="nfm-desc"
               className="schedule-modal-textarea"
@@ -294,7 +296,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           </div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label">触发时间</label>
+            <label className="schedule-modal-label">{t("common.triggerTime")}</label>
             <div className="schedule-modal-datetime-row">
               <DatePicker
                 value={triggerDate}
@@ -312,7 +314,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
 
           <div className="schedule-modal-divider" />
 
-          <div className="schedule-modal-section-label">关联项目</div>
+          <div className="schedule-modal-section-label">{t("notify.relatedItems")}</div>
 
           {mentions.map((m, i) => (
             <div className="schedule-modal-field" key={i}>
@@ -334,7 +336,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
                 <button
                   type="button"
                   className="notify-mention-icon-btn"
-                  title="编辑"
+                  title={t("common.edit")}
                   disabled={!m.target_id.trim()}
                   onClick={() => void handleMentionClick(i, "edit")}
                 >
@@ -346,7 +348,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
                 <button
                   type="button"
                   className="notify-mention-icon-btn"
-                  title="跳转"
+                  title={t("common.jump")}
                   disabled={!m.target_id.trim() || !onNavigate}
                   onClick={() => void handleMentionClick(i, "jump")}
                 >
@@ -359,7 +361,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
                 <button
                   type="button"
                   className="notify-mention-icon-btn notify-mention-icon-btn-delete"
-                  title="移除"
+                  title={t("common.remove")}
                   onClick={() => void removeMention(i)}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -400,7 +402,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           {isEdit && editId !== null && (
             <>
               <div className="schedule-modal-divider" />
-              <div className="schedule-modal-section-label">历史记录</div>
+              <div className="schedule-modal-section-label">{t("common.history")}</div>
               <ChangelogPanel api={api} entityId={editId} kind="notification" />
             </>
           )}
@@ -415,7 +417,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
             disabled={!canSave}
             onClick={() => void handleSave()}
           >
-            {saving ? "保存中..." : isEdit ? "保存更改" : "创建通知"}
+            {saving ? t("common.saving") : isEdit ? t("common.save") : t("notify.createNotification")}
           </button>
           {isEdit ? (
             <button
@@ -423,7 +425,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
               className="schedule-modal-btn schedule-modal-btn-delete"
               onClick={() => void handleDelete()}
             >
-              删除
+              {t("common.delete")}
             </button>
           ) : (
             <button
@@ -431,11 +433,11 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
               className="schedule-modal-btn schedule-modal-btn-delete"
               onClick={onClose}
             >
-              取消
+              {t("common.cancel")}
             </button>
           )}
         </div>
-        {saving ? <div className="modal-save-progress" aria-label="保存中" /> : null}
+        {saving ? <div className="modal-save-progress" aria-label={t("common.saving")} /> : null}
       </div>
       {confirmDialog}
     </div>

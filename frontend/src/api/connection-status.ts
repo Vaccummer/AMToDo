@@ -38,6 +38,7 @@ export class ConnectionStatusManager {
   private _serverName: string | null = null;
   private _wsConnected = false;
   private _httpOk = false;
+  private _reconnectExhausted = false;
   private _listeners: Array<(snap: ConnectionStatusSnapshot) => void> = [];
 
   getSnapshot(): ConnectionStatusSnapshot {
@@ -60,6 +61,7 @@ export class ConnectionStatusManager {
   /** HTTP health check succeeded. */
   reportHealthOk(version: string, name?: string): void {
     this._httpOk = true;
+    this._reconnectExhausted = false;
     this._serverVersion = version;
     this._serverName = name ?? null;
     this._errorMessage = null;
@@ -73,6 +75,7 @@ export class ConnectionStatusManager {
   /** HTTP health check failed. */
   reportHealthError(kind: "network" | "token", message: string): void {
     this._httpOk = false;
+    if (this._reconnectExhausted) return;
     this._errorMessage = message;
     this._status = kind === "token" ? "token-error" : "offline";
     this._emit();
@@ -95,6 +98,7 @@ export class ConnectionStatusManager {
 
   /** API call from a view failed (TypeError → network, other → auth). */
   reportApiError(kind: "network" | "token", message: string): void {
+    if (this._reconnectExhausted) return;
     this._errorMessage = message;
     this._status = kind === "token" ? "token-error" : "offline";
     this._emit();
@@ -111,8 +115,10 @@ export class ConnectionStatusManager {
 
   /** Reconnect attempts exhausted — stop retrying. */
   reportReconnectExhausted(): void {
+    console.log("[ConnMgr] reportReconnectExhausted, prev status=", this._status);
     this._wsConnected = false;
-    this._errorMessage = "重连失败，请检查连接设置";
+    this._reconnectExhausted = true;
+    this._errorMessage = "ws.reconnectFailed";
     this._status = "offline";
     this._emit();
   }
@@ -125,11 +131,15 @@ export class ConnectionStatusManager {
     this._wsConnected = wsStatus === "connected";
 
     if (wsStatus === "connected") {
+      this._reconnectExhausted = false;
       this._status = "online";
       this._errorMessage = null;
       this._emit();
       return;
     }
+
+    // Once reconnect is exhausted, ignore further status changes until a successful reconnect
+    if (this._reconnectExhausted) return;
 
     if (wsStatus === "connecting" || wsStatus === "reconnecting") {
       this._status = "reconnecting";
@@ -202,11 +212,11 @@ export class ConnectionStatusManager {
 // ── Constants ──
 
 export const WS_CLOSE_REASONS: Record<number, string> = {
-  4002: "连接超时",
-  4003: "服务端解密失败，密钥不匹配",
-  4004: "请求字段缺失",
-  4005: "访问令牌无效",
-  4006: "重放攻击检测",
+  4002: "ws.connectionTimeout",
+  4003: "ws.keyMismatch",
+  4004: "ws.missingFields",
+  4005: "ws.invalidToken",
+  4006: "ws.replayDetected",
 };
 
 // ── React Hook ──

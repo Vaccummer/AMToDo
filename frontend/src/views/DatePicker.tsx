@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n";
 import {
   addDaysToDateKey,
   dateKeyFromParts,
@@ -8,8 +9,6 @@ import {
   monthLabelFromDateKey
 } from "../lib/time";
 import toTodayIcon from "../assets/ToToday.svg";
-
-const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 type Props = {
   value: string;
@@ -21,14 +20,21 @@ type Props = {
   id?: string;
 };
 
-function fmtDisplay(dateKey: string): string {
-  if (!dateKey) return "";
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const weekday = formatDateKeyWeekday(dateKey);
-  return `${y}年${m}月${d}日 ${weekday}`;
-}
-
 export function DatePicker({ value, onChange, placeholder, hasError, theme = "green", panelAlign = "left", id }: Props) {
+  const { t, locale } = useI18n();
+
+  const WEEKDAY_LABELS = [t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat"), t("common.weekdaySun")];
+
+  function fmtDisplay(dateKey: string): string {
+    if (!dateKey) return "";
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const weekday = formatDateKeyWeekday(dateKey);
+    if (locale === "en") {
+      return `${m}/${d}/${y} ${weekday}`;
+    }
+    return `${y}年${m}月${d}日 ${weekday}`;
+  }
+
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -162,14 +168,14 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
           <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
         <span className={`date-picker-text${display ? "" : " placeholder"}`}>
-          {display || placeholder || "选择日期"}
+          {display || placeholder || t("common.selectDate")}
         </span>
         {value ? (
           <button
             type="button"
             className="date-picker-clear"
             onClick={handleClear}
-            aria-label="清除日期"
+            aria-label={t("common.clearDate")}
           >
             <svg
               width="12"
@@ -204,13 +210,13 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
       {open ? (
         <div className={`date-picker-panel theme-${theme} align-${panelAlign}`}>
           <div className="dp-panel-header">
-            <button type="button" className="dp-nav" aria-label="上一月" onClick={prevMonth}>
+            <button type="button" className="dp-nav" aria-label={t("common.previousMonth")} onClick={prevMonth}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
             <span className="dp-panel-label">{monthLabel}</span>
-            <button type="button" className="dp-nav" aria-label="下一月" onClick={nextMonth}>
+            <button type="button" className="dp-nav" aria-label={t("common.nextMonth")} onClick={nextMonth}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
@@ -251,7 +257,7 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
               onClick={goToToday}
             >
               <img src={toTodayIcon} alt="" />
-              回到今天
+              {t("common.backToToday")}
             </button>
           </div>
         </div>
