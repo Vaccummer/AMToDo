@@ -320,16 +320,20 @@ export function App() {
       {showSettings && (
         <SettingsModal
           settings={settings}
-          onSave={(newSettings) => {
-            flushSettings(newSettings);
-            setSettings(newSettings);
-            setDefaultTimezone(newSettings.timezone);
-            applyTheme(getTheme(newSettings.theme));
-            document.documentElement.style.setProperty("--app-font-family", newSettings.font_family);
-            document.documentElement.style.setProperty("--app-font-size", `${newSettings.font_size}px`);
+          onUpdateField={(fields) => {
+            setSettings((prev) => {
+              const next = { ...prev, ...fields };
+              if (fields.theme) applyTheme(getTheme(fields.theme));
+              if (fields.timezone) setDefaultTimezone(fields.timezone);
+              if (fields.font_family) document.documentElement.style.setProperty("--app-font-family", fields.font_family);
+              if (fields.font_size) document.documentElement.style.setProperty("--app-font-size", `${fields.font_size}px`);
+              return next;
+            });
+          }}
+          onClose={() => {
+            flushSettings(settings);
             setShowSettings(false);
           }}
-          onClose={() => setShowSettings(false)}
         />
       )}
 

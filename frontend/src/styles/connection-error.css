@@ -1,0 +1,154 @@
+/* ══════════════════════════════════════════ */
+/* Connection Error Banner — shared styles   */
+/* ══════════════════════════════════════════ */
+
+/* ── Color tokens ── */
+.conn-error-net  { --ce-bg1: #fef2f2; --ce-bg2: #fde8e8; --ce-border: #f5c6c6; --ce-icon-shadow: rgba(201,68,68,0.15); --ce-icon-color: #c94444; --ce-title: #8b2020; --ce-desc: #b05050; --ce-btn-bg: #c94444; --ce-btn-hover: #a83838; }
+.conn-error-bad  { --ce-bg1: #fefce8; --ce-bg2: #fef9c4; --ce-border: #e5d060; --ce-icon-shadow: rgba(180,83,9,0.15); --ce-icon-color: #ca8a04; --ce-title: #854d0e; --ce-desc: #a16207; --ce-btn-bg: #ca8a04; --ce-btn-hover: #a16207; }
+.conn-error-fp   { --ce-bg1: #fff7ed; --ce-bg2: #ffedd5; --ce-border: #fdba74; --ce-icon-shadow: rgba(234,88,12,0.15); --ce-icon-color: #ea580c; --ce-title: #9a3412; --ce-desc: #c2410c; --ce-btn-bg: #ea580c; --ce-btn-hover: #c2410c; }
+.conn-error-tok  { --ce-bg1: #fef3e2; --ce-bg2: #fef3e2; --ce-border: #f5d0a0; --ce-icon-shadow: rgba(180,83,9,0.15); --ce-icon-color: #b45309; --ce-title: #92400e; --ce-desc: #b45309; --ce-btn-bg: #b45309; --ce-btn-hover: #92400e; }
+
+/* ── Full-page variant (todo, search, trash) ── */
+
+.conn-error-fullpage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  animation: conn-error-fade-in 0.3s ease-out;
+}
+
+@keyframes conn-error-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.conn-error-fullpage-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px var(--ce-icon-shadow);
+  color: var(--ce-icon-color);
+}
+
+.conn-error-fullpage-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.conn-error-fullpage-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ce-title);
+  margin-bottom: 4px;
+}
+
+.conn-error-fullpage-desc {
+  font-size: 13px;
+  color: var(--ce-desc);
+  margin-bottom: 4px;
+  max-width: 320px;
+}
+
+.conn-error-fullpage-url {
+  font-size: 12px;
+  color: var(--ce-desc);
+  opacity: 0.7;
+  font-family: monospace;
+  margin-bottom: 12px;
+  word-break: break-all;
+  max-width: 320px;
+}
+
+.conn-error-fullpage-btn {
+  padding: 8px 24px;
+  background: var(--ce-btn-bg);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+  margin-top: 8px;
+}
+
+.conn-error-fullpage-btn:hover {
+  background: var(--ce-btn-hover);
+}
+
+/* ── Bar variant (schedule — Style A from demo) ── */
+
+.conn-error-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: linear-gradient(135deg, var(--ce-bg1), var(--ce-bg2));
+  border: 1px solid var(--ce-border);
+  flex-shrink: 0;
+  animation: conn-error-bar-slide 0.25s ease-out;
+}
+
+@keyframes conn-error-bar-slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.conn-error-bar-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px var(--ce-icon-shadow);
+  color: var(--ce-icon-color);
+}
+
+.conn-error-bar-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.conn-error-bar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ce-title);
+}
+
+.conn-error-bar-desc {
+  font-size: 11px;
+  color: var(--ce-desc);
+  margin-top: 1px;
+}
+
+.conn-error-bar-btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  background: var(--ce-btn-bg);
+  transition: background 0.15s;
+}
+
+.conn-error-bar-btn:hover {
+  background: var(--ce-btn-hover);
+}

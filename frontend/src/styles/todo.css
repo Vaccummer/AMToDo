@@ -1,7 +1,7 @@
 .todo-view {
   height: 100%;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .datebar {
@@ -206,6 +206,8 @@
   padding-bottom: 18px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
 .todo-row {
@@ -213,6 +215,7 @@
   --todo-row-accent: var(--status-primary-base);
   overflow: hidden;
   min-height: 56px;
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;

@@ -363,12 +363,26 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
         {status ? (
           status === "回收站为空" ? (
             <div className="trash-empty">
-              <div className="trash-empty-combo">
-                <div className="trash-empty-back"><TrashBinIcon /></div>
-                <div className="trash-empty-front"><CheckIcon /></div>
+              <div className="trash-ghost-scene">
+                <div className="trash-sparkle"></div>
+                <div className="trash-sparkle"></div>
+                <div className="trash-sparkle"></div>
+                <div className="trash-ghost">
+                  <div className="trash-ghost-body">
+                    <div className="trash-ghost-eye left"></div>
+                    <div className="trash-ghost-eye right"></div>
+                    <div className="trash-ghost-cheek left"></div>
+                    <div className="trash-ghost-cheek right"></div>
+                  </div>
+                </div>
+                <div className="trash-bin-handle"></div>
+                <div className="trash-bin-lid"></div>
+                <div className="trash-bin-body">
+                  <div className="trash-bin-line"></div>
+                </div>
               </div>
               <div className="trash-empty-title">回收站为空</div>
-              <div className="trash-empty-desc">一切整洁，没有残留</div>
+              <div className="trash-empty-desc">连灰尘都飘走了</div>
             </div>
           ) : (
             <div className="trash-empty">
@@ -377,9 +391,23 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
           )
         ) : filteredItems.length === 0 ? (
           <div className="trash-empty">
-            <div className="trash-empty-combo">
-              <div className="trash-empty-back"><TrashBinIcon /></div>
-              <div className="trash-empty-front"><SearchSmallIcon /></div>
+            <div className="trash-ghost-scene">
+              <div className="trash-sparkle"></div>
+              <div className="trash-sparkle"></div>
+              <div className="trash-sparkle"></div>
+              <div className="trash-ghost">
+                <div className="trash-ghost-body">
+                  <div className="trash-ghost-eye left"></div>
+                  <div className="trash-ghost-eye right"></div>
+                  <div className="trash-ghost-cheek left"></div>
+                  <div className="trash-ghost-cheek right"></div>
+                </div>
+              </div>
+              <div className="trash-bin-handle"></div>
+              <div className="trash-bin-lid"></div>
+              <div className="trash-bin-body">
+                <div className="trash-bin-line"></div>
+              </div>
             </div>
             <div className="trash-empty-title">没有匹配的项目</div>
             <div className="trash-empty-desc">试试其他关键词</div>
