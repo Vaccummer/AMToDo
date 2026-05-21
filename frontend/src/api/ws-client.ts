@@ -31,7 +31,7 @@ type PendingRequest = {
 // ── Constants ──
 
 const REQUEST_TIMEOUT_MS = 30_000;
-const CONNECT_TIMEOUT_MS = 3_000;
+const CONNECT_TIMEOUT_MS = 10_000;
 
 /** Sentinel close code for client-side fingerprint mismatch (not a real WS close code). */
 const FINGERPRINT_MISMATCH_CODE = -1;
@@ -334,7 +334,6 @@ export class UiWsClient {
         this.ws = null;
         this.sessionKey = null;
         this.rejectAllPending("WebSocket connection timed out");
-        console.log("[WS] connect timeout, calling scheduleReconnect, attempt=", this.reconnectAttempt);
         this.setStatus("disconnected");
         this.scheduleReconnect();
         reject(new Error("WebSocket connection timed out"));
@@ -498,7 +497,6 @@ export class UiWsClient {
         const code = event.code;
         const reason = event.reason || `Connection closed (code ${code})`;
         settle(() => reject(new Error(reason)));
-        console.log("[WS] pre-auth close, code=", code, "calling scheduleReconnect");
         this.scheduleReconnect();
       };
 
@@ -514,9 +512,7 @@ export class UiWsClient {
   }
 
   private scheduleReconnect(): void {
-    console.log("[WS] scheduleReconnect, attempt=", this.reconnectAttempt, "max=", this.maxReconnectAttempts);
     if (!this.shouldReconnect()) {
-      console.log("[WS] reconnect exhausted, emitting RECONNECT_EXHAUSTED_CODE");
       this.emitDisconnectReason(RECONNECT_EXHAUSTED_CODE);
       this.setStatus("disconnected");
       return;

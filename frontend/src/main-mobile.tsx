@@ -1,13 +1,18 @@
 import { initShell } from "./mobile/shell";
-initShell();
-
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./mobile/App";
 import "./mobile/styles/index.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// initShell() must run BEFORE App module is evaluated,
+// because App captures window.amtodoShell at module top level.
+initShell();
+
+Promise.all([
+  import("react"),
+  import("react-dom/client"),
+  import("./mobile/App"),
+]).then(([react, client, app]) => {
+  client.createRoot(document.getElementById("root")!).render(
+    react.createElement(react.StrictMode, null,
+      react.createElement(app.App)
+    )
+  );
+});
