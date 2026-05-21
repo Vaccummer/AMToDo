@@ -184,11 +184,6 @@
   background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
 }
 
-/* On desktop, hero is invisible to layout */
-.mobile-hero {
-  display: contents;
-}
-
 .mobile-shell .mobile-hero {
   background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
   padding: 12px 20px 16px;
@@ -251,11 +246,6 @@
 }
 
 /* ── Glass Panel ── */
-
-/* On desktop, the wrapper is invisible to layout */
-.mobile-glass-panel {
-  display: contents;
-}
 
 .mobile-shell .mobile-glass-panel {
   flex: 1;
@@ -364,11 +354,6 @@
 }
 
 /* ── FAB ── */
-
-/* On desktop, FAB is invisible to layout */
-.mobile-fab {
-  display: contents;
-}
 
 .mobile-shell .mobile-fab {
   position: absolute;
