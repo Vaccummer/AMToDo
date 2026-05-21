@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "../i18n";
 import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../api/client";
 import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../lib/time";
@@ -84,23 +85,24 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
+  const { t } = useI18n();
 
   // fetch full todo on mount (the list item may omit fields)
   useEffect(() => {
     api.getTodo(todo.id).then((r) => {
-      const t = {
+      const fullTodo = {
         ...r.todo,
         attachment_count: r.todo.attachment_count ?? initial.attachment_count
       };
-      setTodo(t);
-      setTitle(t.title);
-      setDescription(t.description ?? "");
-      setPlannedDate(t.planned_at ? splitDatetime(datetimeLocalFromEpoch(t.planned_at)).date : "");
-      setPlannedTime(t.planned_at ? splitDatetime(datetimeLocalFromEpoch(t.planned_at)).time : "");
-      setDueDate(t.due_at ? splitDatetime(datetimeLocalFromEpoch(t.due_at)).date : "");
-      setDueTime(t.due_at ? splitDatetime(datetimeLocalFromEpoch(t.due_at)).time : "");
-      setPriority(String(t.priority));
-      setTag(t.tag ?? "");
+      setTodo(fullTodo);
+      setTitle(fullTodo.title);
+      setDescription(fullTodo.description ?? "");
+      setPlannedDate(fullTodo.planned_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.planned_at)).date : "");
+      setPlannedTime(fullTodo.planned_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.planned_at)).time : "");
+      setDueDate(fullTodo.due_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.due_at)).date : "");
+      setDueTime(fullTodo.due_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.due_at)).time : "");
+      setPriority(String(fullTodo.priority));
+      setTag(fullTodo.tag ?? "");
     }).catch(() => { /* use initial data */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -134,7 +136,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           });
           setAttachmentErrors((prev) => ({
             ...prev,
-            [attachment.id]: err instanceof Error ? err.message : "附件数据加载失败",
+            [attachment.id]: err instanceof Error ? err.message : t("common.attachmentDataLoadFailed"),
           }));
         } finally {
           setAttachmentLoading((prev) => {
@@ -150,7 +152,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   useEffect(() => {
     loadAttachments().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "附件加载失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentLoadFailed"));
     });
   }, [loadAttachments]);
 
@@ -188,7 +190,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       plannedTimeError = true;
     }
     if (plannedDateError || plannedTimeError) {
-      message = "请填写有效的计划日期和时间 (如 14:30:00)";
+      message = t("todo.invalidPlannedDateTime");
     }
 
     const dueHasDate = dueDate !== "";
@@ -196,24 +198,24 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     if (dueHasDate !== dueHasTime) {
       dueDateError = !dueHasDate;
       dueTimeError = !dueHasTime;
-      if (!message) message = "截止日期和时间需要同时为空或同时填写";
+      if (!message) message = t("todo.dueDateRequiresBoth");
     } else if (dueHasDate && dueHasTime) {
       if (!timeKeyValid(dueTime)) {
         dueTimeError = true;
-        if (!message) message = "请填写有效的截止日期和时间 (如 18:30:00)";
+        if (!message) message = t("todo.invalidDueDateTime");
       } else {
         const dueEpoch = epochFromDatetimeLocal(dueAtKey);
         if (!Number.isFinite(dueEpoch)) {
           dueDateError = true;
           dueTimeError = true;
-          if (!message) message = "请填写有效的截止日期和时间 (如 18:30:00)";
+          if (!message) message = t("todo.invalidDueDateTime");
         } else if (Number.isFinite(plannedEpoch) && dueEpoch <= plannedEpoch) {
           if (dueDate < plannedDate) {
             dueDateError = true;
           } else {
             dueTimeError = true;
           }
-          if (!message) message = "截止日期必须晚于计划日期";
+          if (!message) message = t("todo.dueDateAfterPlanned");
         }
       }
     }
@@ -226,7 +228,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       hasError: plannedDateError || plannedTimeError || dueDateError || dueTimeError,
       message
     };
-  }, [plannedDate, plannedTime, plannedAtKey, dueDate, dueTime, dueAtKey]);
+  }, [t, plannedDate, plannedTime, plannedAtKey, dueDate, dueTime, dueAtKey]);
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
@@ -237,7 +239,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   async function handleSave() {
     if (datetimeValidation.hasError) {
-      setError(datetimeValidation.message || "请修正日期时间后再保存");
+      setError(datetimeValidation.message || t("todo.fixDatesBeforeSave"));
       return;
     }
     setSaving(true);
@@ -263,7 +265,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       onUpdate(result.todo);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      setError(err instanceof Error ? err.message : t("common.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -271,9 +273,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   async function handleDelete() {
     const ok = await ask({
-      title: "删除待办",
-      message: "确定将这条待办移入回收站吗？之后可以在 Trash 中恢复。",
-      confirmLabel: "移入回收站",
+      title: t("todo.deleteTodo"),
+      message: t("todo.deleteTodoConfirm"),
+      confirmLabel: t("common.moveToTrash"),
       danger: true,
     });
     if (!ok) return;
@@ -284,7 +286,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       onDelete(todo.id);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      setError(err instanceof Error ? err.message : t("common.deleteFailed"));
       setDeleting(false);
     }
   }
@@ -300,7 +302,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setTodo(updated);
       onUpdate(updated);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      setError(err instanceof Error ? err.message : t("common.operationFailed"));
     }
   }
 
@@ -311,14 +313,14 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     // Check per-file size limit
     for (const file of selected) {
       if (file.size > api.maxAttachmentSize) {
-        setError(`文件 "${file.name}" 大小 (${formatSize(file.size)}) 超过上限 (${formatSize(api.maxAttachmentSize)})`);
+        setError(t("common.fileTooLarge", { name: file.name, size: formatSize(file.size), max: formatSize(api.maxAttachmentSize) }));
         return;
       }
     }
 
     // Check attachment count limit
     if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
-      setError(`附件总数将超过上限 (${api.maxAttachmentsPerTodo})`);
+      setError(t("common.tooManyAttachments", { max: api.maxAttachmentsPerTodo }));
       return;
     }
 
@@ -334,7 +336,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setTodo(updatedTodo);
       onUpdate(updatedTodo);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "附件上传失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
     } finally {
       setAttachmentBusy(false);
       setDragActive(false);
@@ -363,7 +365,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         return next;
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "附件打开失败";
+      const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setError(message);
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
@@ -373,9 +375,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   async function removeAttachment(attachment: AttachmentMetadata) {
     const ok = await ask({
-      title: "删除附件",
-      message: `确定删除附件「${attachment.filename}」吗？`,
-      confirmLabel: "删除",
+      title: t("common.deleteAttachment"),
+      message: t("common.deleteAttachmentConfirm", { name: attachment.filename }),
+      confirmLabel: t("common.delete"),
       danger: true,
     });
     if (!ok) return;
@@ -389,7 +391,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setTodo(updatedTodo);
       onUpdate(updatedTodo);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "附件删除失败");
+      setError(err instanceof Error ? err.message : t("common.attachmentDeleteFailed"));
     } finally {
       setAttachmentBusy(false);
     }
@@ -399,9 +401,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     if (e.key === "Escape") {
       if (dirty) {
         const ok = await ask({
-          title: "放弃更改",
-          message: "有未保存的更改，确定关闭吗？",
-          confirmLabel: "关闭",
+          title: t("common.discardChanges"),
+          message: t("common.unsavedChanges"),
+          confirmLabel: t("common.close"),
           danger: true,
         });
         if (!ok) return;
@@ -412,10 +414,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   return (
     <div className="modal-backdrop" onClick={handleBackdrop} onKeyDown={handleKeyDown}>
-      <div className="modal-card" role="dialog" aria-label="待办详情">
+      <div className="modal-card" role="dialog" aria-label={t("todo.detail")}>
         <div className="modal-header">
-          <h2 className="modal-title">待办详情<span className="modal-id-badge">#{todo.id}</span></h2>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="关闭">
+          <h2 className="modal-title">{t("todo.detail")}<span className="modal-id-badge">#{todo.id}</span></h2>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t("common.close")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -425,10 +427,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
         <div className="modal-body">
           {/* Editable fields */}
-          <div className="modal-section-label">可编辑字段</div>
+          <div className="modal-section-label">{t("common.editableFields")}</div>
 
           <div className="modal-field">
-            <label className="modal-field-label" htmlFor="md-title">标题</label>
+            <label className="modal-field-label" htmlFor="md-title">{t("common.title")}</label>
             <input
               id="md-title"
               type="text"
@@ -439,7 +441,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           <div className="modal-field">
-            <label className="modal-field-label" htmlFor="md-desc">描述</label>
+            <label className="modal-field-label" htmlFor="md-desc">{t("common.description")}</label>
             <textarea
               id="md-desc"
               className="modal-textarea"
@@ -450,7 +452,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           <div className="modal-field">
-            <label className="modal-field-label">计划日期</label>
+            <label className="modal-field-label">{t("todo.plannedDate")}</label>
             <div className="modal-datetime-row">
               <DatePicker
                 value={plannedDate}
@@ -470,7 +472,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           <div className="modal-field">
-            <label className="modal-field-label">截止日期</label>
+            <label className="modal-field-label">{t("todo.dueDate")}</label>
             <div className="modal-datetime-row">
               <DatePicker
                 value={dueDate}
@@ -494,7 +496,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
           <div className="modal-field-row">
             <div className="modal-field modal-field-half">
-              <label className="modal-field-label" htmlFor="md-priority">优先级</label>
+              <label className="modal-field-label" htmlFor="md-priority">{t("common.priority")}</label>
               <input
                 id="md-priority"
                 type="number"
@@ -505,7 +507,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               />
             </div>
             <div className="modal-field modal-field-half">
-              <label className="modal-field-label" htmlFor="md-tag">标签</label>
+              <label className="modal-field-label" htmlFor="md-tag">{t("common.tags")}</label>
               <input
                 id="md-tag"
                 type="text"
@@ -519,7 +521,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           {/* Divider */}
           <div className="modal-divider" />
 
-          <div className="modal-section-label">附件</div>
+          <div className="modal-section-label">{t("common.attachments")}</div>
           <div
             className={`attachment-dropzone${dragActive ? " active" : ""}`}
             onDragOver={(e) => {
@@ -532,9 +534,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               uploadFiles(e.dataTransfer.files);
             }}
           >
-            <span>{attachmentBusy ? "处理中..." : "拖拽文件到这里"}</span>
+            <span>{attachmentBusy ? t("common.processing") : t("common.dropFilesHere")}</span>
             <label className="attachment-upload-button" htmlFor="todo-attachment-input">
-              选择文件
+              {t("common.selectFile")}
             </label>
             <input
               id="todo-attachment-input"
@@ -547,7 +549,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               }}
             />
           </div>
-          {attachmentBusy ? <div className="attachment-progress-bar" aria-label="附件处理中" /> : null}
+          {attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
 
           <div className="attachment-list">
             {attachments.map((attachment) => {
@@ -570,7 +572,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                         setPreview(attachment);
                       }
                     }}
-                    aria-label={`打开 ${attachment.filename}`}
+                    aria-label={attachment.filename}
                   >
                     {orphaned || loadError ? (
                       <AttachmentMissingIcon />
@@ -593,9 +595,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     <span className="attachment-filename">{attachment.filename}</span>
                     <span className="attachment-size">
                       {orphaned
-                        ? "文件丢失"
+                        ? t("common.fileMissing")
                         : downloadingId === attachment.id
-                          ? "下载中..."
+                          ? t("common.downloading")
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
@@ -604,7 +606,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     className="attachment-remove"
                     disabled={attachmentBusy || downloadingId !== null}
                     onClick={() => removeAttachment(attachment)}
-                    aria-label={`删除 ${attachment.filename}`}
+                    aria-label={`${t("common.delete")} ${attachment.filename}`}
                   >
                     <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor">
                       <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
@@ -621,20 +623,20 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           <div className="modal-divider" />
 
           {/* Read-only fields */}
-          <div className="modal-section-label">只读信息</div>
+          <div className="modal-section-label">{t("common.readonlyInfo")}</div>
 
           <div className="modal-field">
-            <span className="modal-field-label">创建时间</span>
+            <span className="modal-field-label">{t("common.createdAt")}</span>
             <span className="modal-field-value">{fmtDatetime(todo.created_at)}</span>
           </div>
 
           <div className="modal-field">
-            <span className="modal-field-label">更新时间</span>
+            <span className="modal-field-label">{t("common.updatedAt")}</span>
             <span className="modal-field-value">{fmtDatetime(todo.updated_at)}</span>
           </div>
 
           <div className="modal-field">
-            <span className="modal-field-label">完成状态</span>
+            <span className="modal-field-label">{t("common.completedStatus")}</span>
             <button
               type="button"
               className={`modal-toggle ${todo.completed ? "on" : ""}`}
@@ -642,21 +644,21 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             >
               <span className="modal-toggle-knob" />
               <span className="modal-toggle-label">
-                {todo.completed ? "已完成" : "未完成"}
+                {todo.completed ? t("common.completed") : t("common.notCompleted")}
               </span>
             </button>
           </div>
 
           {todo.completed_at ? (
             <div className="modal-field">
-              <span className="modal-field-label">完成时间</span>
+              <span className="modal-field-label">{t("common.completedAt")}</span>
               <span className="modal-field-value">{fmtDatetime(todo.completed_at)}</span>
             </div>
           ) : null}
 
           <div className="modal-divider" />
 
-          <div className="modal-section-label">历史记录</div>
+          <div className="modal-section-label">{t("common.history")}</div>
           <ChangelogPanel api={api} entityId={todo.id} kind="todo" />
         </div>
 
@@ -669,7 +671,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             disabled={!dirty || saving || datetimeValidation.hasError}
             onClick={handleSave}
           >
-            {saving ? "保存中..." : "保存更改"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
           <button
             type="button"
@@ -684,10 +686,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               <path d="M14 11v6" />
               <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
-            {deleting ? "删除中..." : "删除"}
+            {deleting ? t("common.deleting") : t("common.delete")}
           </button>
         </div>
-        {saving ? <div className="modal-save-progress" aria-label="保存中" /> : null}
+        {saving ? <div className="modal-save-progress" aria-label={t("common.saving")} /> : null}
       </div>
       {preview ? (
         <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
@@ -696,7 +698,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               type="button"
               className="modal-close attachment-preview-close"
               onClick={() => setPreview(null)}
-              aria-label="关闭预览"
+              aria-label={t("common.close")}
             >
               ×
             </button>

@@ -1,5 +1,6 @@
 # AMToDo UI configuration (non-visual parameters).
-server_url = "http://127.0.0.1:8000"
+# 192.168.137.1
+server_url = "http://192.168.137.1:8000"
 lan_address = ""
 access_token = "UsKLFcbMTsqbGjPI_z3-dR0afo9O9PdYp_IQLbeYyTU"
 admin_token = "123456"
@@ -18,8 +19,8 @@ notification_enabled = "true"
 notification_poll_interval = "30"
 notification_query_window = "60"
 notification_silent = "false"
-notification_timeout = "default"
-reconnect_max_attempts = "3"
+notification_timeout = "never"
+reconnect_max_attempts = "1"
 ws_enabled = "true"
 notify_on_disconnect = "true"
 ws_reconnect_interval_ms = "3000"

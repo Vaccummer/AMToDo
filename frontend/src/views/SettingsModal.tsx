@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../api/client";
 import type { ConnectionStatusSnapshot } from "../api/connection-status";
+import { useI18n } from "../i18n";
 import { FingerprintMismatchError, fingerprintPublicKey, importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
 import type { UISettings } from "../lib/settings";
@@ -109,6 +110,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // Toggle guard
   const userToggledWsRef = useRef(false);
 
+  const { t, locale } = useI18n();
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // Cache
@@ -193,7 +195,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
       // Validate response format
       if (!result || typeof result.version !== "string") {
-        setUrlCheckResult({ kind: "invalid", message: "响应格式异常 — 服务器返回了非预期的响应格式" });
+        setUrlCheckResult({ kind: "invalid", message: t("settings.responseFormatError") });
         return false;
       }
 
@@ -222,7 +224,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       setUrlCheckResult({ kind: "ok", version: result.version, name: result.name, publicKey: result.public_key });
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "连接失败";
+      const msg = err instanceof Error ? err.message : t("settings.connectionFailed");
       setUrlCheckResult({ kind: "unreachable", message: msg });
       return false;
     } finally {
@@ -263,11 +265,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         setTokenResult({ ok: true, userName: result.user.name });
         return true;
       } else {
-        setTokenResult({ ok: false, message: "令牌无效" });
+        setTokenResult({ ok: false, message: t("settings.tokenInvalid") });
         return false;
       }
     } catch (err: unknown) {
-      setTokenResult({ ok: false, message: err instanceof Error ? err.message : "验证失败" });
+      setTokenResult({ ok: false, message: err instanceof Error ? err.message : t("settings.tokenVerifyFailed") });
       return false;
     } finally {
       setTokenVerifying(false);
@@ -409,9 +411,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   async function handleClearCache() {
     const ok = await ask({
-      title: "清除缓存",
-      message: "确定清除所有附件缓存吗？下次查看附件时需要重新下载。",
-      confirmLabel: "清除",
+      title: t("settings.clearCache"),
+      message: t("settings.clearCacheConfirm"),
+      confirmLabel: t("settings.clearCache"),
       danger: true,
     });
     if (!ok) return;
@@ -431,7 +433,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (hotkeyEnabled && hotkeyValue) {
       window.amtodoShell?.registerHotkey?.(hotkeyValue)?.then?.((result: { ok: boolean; error?: string }) => {
         if (!result?.ok) {
-          setHotkeyError(result?.error || "快捷键注册失败");
+          setHotkeyError(result?.error || t("settings.hotkeyRegisterFailed"));
         }
       });
     } else {
@@ -484,7 +486,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-conn-status">
           <div className="settings-conn-status-inline" style={{ color: "var(--global-text-secondary)" }}>
             <span className="settings-modal-spinner" />
-            正在检测连接...
+            {t("settings.detectingConnection")}
           </div>
         </div>
       );
@@ -498,9 +500,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className="settings-conn-status-card ok">
               <div className="settings-conn-card-icon">{CHECK_ICON}</div>
               <div className="settings-conn-card-body">
-                <div className="settings-conn-card-title">连接成功</div>
+                <div className="settings-conn-card-title">{t("settings.connectionSuccess")}</div>
                 <div className="settings-conn-card-desc">
-                  服务器 {urlCheckResult.name ?? ""} v{urlCheckResult.version}，一切正常
+                  {t("settings.connectionSuccessDesc", { name: urlCheckResult.name ?? "", version: urlCheckResult.version })}
                 </div>
               </div>
             </div>
@@ -512,9 +514,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className="settings-conn-status-card err">
               <div className="settings-conn-card-icon">{CROSS_ICON}</div>
               <div className="settings-conn-card-body">
-                <div className="settings-conn-card-title">连接失败</div>
+                <div className="settings-conn-card-title">{t("settings.connectionFailed")}</div>
                 <div className="settings-conn-card-desc">
-                  {urlCheckResult.message || "无法访问服务器，请检查地址是否正确、网络是否通畅"}
+                  {urlCheckResult.message || t("settings.connectionFailedDesc")}
                 </div>
               </div>
             </div>
@@ -534,29 +536,29 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           <div className="settings-conn-status">
             <div className="settings-conn-status-inline warn">
               {WARN_ICON}
-              公钥指纹不匹配 — 服务器返回了与本地记录不同的指纹
+              {t("settings.fingerprintMismatch")}
             </div>
             <div className="settings-conn-fp-inline" style={{ marginTop: 6 }}>
               <div className="settings-conn-fp-title">
                 {WARN_ICON}
-                指纹已变更
+                {t("settings.fingerprintChanged")}
               </div>
               <div className="settings-conn-fp-hashes">
                 <div className="settings-conn-fp-hash-row">
-                  <span className="settings-conn-fp-hash-label">本地记录</span>
+                  <span className="settings-conn-fp-hash-label">{t("settings.localRecord")}</span>
                   <code className="settings-conn-fp-hash old">{urlCheckResult.old}</code>
                 </div>
                 <div className="settings-conn-fp-hash-row">
-                  <span className="settings-conn-fp-hash-label">服务器新指纹</span>
+                  <span className="settings-conn-fp-hash-label">{t("settings.serverNewFingerprint")}</span>
                   <code className="settings-conn-fp-hash new">{urlCheckResult.new}</code>
                 </div>
               </div>
               <div className="settings-conn-fp-actions">
                 <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-accept" onClick={handleAcceptFingerprint}>
-                  信任新指纹
+                  {t("settings.trustNewFingerprint")}
                 </button>
                 <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-reject" onClick={handleRejectFingerprint}>
-                  拒绝
+                  {t("settings.reject")}
                 </button>
               </div>
             </div>
@@ -571,7 +573,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-conn-status">
           <div className="settings-conn-status-inline" style={{ color: "var(--global-text-secondary)" }}>
             <span className="settings-modal-spinner" />
-            正在验证令牌...
+            {t("settings.verifyingToken")}
           </div>
         </div>
       );
@@ -584,8 +586,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           <div className="settings-conn-status-card ok">
             <div className="settings-conn-card-icon">{CHECK_ICON}</div>
             <div className="settings-conn-card-body">
-              <div className="settings-conn-card-title">令牌有效</div>
-              <div className="settings-conn-card-desc">用户: {tokenResult.userName}</div>
+              <div className="settings-conn-card-title">{t("settings.tokenValid")}</div>
+              <div className="settings-conn-card-desc">{t("settings.userLabel")}{tokenResult.userName}</div>
             </div>
           </div>
         </div>
@@ -597,9 +599,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-conn-status-card err">
           <div className="settings-conn-card-icon">{CROSS_ICON}</div>
           <div className="settings-conn-card-body">
-            <div className="settings-conn-card-title">令牌无效</div>
+            <div className="settings-conn-card-title">{t("settings.tokenInvalid")}</div>
             <div className="settings-conn-card-desc">
-              服务器已连接，但拒绝了此访问令牌。请确认令牌正确或重新生成。
+              {t("settings.tokenInvalidDesc")}
             </div>
           </div>
         </div>
@@ -611,13 +613,13 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   return (
     <div className="settings-modal-backdrop" onKeyDown={handleKeyDown}>
-      <div className="settings-modal-card" role="dialog" aria-label="设置">
+      <div className="settings-modal-card" role="dialog" aria-label={t("settings.title")}>
         <div className="settings-modal-header">
           <div className="settings-modal-header-left">
             <div className="settings-modal-dot" />
-            <h2 className="settings-modal-title">设置</h2>
+            <h2 className="settings-modal-title">{t("settings.title")}</h2>
           </div>
-          <button type="button" className="settings-modal-close" onClick={onClose} aria-label="关闭">
+          <button type="button" className="settings-modal-close" onClick={onClose} aria-label={t("common.close")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -627,13 +629,13 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
         <div className="settings-modal-tabs" role="tablist">
           {([
-            ["connection", "连接",
+            ["connection", t("settings.tabConnection"),
               <svg key="link" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
             ],
-            ["general", "通用",
+            ["general", t("settings.tabGeneral"),
               <svg key="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
             ],
-            ["notification", "通知",
+            ["notification", t("settings.tabNotification"),
               <svg key="bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
             ],
           ] as const).map(([key, label, icon]) => (
@@ -656,11 +658,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* Connection Section (unified block)     */}
           {/* ══════════════════════════════════════ */}
           {activeSettingsTab === "connection" && (<>
-          <div className="settings-modal-section-label">连接设置</div>
+          <div className="settings-modal-section-label">{t("settings.connectionSettings")}</div>
 
           <div className="settings-conn-section">
             <div className="settings-conn-header">
-              <span className="settings-conn-header-label">连接总开关</span>
+              <span className="settings-conn-header-label">{t("settings.connectionToggle")}</span>
               <button
                 type="button"
                 className={`toggle-switch${wsEnabled ? " on" : ""}`}
@@ -668,7 +670,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 disabled={false}
                 role="switch"
                 aria-checked={wsEnabled}
-                aria-label="连接总开关"
+                aria-label={t("settings.connectionToggle")}
               >
                 <span className="toggle-thumb" />
               </button>
@@ -677,7 +679,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
               {/* LAN Address */}
               <div className="settings-modal-field">
-                <label className="settings-modal-label" htmlFor="lan-addr">内网地址</label>
+                <label className="settings-modal-label" htmlFor="lan-addr">{t("settings.lanAddress")}</label>
                 <div className="settings-conn-lan-row">
                   <input
                     id="lan-addr"
@@ -695,14 +697,14 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onClick={handleLanFetch}
                     disabled={connLocked || !lanAddress || lanLoading}
                   >
-                    {lanLoading ? "获取中..." : "获取"}
+                    {lanLoading ? t("settings.fetching") : t("settings.fetch")}
                   </button>
                 </div>
               </div>
 
               {/* Server URL */}
               <div className="settings-modal-field">
-                <label className="settings-modal-label" htmlFor="srv-url">服务器地址</label>
+                <label className="settings-modal-label" htmlFor="srv-url">{t("settings.serverUrl")}</label>
                 <div className="settings-conn-input-row">
                   <input
                     id="srv-url"
@@ -720,7 +722,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onClick={() => checkUrl()}
                     disabled={connLocked || !serverUrl || urlChecking}
                   >
-                    {urlChecking ? "检测中..." : "检测"}
+                    {urlChecking ? t("settings.checking") : t("settings.check")}
                   </button>
                 </div>
                 {renderUrlStatus()}
@@ -729,9 +731,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               {/* Access Token */}
               <div className={`settings-modal-field${!tokenEditable ? " settings-conn-field-disabled" : ""}`}>
                 <label className="settings-modal-label" htmlFor="srv-token">
-                  访问令牌
+                  {t("settings.accessToken")}
                   {!tokenEditable && !connLocked && (
-                    <span className="settings-conn-field-hint">请先检测服务器地址</span>
+                    <span className="settings-conn-field-hint">{t("settings.checkServerFirst")}</span>
                   )}
                 </label>
                 <div className="settings-conn-input-row">
@@ -744,13 +746,13 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                       onChange={handleTokenChange}
                       onBlur={() => onUpdateField?.({ access_token: accessToken })}
                       disabled={!tokenEditable}
-                      placeholder={!tokenEditable && !connLocked ? "请先完成服务器地址检测" : "输入访问令牌"}
+                      placeholder={!tokenEditable && !connLocked ? t("settings.completeServerCheckFirst") : t("settings.enterAccessToken")}
                     />
                     <button
                       type="button"
                       className="settings-modal-input-eye"
                       onClick={() => setShowToken((v) => !v)}
-                      title={showToken ? "隐藏" : "显示"}
+                      title={showToken ? t("settings.hide") : t("settings.show")}
                       disabled={!tokenEditable}
                     >
                       {showToken ? (
@@ -772,7 +774,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onClick={() => verifyToken()}
                     disabled={!tokenEditable || !accessToken || tokenVerifying}
                   >
-                    {tokenVerifying ? "验证中..." : "验证"}
+                    {tokenVerifying ? t("settings.verifying") : t("settings.verify")}
                   </button>
                 </div>
                 {renderTokenStatus()}
@@ -786,7 +788,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                   <span className="settings-conn-sub-icon">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                   </span>
-                  <span className="settings-conn-sub-label">最大重连次数</span>
+                  <span className="settings-conn-sub-label">{t("settings.maxReconnect")}</span>
                 </div>
                 <div className="settings-conn-sub-right">
                   <input
@@ -810,7 +812,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                   </span>
                   <div className="settings-conn-sub-text">
-                    <span className="settings-conn-sub-label">断开时标签提醒</span>
+                    <span className="settings-conn-sub-label">{t("settings.disconnectNotify")}</span>
                   </div>
                 </div>
                 <div className="settings-conn-sub-right">
@@ -821,7 +823,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     disabled={connLocked}
                     role="switch"
                     aria-checked={notifyOnDisconnect}
-                    aria-label="断开时标签提醒"
+                    aria-label={t("settings.disconnectNotify")}
                   >
                     <span className="toggle-thumb" />
                   </button>
@@ -837,20 +839,20 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* ══════════════════════════════════════ */}
           {/* Display                                */}
           {/* ══════════════════════════════════════ */}
-          <div className="settings-modal-section-label">显示设置</div>
+          <div className="settings-modal-section-label">{t("settings.displaySettings")}</div>
 
           <div className="settings-modal-field-row">
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-lang">语言</label>
+              <label className="settings-modal-label" htmlFor="sui-lang">{t("settings.language")}</label>
               <Dropdown
                 id="sui-lang"
                 value={language}
-                options={[{ value: "zh-CN", label: "中文 (zh-CN)" }]}
+                options={[{ value: "zh-CN", label: "中文 (zh-CN)" }, { value: "en", label: "English" }]}
                 onChange={(v) => { setLanguage(v); onUpdateField?.({ language: v }); }}
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-tz">时区</label>
+              <label className="settings-modal-label" htmlFor="sui-tz">{t("settings.timezone")}</label>
               <Dropdown
                 id="sui-tz"
                 value={timezone}
@@ -863,19 +865,19 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
           <div className="settings-modal-field-row">
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-wkstart">每周起始</label>
+              <label className="settings-modal-label" htmlFor="sui-wkstart">{t("settings.weekStart")}</label>
               <Dropdown
                 id="sui-wkstart"
                 value={weekStart}
                 options={[
-                  { value: "0", label: "周日" },
-                  { value: "1", label: "周一" },
+                  { value: "0", label: t("settings.sunday") },
+                  { value: "1", label: t("settings.monday") },
                 ]}
                 onChange={(v) => { setWeekStart(v); onUpdateField?.({ week_start: Number(v) }); }}
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-theme">主题</label>
+              <label className="settings-modal-label" htmlFor="sui-theme">{t("settings.theme")}</label>
               <Dropdown
                 id="sui-theme"
                 value={theme}
@@ -890,11 +892,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* ══════════════════════════════════════ */}
           {/* Schedule                               */}
           {/* ══════════════════════════════════════ */}
-          <div className="settings-modal-section-label">Schedule设置</div>
+          <div className="settings-modal-section-label">{t("settings.scheduleSettings")}</div>
 
           <div className="settings-modal-field-row">
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-schedule-start">默认起始</label>
+              <label className="settings-modal-label" htmlFor="sui-schedule-start">{t("settings.scheduleStart")}</label>
               <Dropdown
                 id="sui-schedule-start"
                 value={scheduleStartHour}
@@ -903,7 +905,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               />
             </div>
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-schedule-end">默认终止</label>
+              <label className="settings-modal-label" htmlFor="sui-schedule-end">{t("settings.scheduleEnd")}</label>
               <Dropdown
                 id="sui-schedule-end"
                 value={scheduleEndHour}
@@ -913,20 +915,20 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             </div>
           </div>
           {!validScheduleHours ? (
-            <span className="settings-modal-field-msg err">默认起始时间必须早于终止时间</span>
+            <span className="settings-modal-field-msg err">{t("settings.scheduleStartBeforeEnd")}</span>
           ) : null}
 
           <div className="settings-modal-field-row">
             <div className="settings-modal-field settings-modal-field-half">
-              <label className="settings-modal-label" htmlFor="sui-slot">时间粒度</label>
+              <label className="settings-modal-label" htmlFor="sui-slot">{t("settings.slotMinutes")}</label>
               <Dropdown
                 id="sui-slot"
                 value={slotMinutes}
                 options={[
-                  { value: "15", label: "15 分钟" },
-                  { value: "30", label: "30 分钟" },
-                  { value: "45", label: "45 分钟" },
-                  { value: "60", label: "60 分钟" },
+                  { value: "15", label: t("settings.slotMinutesLabel", { n: 15 }) },
+                  { value: "30", label: t("settings.slotMinutesLabel", { n: 30 }) },
+                  { value: "45", label: t("settings.slotMinutesLabel", { n: 45 }) },
+                  { value: "60", label: t("settings.slotMinutesLabel", { n: 60 }) },
                 ]}
                 onChange={(v) => { setSlotMinutes(v); onUpdateField?.({ scheduler_slot_minutes: Number(v) }); }}
               />
@@ -938,7 +940,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* Notification                           */}
           {/* ══════════════════════════════════════ */}
           {activeSettingsTab === "notification" && (<>
-          <div className="settings-modal-section-label">通知设置</div>
+          <div className="settings-modal-section-label">{t("settings.notificationSettings")}</div>
 
           <div className={`notify-card${notifyEnabled ? " on" : " off"}`}>
             {/* Header: master toggle */}
@@ -952,10 +954,10 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 </div>
                 <div className="settings-notify-header-info">
                   <span className={`settings-notify-header-title${notifyEnabled ? "" : " off"}`}>
-                    {notifyEnabled ? "启用通知" : "通知已关闭"}
+                    {notifyEnabled ? t("settings.notificationEnabled") : t("settings.notificationDisabled")}
                   </span>
                   <span className="settings-notify-header-sub">
-                    {notifyEnabled ? "服务器通过 WebSocket 实时推送新通知" : "开启后将通过 WebSocket 实时接收通知"}
+                    {notifyEnabled ? t("settings.notificationEnabledDesc") : t("settings.notificationDisabledDesc")}
                   </span>
                 </div>
               </div>
@@ -965,7 +967,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 onClick={() => setNotifyEnabled((v) => { onUpdateField?.({ notification_enabled: !v }); return !v; })}
                 role="switch"
                 aria-checked={notifyEnabled}
-                aria-label="通知总开关"
+                aria-label={t("settings.notificationToggle")}
               >
                 <span className="toggle-thumb" />
               </button>
@@ -984,8 +986,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     </svg>
                   </div>
                   <div className="notify-row-text">
-                    <span className="notify-row-label">静默模式</span>
-                    <span className="notify-row-hint">不播放提示音</span>
+                    <span className="notify-row-label">{t("settings.silentMode")}</span>
+                    <span className="notify-row-hint">{t("settings.silentModeDesc")}</span>
                   </div>
                 </div>
                 <div className="notify-row-right">
@@ -995,7 +997,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onClick={() => setNotifSilent((v) => { onUpdateField?.({ notification_silent: !v }); return !v; })}
                     role="switch"
                     aria-checked={notifSilent}
-                    aria-label="静默模式"
+                    aria-label={t("settings.silentMode")}
                   >
                     <span className="toggle-thumb" />
                   </button>
@@ -1012,16 +1014,16 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     </svg>
                   </div>
                   <div className="notify-row-text">
-                    <span className="notify-row-label">消失时间</span>
-                    <span className="notify-row-hint">通知弹窗的显示策略</span>
+                    <span className="notify-row-label">{t("settings.timeout")}</span>
+                    <span className="notify-row-hint">{t("settings.timeoutDesc")}</span>
                   </div>
                 </div>
                 <div className="notify-row-right">
                   <Dropdown
                     value={notifTimeout}
                     options={[
-                      { value: "default", label: "自动消失" },
-                      { value: "never", label: "常驻不消失" },
+                      { value: "default", label: t("settings.autoTimeout") },
+                      { value: "never", label: t("settings.neverTimeout") },
                     ]}
                     onChange={(v) => { setNotifTimeout(v as "default" | "never"); onUpdateField?.({ notification_timeout: v as "default" | "never" }); }}
                   />
@@ -1037,11 +1039,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* ══════════════════════════════════════ */}
           {/* Global Hotkey                          */}
           {/* ══════════════════════════════════════ */}
-          <div className="settings-modal-section-label">全局快捷键</div>
+          <div className="settings-modal-section-label">{t("settings.globalHotkey")}</div>
 
           <div className="settings-modal-field">
             <div className="settings-modal-input-row">
-              <label className="settings-modal-label">快捷键组合</label>
+              <label className="settings-modal-label">{t("settings.hotkeyCombo")}</label>
               <button
                 type="button"
                 className={`toggle-switch${hotkeyEnabled ? " on" : ""}`}
@@ -1062,14 +1064,14 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               <input
                 type="text"
                 className="settings-modal-input"
-                value={recording ? "请按下快捷键..." : hotkeyValue}
+                value={recording ? t("settings.pressHotkey") : hotkeyValue}
                 readOnly
                 disabled={!hotkeyEnabled}
                 onClick={() => hotkeyEnabled && setRecording(true)}
                 onKeyDown={handleHotkeyKeyDown}
                 onBlur={() => setRecording(false)}
                 style={{ cursor: hotkeyEnabled ? "pointer" : "default", color: recording ? "#999" : undefined }}
-                placeholder="点击后按下快捷键组合"
+                placeholder={t("settings.clickToRecordHotkey")}
               />
               {hotkeyValue ? (
                 <button
@@ -1078,11 +1080,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                   disabled={!hotkeyEnabled}
                   onClick={() => { setHotkeyValue(""); setHotkeyError(null); onUpdateField?.({ global_hotkey: "" }); }}
                 >
-                  清除
+                  {t("settings.clearHotkey")}
                 </button>
               ) : null}
             </div>
-            <span className="settings-modal-hint">必须包含至少一个修饰键 (Ctrl/Alt/Shift/Super)</span>
+            <span className="settings-modal-hint">{t("settings.hotkeyHint")}</span>
             {hotkeyError ? (
               <span className="settings-modal-field-msg err">{hotkeyError}</span>
             ) : null}
@@ -1093,7 +1095,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* ══════════════════════════════════════ */}
           {/* Cache                                  */}
           {/* ══════════════════════════════════════ */}
-          <div className="settings-modal-section-label">缓存</div>
+          <div className="settings-modal-section-label">{t("settings.cache")}</div>
 
           <div className="cache-compact-card">
             <div className="cache-compact-left">
@@ -1105,11 +1107,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 </svg>
               </div>
               <div className="cache-compact-text">
-                <span className="cache-compact-title">附件缓存</span>
+                <span className="cache-compact-title">{t("settings.attachmentCache")}</span>
                 <span className="cache-compact-detail">
                   {cacheSize
-                    ? `${cacheSize.count} 个文件 · ${formatSize(cacheSize.bytes)}`
-                    : "加载中..."}
+                    ? t("settings.cacheDetail", { count: cacheSize.count, size: formatSize(cacheSize.bytes) })
+                    : t("settings.cacheLoading")}
                 </span>
               </div>
             </div>
@@ -1119,7 +1121,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               disabled={clearingCache || !cacheSize || cacheSize.count === 0}
               onClick={handleClearCache}
             >
-              {clearingCache ? "清除中..." : "清除"}
+              {clearingCache ? t("settings.clearingCache") : t("settings.clearCache")}
             </button>
           </div>
           </>)}

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useI18n } from "../i18n";
 
 type Option = { value: string; label: string; hasValue?: boolean };
 
@@ -11,10 +13,13 @@ type Props = {
 };
 
 export function Dropdown({ value, options, onChange, id, searchable }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? value;
 
@@ -25,6 +30,35 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
       (o) => o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q),
     );
   }, [options, query]);
+
+  // Compute fixed position for portaled panel
+  useEffect(() => {
+    if (!open) return;
+    function updatePosition() {
+      const trigger = containerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const PANEL_MAX = 220;
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const flip = spaceBelow < PANEL_MAX && spaceAbove > spaceBelow;
+      setPanelStyle({
+        position: "fixed",
+        top: flip ? rect.top - 4 - Math.min(PANEL_MAX, spaceAbove) : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 10000,
+        maxHeight: flip ? Math.min(PANEL_MAX, spaceAbove) : Math.min(PANEL_MAX, spaceBelow),
+      });
+    }
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -40,9 +74,10 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     const timer = setTimeout(() => {
       window.addEventListener("click", handleClick);
@@ -52,6 +87,38 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
       window.removeEventListener("click", handleClick);
     };
   }, [open]);
+
+  const panel = open ? (
+    <div className="dropdown-panel" ref={panelRef} style={panelStyle}>
+      {searchable && (
+        <div className="dropdown-search">
+          <input
+            ref={searchRef}
+            type="text"
+            className="dropdown-search-input"
+            placeholder={t("common.search") + "…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+      {filtered.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          className={`dropdown-option${opt.value === value ? " selected" : ""}${opt.hasValue ? " has-value" : ""}`}
+          onClick={() => {
+            onChange(opt.value);
+            setOpen(false);
+          }}
+        >
+          {opt.hasValue && <span className="dropdown-option-dot" />}
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   return (
     <div className="dropdown" ref={containerRef}>
@@ -74,37 +141,7 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open ? (
-        <div className="dropdown-panel">
-          {searchable && (
-            <div className="dropdown-search">
-              <input
-                ref={searchRef}
-                type="text"
-                className="dropdown-search-input"
-                placeholder="搜索…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-              />
-            </div>
-          )}
-          {filtered.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`dropdown-option${opt.value === value ? " selected" : ""}${opt.hasValue ? " has-value" : ""}`}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
-              }}
-            >
-              {opt.hasValue && <span className="dropdown-option-dot" />}
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {panel ? createPortal(panel, document.body) : null}
     </div>
   );
 }

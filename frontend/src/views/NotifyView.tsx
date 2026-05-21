@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AMToDoApi, NotificationItem } from "../api/client";
 import type { UISettings } from "../lib/settings";
+import { useI18n } from "../i18n";
 import { NotifyFormModal } from "./NotifyFormModal";
 import { NotifyDetailModal } from "./NotifyDetailModal";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
@@ -74,6 +75,7 @@ type Props = {
 };
 
 export function NotifyView({ api, settings, onNavigate }: Props) {
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -121,10 +123,10 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
   return (
     <div className="notify-view">
       <div className="notify-header">
-        <h2>{showTrash ? "通知回收站" : "通知"}</h2>
+        <h2>{showTrash ? t("notify.trash") : t("notify.title")}</h2>
         <div className="notify-header-actions">
           <button type="button" onClick={() => setShowTrash(!showTrash)}>
-            {showTrash ? "返回" : "回收站"}
+            {showTrash ? t("notify.back") : t("notify.trashBtn")}
           </button>
           {!showTrash && (
             <button
@@ -135,7 +137,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
                 setFormOpen(true);
               }}
             >
-              + 新建通知
+              {t("notify.newNotification")}
             </button>
           )}
         </div>
@@ -173,7 +175,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
                     void handleRestore(n.id);
                   }}
                 >
-                  恢复
+                  {t("common.restore")}
                 </button>
                 <button
                   type="button"
@@ -182,7 +184,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
                     void handlePurge(n.id);
                   }}
                 >
-                  永久删除
+                  {t("common.purge")}
                 </button>
               </div>
             )}
@@ -190,7 +192,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
         ))}
         {notifications.length === 0 && (
           <div className="notify-empty">
-            {showTrash ? "回收站为空" : "暂无通知"}
+            {showTrash ? t("notify.trashEmpty") : t("notify.noNotifications")}
           </div>
         )}
       </div>
@@ -203,12 +205,12 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
             showTrash
               ? [
                   {
-                    label: "恢复",
+                    label: t("common.restore"),
                     icon: <RestoreIcon />,
                     action: () => void handleRestore(contextMenu.notificationId),
                   },
                   {
-                    label: "永久删除",
+                    label: t("common.purge"),
                     icon: <PurgeIcon />,
                     danger: true,
                     action: () => void handlePurge(contextMenu.notificationId),
@@ -216,7 +218,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
                 ]
               : [
                   {
-                    label: "编辑",
+                    label: t("common.edit"),
                     icon: <EditIcon />,
                     action: () => {
                       setEditId(contextMenu.notificationId);
@@ -224,7 +226,7 @@ export function NotifyView({ api, settings, onNavigate }: Props) {
                     },
                   },
                   {
-                    label: "删除",
+                    label: t("common.delete"),
                     icon: <TrashIcon />,
                     danger: true,
                     action: () => void handleDelete(contextMenu.notificationId),

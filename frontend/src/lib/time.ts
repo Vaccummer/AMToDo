@@ -71,7 +71,11 @@ export function addDays(value: Date, days: number): Date {
   return next;
 }
 
-export function formatDateKeyDay(dateKey: string): string {
+export function formatDateKeyDay(dateKey: string, locale = "zh-CN"): string {
+  const d = dateKeyToNoonUtc(dateKey);
+  if (locale === "en") {
+    return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(d);
+  }
   const [_year, month, day] = dateKey.split("-").map(Number);
   return `${month}月${day}日`;
 }
@@ -80,34 +84,38 @@ export function formatDateKeyDayNumber(dateKey: string): string {
   return String(Number(dateKey.split("-")[2]));
 }
 
-export function formatDateKeyWeekday(dateKey: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function formatDateKeyWeekday(dateKey: string, locale = "zh-CN"): string {
+  return new Intl.DateTimeFormat(locale === "en" ? "en" : "zh-CN", {
     weekday: "short"
   }).format(dateKeyToNoonUtc(dateKey));
 }
 
-export function monthLabelFromDateKey(dateKey: string): string {
+export function monthLabelFromDateKey(dateKey: string, locale = "zh-CN"): string {
+  const d = dateKeyToNoonUtc(dateKey);
+  if (locale === "en") {
+    return new Intl.DateTimeFormat("en", { year: "numeric", month: "long" }).format(d);
+  }
   const [year, month] = dateKey.split("-").map(Number);
   return `${year}年${month}月`;
 }
 
-export function formatDay(value: Date, timezone = DEFAULT_TIMEZONE): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function formatDay(value: Date, timezone = DEFAULT_TIMEZONE, locale = "zh-CN"): string {
+  return new Intl.DateTimeFormat(locale === "en" ? "en" : "zh-CN", {
     timeZone: timezone,
     month: "numeric",
     day: "numeric"
   }).format(value);
 }
 
-export function formatWeekday(value: Date, timezone = DEFAULT_TIMEZONE): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function formatWeekday(value: Date, timezone = DEFAULT_TIMEZONE, locale = "zh-CN"): string {
+  return new Intl.DateTimeFormat(locale === "en" ? "en" : "zh-CN", {
     timeZone: timezone,
     weekday: "short"
   }).format(value);
 }
 
-export function formatTime(epoch: number, timezone = DEFAULT_TIMEZONE): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function formatTime(epoch: number, timezone = DEFAULT_TIMEZONE, locale = "zh-CN"): string {
+  return new Intl.DateTimeFormat(locale === "en" ? "en" : "zh-CN", {
     timeZone: timezone,
     hour: "2-digit",
     minute: "2-digit",

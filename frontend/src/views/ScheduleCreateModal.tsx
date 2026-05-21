@@ -4,6 +4,7 @@ import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../l
 import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
+import { useI18n } from "../i18n";
 
 type Props = {
   api: AMToDoApi;
@@ -36,6 +37,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
+  const { t } = useI18n();
 
   const startKey = startDate && startTime ? `${startDate}T${startTime}` : "";
   const endKey = endDate && endTime ? `${endDate}T${endTime}` : "";
@@ -81,9 +83,9 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
     if (e.key !== "Escape") return;
     if (dirty) {
       const ok = await ask({
-        title: "放弃新建",
-        message: "有未保存的新日程，确定关闭吗？",
-        confirmLabel: "关闭",
+        title: t("schedule.discardNew"),
+        message: t("schedule.discardNewConfirm"),
+        confirmLabel: t("common.close"),
         danger: true,
       });
       if (!ok) return;
@@ -108,7 +110,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
       onCreate(result.schedule);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "创建失败");
+      setError(err instanceof Error ? err.message : t("common.createFailed"));
     } finally {
       setSaving(false);
     }
@@ -120,17 +122,17 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
       onClick={handleBackdrop}
       onKeyDown={handleKeyDown}
     >
-      <div className="schedule-modal-card" role="dialog" aria-label="创建日程">
+      <div className="schedule-modal-card" role="dialog" aria-label={t("schedule.createSchedule")}>
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">创建日程</h2>
+            <h2 className="schedule-modal-title">{t("schedule.createSchedule")}</h2>
           </div>
           <button
             type="button"
             className="schedule-modal-close"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -140,10 +142,10 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
         </div>
 
         <div className="schedule-modal-body">
-          <div className="schedule-modal-section-label">可编辑字段</div>
+          <div className="schedule-modal-section-label">{t("common.editableFields")}</div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="scm-title">标题</label>
+            <label className="schedule-modal-label" htmlFor="scm-title">{t("common.title")}</label>
             <input
               id="scm-title"
               type="text"
@@ -155,7 +157,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
           </div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="scm-desc">描述</label>
+            <label className="schedule-modal-label" htmlFor="scm-desc">{t("common.description")}</label>
             <textarea
               id="scm-desc"
               className="schedule-modal-textarea"
@@ -166,7 +168,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
           </div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label">开始时间</label>
+            <label className="schedule-modal-label">{t("common.startTime")}</label>
             <div className="schedule-modal-datetime-row">
               <DatePicker
                 value={startDate}
@@ -183,7 +185,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
           </div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label">结束时间</label>
+            <label className="schedule-modal-label">{t("common.endTime")}</label>
             <div className="schedule-modal-datetime-row">
               <DatePicker
                 value={endDate}
@@ -210,13 +212,13 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
               <span className="schedule-modal-timeline-start">{formatTime(timeline.startEpoch)}</span>
               <div className="schedule-modal-timeline-bar" />
               <span className="schedule-modal-timeline-end">{formatTime(timeline.endEpoch)}</span>
-              <span className="schedule-modal-timeline-dur">{timeline.durMins} 分钟</span>
+              <span className="schedule-modal-timeline-dur">{timeline.durMins} {t("common.minutes")}</span>
             </div>
           ) : null}
 
           <div className="schedule-modal-field-row">
             <div className="schedule-modal-field">
-              <label className="schedule-modal-label" htmlFor="scm-location">地点</label>
+              <label className="schedule-modal-label" htmlFor="scm-location">{t("common.location")}</label>
               <input
                 id="scm-location"
                 type="text"
@@ -226,7 +228,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
               />
             </div>
             <div className="schedule-modal-field">
-              <label className="schedule-modal-label" htmlFor="scm-category">分类</label>
+              <label className="schedule-modal-label" htmlFor="scm-category">{t("common.category")}</label>
               <input
                 id="scm-category"
                 type="text"
@@ -247,17 +249,17 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
             disabled={saveDisabled}
             onClick={handleSave}
           >
-            {saving ? "创建中..." : "创建日程"}
+            {saving ? t("common.creating") : t("schedule.createSchedule")}
           </button>
           <button
             type="button"
             className="schedule-modal-btn schedule-modal-btn-delete"
             onClick={onClose}
           >
-            取消
+            {t("common.cancel")}
           </button>
         </div>
-        {saving ? <div className="modal-save-progress" aria-label="创建中" /> : null}
+        {saving ? <div className="modal-save-progress" aria-label={t("common.creating")} /> : null}
       </div>
       {confirmDialog}
     </div>

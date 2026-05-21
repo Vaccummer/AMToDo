@@ -53,13 +53,13 @@ export async function fingerprintPublicKey(base64Key: string): Promise<string> {
 }
 
 export class FingerprintMismatchError extends Error {
+  /** i18n message key for translation by UI layer */
+  readonly messageKey = "crypto.fingerprintMismatch";
   constructor(
     public readonly expected: string,
     public readonly actual: string
   ) {
-    super(
-      `服务器公钥指纹不匹配！\n期望: ${expected}\n实际: ${actual}\n可能存在中间人攻击，或服务器已更换密钥。`
-    );
+    super(`fingerprint mismatch: expected=${expected} actual=${actual}`);
     this.name = "FingerprintMismatchError";
   }
 }

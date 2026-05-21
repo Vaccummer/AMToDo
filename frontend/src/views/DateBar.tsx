@@ -1,5 +1,6 @@
 import { forwardRef, type ReactNode } from "react";
 import { formatDateKeyDay, formatDateKeyWeekday } from "../lib/time";
+import { useI18n } from "../i18n";
 import leftIcon from "../assets/left.svg";
 import rightIcon from "../assets/right.svg";
 import toTodayIcon from "../assets/ToToday.svg";
@@ -34,10 +35,11 @@ export const DateBar = forwardRef<HTMLDivElement, Props>(function DateBar(
   },
   ref
 ) {
+  const { t } = useI18n();
   return (
     <div className="datebar" ref={ref}>
       <div className="datebar-nav">
-        <button type="button" className="datebar-nav-btn" aria-label="上一周" onClick={onPrevious}>
+        <button type="button" className="datebar-nav-btn" aria-label={t("common.previousWeek")} onClick={onPrevious}>
           <img src={leftIcon} alt="" />
         </button>
         <div className="datebar-center">
@@ -52,14 +54,14 @@ export const DateBar = forwardRef<HTMLDivElement, Props>(function DateBar(
           <button
             type="button"
             className="datebar-today-btn"
-            aria-label="回到今天"
+            aria-label={t("common.backToToday")}
             onClick={onToday}
             disabled={selectedDateKey === todayKey}
           >
             <img src={toTodayIcon} alt="" />
           </button>
         </div>
-        <button type="button" className="datebar-nav-btn" aria-label="下一周" onClick={onNext}>
+        <button type="button" className="datebar-nav-btn" aria-label={t("common.nextWeek")} onClick={onNext}>
           <img src={rightIcon} alt="" />
         </button>
       </div>

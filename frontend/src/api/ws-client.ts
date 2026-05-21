@@ -31,6 +31,7 @@ type PendingRequest = {
 // ── Constants ──
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 3_000;
 
 /** Sentinel close code for client-side fingerprint mismatch (not a real WS close code). */
 const FINGERPRINT_MISMATCH_CODE = -1;
@@ -311,6 +312,7 @@ export class UiWsClient {
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      let timedOut = false;
       let ws: WebSocket;
 
       try {
@@ -323,9 +325,25 @@ export class UiWsClient {
 
       this.ws = ws;
 
+      const connectTimer = setTimeout(() => {
+        if (settled) return;
+        timedOut = true;
+        settled = true;
+        clearTimeout(connectTimer);
+        ws.close();
+        this.ws = null;
+        this.sessionKey = null;
+        this.rejectAllPending("WebSocket connection timed out");
+        console.log("[WS] connect timeout, calling scheduleReconnect, attempt=", this.reconnectAttempt);
+        this.setStatus("disconnected");
+        this.scheduleReconnect();
+        reject(new Error("WebSocket connection timed out"));
+      }, CONNECT_TIMEOUT_MS);
+
       const settle = (fn: () => void) => {
         if (settled) return;
         settled = true;
+        clearTimeout(connectTimer);
         fn();
       };
 
@@ -446,6 +464,9 @@ export class UiWsClient {
       };
 
       ws.onclose = (event) => {
+        // Timeout already handled cleanup and reconnection
+        if (timedOut) return;
+
         this.ws = null;
         this.sessionKey = null;
         this.rejectAllPending("WebSocket closed");
@@ -462,7 +483,7 @@ export class UiWsClient {
             this.emitDisconnectReason(authCode);
             this.setStatus("disconnected");
           } else if (!this.intentionalClose) {
-            // Non-auth close — reconnect (infinite)
+            // Non-auth close — reconnect
             this.scheduleReconnect();
           } else {
             this.setStatus("disconnected");
@@ -470,14 +491,15 @@ export class UiWsClient {
           return;
         }
 
-        // Pre-auth close
+        // Pre-auth close (e.g. ERR_CONNECTION_REFUSED fires onclose synchronously)
         if (authCode !== null) {
           this.emitDisconnectReason(authCode);
         }
         const code = event.code;
         const reason = event.reason || `Connection closed (code ${code})`;
         settle(() => reject(new Error(reason)));
-        this.setStatus("disconnected");
+        console.log("[WS] pre-auth close, code=", code, "calling scheduleReconnect");
+        this.scheduleReconnect();
       };
 
       ws.onerror = () => {
@@ -492,7 +514,9 @@ export class UiWsClient {
   }
 
   private scheduleReconnect(): void {
+    console.log("[WS] scheduleReconnect, attempt=", this.reconnectAttempt, "max=", this.maxReconnectAttempts);
     if (!this.shouldReconnect()) {
+      console.log("[WS] reconnect exhausted, emitting RECONNECT_EXHAUSTED_CODE");
       this.emitDisconnectReason(RECONNECT_EXHAUSTED_CODE);
       this.setStatus("disconnected");
       return;
