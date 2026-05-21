@@ -15,6 +15,7 @@ import { ContextMenu, TrashIcon } from "./ContextMenu";
 import { DateBar } from "./DateBar";
 import { useConfirm } from "./ConfirmDialog";
 import { TodoDetailModal } from "./TodoDetailModal";
+import { MobileTodoHero } from "./MobileTodoHero";
 import addIcon from "../assets/add.svg";
 import { useI18n } from "../i18n";
 
@@ -148,6 +149,14 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     const weekStr = locale === "en" ? ordinal(wn) : String(wn);
     return t("common.weekOfYear", { year, month, week: weekStr });
   }, [normalizedWeekStart, weekStartKey, t, locale]);
+
+  const dateLine = useMemo(() => {
+    const [year, month, day] = selectedDayKey.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    const weekday = date.toLocaleDateString(locale === "zh-CN" ? "zh-CN" : "en-US", { weekday: "long" });
+    const monthName = date.toLocaleDateString(locale === "zh-CN" ? "zh-CN" : "en-US", { month: "long" });
+    return `${weekday}, ${monthName} ${day}`;
+  }, [selectedDayKey, locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -294,6 +303,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
 
   return (
     <div className="todo-view">
+      <MobileTodoHero todos={todos} dateLine={dateLine} />
       <DateBar
         ref={calendarStripRef}
         title={weekLabel}
@@ -334,7 +344,18 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         />
       ) : null}
 
-      <div className="todo-list">
+      <div className="mobile-glass-panel">
+        <div className="mobile-panel-header">
+          <span className="mobile-panel-title">{t("todo.taskList")}</span>
+          <button
+            type="button"
+            className="mobile-panel-sort-btn"
+            onClick={() => setHideCompleted((v) => !v)}
+          >
+            {hideCompleted ? t("todo.showCompleted") : t("todo.hideCompleted")}
+          </button>
+        </div>
+        <div className="todo-list">
         {(() => {
           const completedTodos = todos.filter((t) => t.completed);
           const lateCompleted = completedTodos.filter(
@@ -486,6 +507,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           </div>
           );
         })}
+        </div>
       </div>
       <div className="todo-bottom-bar">
         <button type="button" className="add-todo-button todo-bottom-primary" onClick={() => void addTodo()}>
@@ -515,6 +537,15 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           </svg>
         </button>
       </div>
+
+      <button
+        type="button"
+        className="mobile-fab"
+        onClick={() => void addTodo()}
+        title={t("todo.addTodo")}
+      >
+        +
+      </button>
 
       {detailId != null ? (
         <TodoDetailModal

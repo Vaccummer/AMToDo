@@ -42,6 +42,8 @@ export const zhCN: Record<string, string> = {
   "common.updatedAt": "更新时间",
   "common.completedAt": "完成时间",
   "common.completedStatus": "完成状态",
+  "common.remaining": "待办",
+  "common.done": "已完成",
   "common.completed": "已完成",
   "common.notCompleted": "未完成",
   "common.inProgress": "进行中",
@@ -235,6 +237,8 @@ export const zhCN: Record<string, string> = {
   "connection.replayDetectedDesc": "服务器检测到重复请求，连接已拒绝",
 
   // Todo
+  "todo.todayTasks": "今日任务",
+  "todo.taskList": "任务列表",
   "todo.newTodo": "新待办",
   "todo.addTodo": "添加待办",
   "todo.deleteTodo": "删除待办",

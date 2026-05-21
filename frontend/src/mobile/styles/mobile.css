@@ -77,14 +77,16 @@
   flex-direction: column;
 }
 
-/* ── Bottom Tab Bar ── */
+/* ── Bottom Tab Bar (Concept E: Dark Frosted) ── */
 
 .mobile-tab-bar {
   display: flex;
   height: calc(56px + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
-  background: var(--components-nav-bg);
-  border-top: 1px solid var(--global-surface-line);
+  background: rgba(26, 40, 32, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
@@ -97,15 +99,15 @@
   gap: 3px;
   border: 0;
   background: transparent;
-  color: var(--global-text-secondary);
+  color: rgba(255, 255, 255, 0.35);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s;
 }
 
 .mobile-tab-bar button.active {
-  color: var(--global-text-primary);
+  color: #4ade80;
 }
 
 .mobile-tab-bar button:active {
@@ -115,12 +117,14 @@
 .mobile-tab-bar img {
   width: 22px;
   height: 22px;
-  opacity: 0.7;
+  opacity: 0.35;
   transition: opacity 0.15s;
+  filter: none;
 }
 
 .mobile-tab-bar button.active img {
   opacity: 1;
+  filter: none;
 }
 
 /* ── Full-screen modals on mobile ── */
@@ -166,4 +170,245 @@
 .mobile-shell .trash-view,
 .mobile-shell .notify-view {
   height: 100%;
+}
+
+/* ── Hide DateBar on mobile (hero replaces it) ── */
+
+.mobile-shell .datebar {
+  display: none;
+}
+
+/* ── Mobile Todo Hero (Concept E) ── */
+
+.mobile-shell .todo-view {
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
+}
+
+.mobile-shell .mobile-hero {
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
+  padding: 12px 20px 16px;
+  flex-shrink: 0;
+}
+
+.mobile-shell .mobile-hero-date {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.mobile-shell .mobile-hero-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+  margin: 0 0 12px;
+}
+
+.mobile-shell .mobile-hero-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.mobile-shell .mobile-stat-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+
+.mobile-shell .mobile-stat-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.mobile-shell .mobile-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.mobile-shell .mobile-stat-highlight .mobile-stat-num {
+  color: #4ade80;
+}
+
+.mobile-shell .mobile-stat-danger .mobile-stat-num {
+  color: #f87171;
+}
+
+/* ── Glass Panel ── */
+
+.mobile-shell .mobile-glass-panel {
+  flex: 1;
+  margin: 0 12px;
+  background: rgba(250, 247, 242, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px 20px 0 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mobile-shell .mobile-panel-header {
+  padding: 16px 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.mobile-shell .mobile-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--global-text-primary, #342f2a);
+}
+
+.mobile-shell .mobile-panel-sort-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-primary-base, #1a7f72);
+  background: var(--status-primary-badge-bg, #e8f3f1);
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .mobile-panel-sort-btn:active {
+  opacity: 0.7;
+}
+
+/* ── Todo Cards (mobile override) ── */
+
+.mobile-shell .todo-list {
+  padding: 4px 16px 80px;
+  gap: 6px;
+}
+
+.mobile-shell .todo-row {
+  border-radius: 14px;
+  border: 1px solid rgba(229, 223, 215, 0.6);
+  background: #fff;
+  padding: 14px;
+  gap: 12px;
+  margin-bottom: 0;
+  min-height: auto;
+  transition: transform 0.1s;
+}
+
+.mobile-shell .todo-row::before {
+  display: none;
+}
+
+.mobile-shell .todo-row:first-of-type {
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+}
+
+.mobile-shell .todo-row:last-of-type {
+  border-bottom: 1px solid rgba(229, 223, 215, 0.6);
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
+.mobile-shell .todo-row:active {
+  transform: scale(0.98);
+}
+
+.mobile-shell .check-button {
+  width: 28px;
+  height: 28px;
+  border-width: 2.5px;
+}
+
+.mobile-shell .todo-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.mobile-shell .todo-row.overdue {
+  background: linear-gradient(135deg, #fff5f5, #fff);
+  border-color: rgba(198, 47, 47, 0.15);
+}
+
+.mobile-shell .todo-row.completed {
+  background: var(--status-completed-bg, #f2f4ef);
+  border-color: var(--status-completed-border, #dce4d8);
+}
+
+.mobile-shell .todo-row.late-done {
+  background: linear-gradient(135deg, #fef0d0, #fff);
+  border-color: rgba(212, 134, 10, 0.15);
+}
+
+/* ── FAB ── */
+
+.mobile-shell .mobile-fab {
+  position: absolute;
+  bottom: 72px;
+  right: 28px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--status-primary-base, #1a7f72), #14967e);
+  color: #fff;
+  border: none;
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(26, 127, 114, 0.4);
+  z-index: 50;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .mobile-fab:active {
+  transform: scale(0.9);
+}
+
+/* ── Hide bottom bar on mobile (replaced by FAB) ── */
+
+.mobile-shell .todo-bottom-bar {
+  display: none;
+}
+
+/* ── Skeleton adjustments for card style ── */
+
+.mobile-shell .skel-row {
+  border-radius: 14px;
+  border: 1px solid rgba(229, 223, 215, 0.6);
+  margin-bottom: 6px;
+}
+
+.mobile-shell .skel-row:first-child {
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+}
+
+.mobile-shell .skel-row:last-child {
+  border-bottom: 1px solid rgba(229, 223, 215, 0.6);
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
+/* ── Empty state adjustments for glass panel ── */
+
+.mobile-shell .empty-state {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  margin: 0;
 }
