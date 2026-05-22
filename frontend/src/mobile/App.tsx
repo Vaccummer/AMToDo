@@ -283,6 +283,35 @@ export function App() {
     };
   }, [settings.server_url, settings.access_token, settings.ws_enabled]);
 
+  // Disconnect WS when app goes to background, reconnect on foreground
+  useEffect(() => {
+    let listenerHandle: { remove: () => Promise<void> } | undefined;
+
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("appStateChange", ({ isActive }) => {
+        const ws = wsClientRef.current;
+        if (!ws) return;
+
+        if (isActive) {
+          // App came to foreground — reconnect if disconnected
+          if (ws.connectionStatus === "disconnected") {
+            ws.connect().catch(() => {});
+          }
+        } else {
+          // App went to background — disconnect to save battery
+          ws.disconnect();
+          setConnectionStatus("offline");
+        }
+      }).then((handle) => {
+        listenerHandle = handle;
+      });
+    }).catch(() => {});
+
+    return () => {
+      listenerHandle?.remove();
+    };
+  }, []);
+
   // Fetch username
   useEffect(() => {
     api.user()
@@ -417,6 +446,7 @@ export function App() {
       {showSettings && (
         <SettingsModal
           settings={settings}
+          connectionStatus={connStatus}
           onUpdateField={(fields) => {
             setSettings((prev) => {
               const next = { ...prev, ...fields };
@@ -426,6 +456,15 @@ export function App() {
               if (fields.font_size) document.documentElement.style.setProperty("--app-font-size", `${fields.font_size}px`);
               return next;
             });
+          }}
+          onSaveConnection={(fields) => {
+            setSettings((prev) => ({ ...prev, ...fields }));
+          }}
+          onConnectionToggle={(enabled) => {
+            setSettings((prev) => ({ ...prev, ws_enabled: enabled }));
+          }}
+          onAcceptFingerprint={(fingerprint) => {
+            setSettings((prev) => ({ ...prev, known_key_fingerprint: fingerprint }));
           }}
           onClose={() => {
             flushSettings(settings);
