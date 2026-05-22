@@ -150,14 +150,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     return t("common.weekOfYear", { year, month, week: weekStr });
   }, [normalizedWeekStart, weekStartKey, t, locale]);
 
-  const dateLine = useMemo(() => {
-    const [year, month, day] = selectedDayKey.split("-").map(Number);
-    const date = new Date(year, month - 1, day);
-    const weekday = date.toLocaleDateString(locale === "zh-CN" ? "zh-CN" : "en-US", { weekday: "long" });
-    const monthName = date.toLocaleDateString(locale === "zh-CN" ? "zh-CN" : "en-US", { month: "long" });
-    return `${weekday}, ${monthName} ${day}`;
-  }, [selectedDayKey, locale]);
-
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -303,7 +295,17 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
 
   return (
     <div className="todo-view">
-      <MobileTodoHero todos={todos} dateLine={dateLine} />
+      <MobileTodoHero
+        todos={todos}
+        selectedDateKey={selectedDayKey}
+        todayKey={todayKey}
+        weekDays={days}
+        locale={locale}
+        onPrevWeek={prevWeek}
+        onNextWeek={nextWeek}
+        onToday={goToToday}
+        onSelectDate={setSelectedDayKey}
+      />
       <DateBar
         ref={calendarStripRef}
         title={weekLabel}
