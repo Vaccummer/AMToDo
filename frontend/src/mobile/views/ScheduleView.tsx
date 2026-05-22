@@ -7,7 +7,9 @@ import {
   addDaysToDateKey,
   dateKeyFromDate,
   dateKeyFromEpoch,
+  formatDateKeyWeekday,
   formatTime,
+  monthLabelFromDateKey,
   startOfWeekDateKey,
   startOfDateKeyEpoch,
   weekOfMonth
@@ -29,6 +31,11 @@ function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatTimeShort(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 type Props = {
@@ -140,6 +147,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   } | null>(null);
   const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
   const dateBarRef = useRef<HTMLDivElement>(null);
+  const calendarBtnRef = useRef<HTMLButtonElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t, locale } = useI18n();
 
@@ -495,9 +503,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
     setItems((prev) => [...prev, schedule].sort((a, b) => a.start_at - b.start_at || a.end_at - b.end_at || a.id - b.id));
   }
 
-  function toggleCalendar() {
-    if (!showCalendar && dateBarRef.current) {
-      setCalendarAnchor(dateBarRef.current.getBoundingClientRect());
+  function toggleCalendar(anchorRect?: DOMRect) {
+    if (!showCalendar) {
+      setCalendarAnchor(anchorRect ?? dateBarRef.current?.getBoundingClientRect() ?? null);
     }
     setShowCalendar((v) => !v);
   }
@@ -878,6 +886,79 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
     return Math.abs(hash) % 100 < 30;
   }
 
+  // ── Agenda data computation ──
+  const monthLabel = monthLabelFromDateKey(weekStartKey, locale);
+  const agendaDays = useMemo(
+    () =>
+      days.map((dk) => ({
+        dateKey: dk,
+        dayNum: Number(dk.split("-")[2]),
+        weekday: formatDateKeyWeekday(dk, locale),
+        isToday: dk === todayKey,
+      })),
+    [days, todayKey, locale]
+  );
+
+  const eventColors = useMemo(() => getEventColors(), []);
+  const notifyColors = useMemo(() => getNotifyEventColors(), []);
+
+  const agendaItemsByDay = useMemo(() => {
+    const map: Record<string, { type: "schedule" | "notify"; item: ScheduleItem | NotificationItem; color: string }[]> = {};
+    for (const dk of days) {
+      map[dk] = [];
+    }
+    for (let i = 0; i < renderItems.length; i++) {
+      const item = renderItems[i];
+      const dk = dateKeyFromEpoch(item.start_at);
+      if (map[dk]) {
+        map[dk].push({ type: "schedule", item, color: eventColors[map[dk].filter((e) => e.type === "schedule").length % eventColors.length] });
+      }
+    }
+    for (let i = 0; i < notifyRenderItems.length; i++) {
+      const n = notifyRenderItems[i];
+      const dk = dateKeyFromEpoch(n.trigger_at);
+      if (map[dk]) {
+        map[dk].push({ type: "notify", item: n, color: notifyColors[map[dk].filter((e) => e.type === "notify").length % notifyColors.length] });
+      }
+    }
+    for (const dk of days) {
+      map[dk].sort((a, b) => {
+        const aTime = a.type === "schedule" ? (a.item as ScheduleItem).start_at : (a.item as NotificationItem).trigger_at;
+        const bTime = b.type === "schedule" ? (b.item as ScheduleItem).start_at : (b.item as NotificationItem).trigger_at;
+        return aTime - bTime;
+      });
+    }
+    return map;
+  }, [renderItems, notifyRenderItems, days, eventColors, notifyColors]);
+
+  const agendaStats = useMemo(() => {
+    let weekCount = 0;
+    const todayItems = agendaItemsByDay[todayKey] ?? [];
+    const todayCount = todayItems.filter((e) => e.type === "schedule").length;
+    const tomorrowKey = addDaysToDateKey(todayKey, 1);
+    const tomorrowItems = agendaItemsByDay[tomorrowKey] ?? [];
+    const tomorrowCount = tomorrowItems.filter((e) => e.type === "schedule").length;
+    for (const dk of days) {
+      weekCount += (agendaItemsByDay[dk] ?? []).filter((e) => e.type === "schedule").length;
+    }
+    return { weekCount, todayCount, tomorrowCount };
+  }, [agendaItemsByDay, days, todayKey]);
+
+  function handleFabClick() {
+    const targetDay = selectedDateKey;
+    const now = new Date();
+    const targetDate = new Date(now);
+    if (dateKeyFromDate(now) !== targetDay) {
+      const [y, m, d] = targetDay.split("-").map(Number);
+      targetDate.setFullYear(y, m - 1, d);
+    }
+    const nextHour = new Date(targetDate);
+    nextHour.setMinutes(0, 0, 0);
+    nextHour.setHours(nextHour.getHours() + 1);
+    const startAt = Math.floor(nextHour.getTime() / 1000);
+    setCreateDraft({ startAt, endAt: startAt + 3600 });
+  }
+
   return (
     <div className="schedule-view">
       <DateBar
@@ -915,115 +996,176 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
         />
       ) : null}
 
-      <div className="schedule-grid-scroll">
-        {isLoading ? (
-          <div className="skel-grid">
-            {slots.map((slot) => (
-              <Fragment key={slot.key}>
-                <div className="time-label">{slot.label}</div>
-                {days.map((dayKey) => (
-                  <div
-                    className={`skel-cell${pseudoHasEvent(dayKey, slot) ? " has-event" : ""}`}
-                    key={`${dayKey}-${slot.key}`}
-                  />
-                ))}
-              </Fragment>
-            ))}
+      {/* ── Agenda Hero Section ── */}
+      <div className="schedule-hero">
+        <div className="schedule-hero-header">
+          <span className="schedule-hero-date">{monthLabel}</span>
+          <button
+            ref={calendarBtnRef}
+            type="button"
+            className="schedule-hero-calendar-btn"
+            onClick={(e) => toggleCalendar(e.currentTarget.getBoundingClientRect())}
+            title={t("schedule.toggleTimeRange")}
+          >
+            📅
+          </button>
+        </div>
+        <h2 className="schedule-hero-title">{locale === "en" ? "This Week" : "本周日程"}</h2>
+        <div className="schedule-hero-stats">
+          <div className="schedule-stat-card">
+            <div className="schedule-stat-num green">{agendaStats.weekCount}</div>
+            <div className="schedule-stat-label">{locale === "en" ? "WEEK" : "本周"}</div>
           </div>
-        ) : (
-        <div className={`schedule-grid${editing ? " editing" : ""}`} style={gridStyle}>
-          {slots.map((slot) => (
-            <TimeRow
-              key={slot.key}
-              slot={slot}
-              days={days}
-              onCreate={beginCreate}
-              onClick={(dayKey) => {
-                setSelectedDateKey(dayKey);
-                void commitEditingNotify();
-                void commitEditingSchedule();
-              }}
-              onContextMenu={(dayKey, currentSlot, event) => {
-                event.preventDefault();
-                setSelectedDateKey(dayKey);
-                setContextMenu(null);
+          <div className="schedule-stat-card">
+            <div className="schedule-stat-num amber">{agendaStats.todayCount}</div>
+            <div className="schedule-stat-label">{locale === "en" ? "TODAY" : "今天"}</div>
+          </div>
+          <div className="schedule-stat-card">
+            <div className="schedule-stat-num">{agendaStats.tomorrowCount}</div>
+            <div className="schedule-stat-label">{locale === "en" ? "TMRW" : "明天"}</div>
+          </div>
+        </div>
+      </div>
 
-                // Calculate precise minute from click position within the cell
-                const cellHeight = (HOUR_HEIGHT * normalizedSlotMinutes) / 60;
-                const offsetY = (event.nativeEvent as MouseEvent).offsetY;
-                const ratio = Math.max(0, Math.min(1, offsetY / cellHeight));
-                const exactMinute = currentSlot.minutes + Math.round(ratio * normalizedSlotMinutes);
-                const dayStart = startOfDateKeyEpoch(dayKey);
-                const exactStartAt = dayStart + exactMinute * 60;
-                const exactEndAt = exactStartAt + normalizedSlotMinutes * 60;
+      {/* ── Week Navigation ── */}
+      <div className="schedule-week-nav">
+        <span className="schedule-week-nav-label">{weekLabel}</span>
+        <div className="schedule-week-nav-arrows">
+          <button type="button" className="schedule-week-nav-btn" onClick={prevWeek} aria-label="Previous week">‹</button>
+          <button type="button" className="schedule-week-nav-btn today-btn" onClick={goToToday}>{locale === "en" ? "Today" : "今天"}</button>
+          <button type="button" className="schedule-week-nav-btn" onClick={nextWeek} aria-label="Next week">›</button>
+        </div>
+      </div>
 
-                setEmptyContextMenu({
-                  startAt: exactStartAt,
-                  endAt: exactEndAt,
-                  x: event.clientX,
-                  y: event.clientY
-                });
-              }}
-            />
-          ))}
-          <div className="schedule-events-layer">
-            {days.map((dayKey, dayIndex) => (
-              <div
-                className="schedule-day-overlay"
-                key={`${dayKey}-events`}
-                ref={(node) => {
-                  dayOverlayRefs.current[dayKey] = node;
-                }}
-                style={{ gridColumn: dayIndex + 2 }}
-              >
-                {(blocksByDay[dayKey] ?? []).map((block) => (
-                  <ScheduleEventBlock
-                    block={block}
-                    key={`${dayKey}-${block.item.id}`}
-                    ref={(node) => {
-                      scheduleEventRefs.current[block.item.id] = node;
-                    }}
-                    selected={editing?.id === block.item.id}
-                    saving={editing?.id === block.item.id && editing.saving}
-                    onClick={() => handleScheduleClick(block.item)}
-                    onDoubleClick={() => openScheduleDetail(block.item.id)}
-                    onKeyDown={(event) => handleScheduleKeyDown(event, block.item)}
-                    onPointerDown={(event) => beginPointerEdit(event, block.item, "move")}
-                    onResizePointerDown={(event, mode) => beginPointerEdit(event, block.item, mode)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setEmptyContextMenu(null);
-                      setContextMenu({ id: block.item.id, x: e.clientX, y: e.clientY });
-                    }}
-                  />
-                ))}
-                {(notifyBlocksByDay[dayKey] ?? []).map((nb) => (
-                  <NotifyEventBlock
-                    key={`notify-${nb.item.id}`}
-                    item={nb.item}
-                    top={nb.top}
-                    backgroundColor={nb.backgroundColor}
-                    ref={(node) => { notifyEventRefs.current[nb.item.id] = node; }}
-                    selected={editingNotify?.id === nb.item.id}
-                    saving={editingNotify?.id === nb.item.id && editingNotify.saving}
-                    onClick={() => handleNotifyClick(nb.item)}
-                    onDoubleClick={() => setNotifyEditId(nb.item.id)}
-                    onKeyDown={(event) => handleNotifyKeyDown(event, nb.item)}
-                    onPointerDown={(event) => beginNotifyPointerEdit(event, nb.item)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setNotifyContextMenu({ id: nb.item.id, x: e.clientX, y: e.clientY });
-                    }}
-                  />
+      {/* ── Day Selector Strip ── */}
+      <div className="schedule-day-selector">
+        {agendaDays.map((day) => (
+          <button
+            key={day.dateKey}
+            type="button"
+            className={`schedule-day-chip${day.dateKey === selectedDateKey ? " active" : ""}${day.isToday ? " today" : ""}`}
+            onClick={() => setSelectedDateKey(day.dateKey)}
+          >
+            <span className="schedule-day-chip-weekday">{day.weekday}</span>
+            <span className="schedule-day-chip-num">{day.dayNum}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Agenda Glass Panel ── */}
+      <div className="schedule-agenda-panel">
+        {isLoading ? (
+          <>
+            {Array.from({ length: 3 }, (_, gi) => (
+              <div className="schedule-skel-agenda" key={gi}>
+                <div className="schedule-skel-day-header">
+                  <div className="schedule-skel-day-header-dot" />
+                  <div className="schedule-skel-day-header-line" />
+                </div>
+                {Array.from({ length: gi === 0 ? 3 : 2 }, (_, ci) => (
+                  <div className="schedule-skel-card" key={ci}>
+                    <div className="schedule-skel-card-bar" />
+                    <div className="schedule-skel-card-body">
+                      <div className={`schedule-skel-line${ci % 2 === 0 ? "" : " short"}`} />
+                      <div className={`schedule-skel-line${ci % 2 === 0 ? " medium" : " short"}`} />
+                    </div>
+                  </div>
                 ))}
               </div>
             ))}
-          </div>
-        </div>
+          </>
+        ) : (
+          days.map((dk) => {
+            const dayItems = agendaItemsByDay[dk] ?? [];
+            const dayInfo = agendaDays.find((d) => d.dateKey === dk)!;
+            const isToday = dk === todayKey;
+            const dayLabel = isToday
+              ? `${locale === "en" ? "Today" : "今天"} · ${locale === "en" ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", weekday: "short" }).format(new Date(dk + "T12:00:00")) : `${Number(dk.split("-")[1])}月${dayInfo.dayNum}日 ${dayInfo.weekday}`}`
+              : locale === "en"
+                ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", weekday: "short" }).format(new Date(dk + "T12:00:00"))
+                : `${Number(dk.split("-")[1])}月${dayInfo.dayNum}日 ${dayInfo.weekday}`;
+
+            return (
+              <div className="schedule-agenda-day" key={dk}>
+                <div className={`schedule-agenda-day-header${isToday ? " today" : ""}`}>
+                  <div className="schedule-agenda-day-header-dot" />
+                  <span className="schedule-agenda-day-header-text">{dayLabel}</span>
+                  <div className="schedule-agenda-day-header-line" />
+                </div>
+                {dayItems.length === 0 ? (
+                  <div className="schedule-agenda-empty">— {locale === "en" ? "No events" : "没有安排"} —</div>
+                ) : (
+                  dayItems.map((entry) => {
+                    if (entry.type === "schedule") {
+                      const item = entry.item as ScheduleItem;
+                      return (
+                        <div
+                          className="schedule-agenda-card"
+                          key={`s-${item.id}`}
+                          onClick={() => handleScheduleClick(item)}
+                          onDoubleClick={() => openScheduleDetail(item.id)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setEmptyContextMenu(null);
+                            setContextMenu({ id: item.id, x: e.clientX, y: e.clientY });
+                          }}
+                        >
+                          <div className="schedule-agenda-card-color" style={{ background: entry.color }} />
+                          <div className="schedule-agenda-card-body">
+                            <div className="schedule-agenda-card-title">{item.title}</div>
+                            <div className="schedule-agenda-card-meta">
+                              <span className="schedule-agenda-card-meta-icon">🕐</span>
+                              {formatTimeShort(item.start_at)} - {formatTimeShort(item.end_at)}
+                              {item.location ? (
+                                <>
+                                  <span className="schedule-agenda-card-meta-icon">📍</span>
+                                  {item.location}
+                                </>
+                              ) : null}
+                              {item.category ? (
+                                <span className="schedule-agenda-card-tag">{item.category}</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    const n = entry.item as NotificationItem;
+                    return (
+                      <div
+                        className="schedule-agenda-card"
+                        key={`n-${n.id}`}
+                        onClick={() => handleNotifyClick(n)}
+                        onDoubleClick={() => setNotifyEditId(n.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setNotifyContextMenu({ id: n.id, x: e.clientX, y: e.clientY });
+                        }}
+                      >
+                        <div className="schedule-agenda-card-color" style={{ background: entry.color }} />
+                        <div className="schedule-agenda-card-body">
+                          <div className="schedule-agenda-card-title">
+                            <span className="schedule-agenda-card-notify-icon">🔔</span>{" "}
+                            {n.title}
+                          </div>
+                          <div className="schedule-agenda-card-meta">
+                            <span className="schedule-agenda-card-meta-icon">🕐</span>
+                            {formatTimeShort(n.trigger_at)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })
         )}
       </div>
+
+      {/* FAB */}
+      <button type="button" className="schedule-agenda-fab" onClick={handleFabClick}>+</button>
+
       {editStatus ? <div className="empty-state schedule-status">{editStatus}</div> : null}
 
       {detailId != null ? (
