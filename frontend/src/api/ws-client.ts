@@ -362,6 +362,7 @@ export class UiWsClient {
         if (msg.type === "server_hello" && !settled) {
           try {
             const publicKeyB64 = msg.public_key as string;
+            console.log("[AMToDo WS] server_hello received, key_len=%d", publicKeyB64.length);
 
             // TOFU: verify or enroll the server's public key fingerprint
             const verifiedFp = await verifyOrEnrollKey(publicKeyB64, this.knownFingerprint);
@@ -374,6 +375,9 @@ export class UiWsClient {
             const sessionKeyBytes = crypto.getRandomValues(new Uint8Array(32));
             this.sessionKey = await importSessionKey(sessionKeyBytes);
 
+            console.log("[AMToDo WS] sending auth: token_len=%d, token_prefix=%s...",
+              this.accessToken.length, this.accessToken.slice(0, 8));
+
             const { envelope } = await sealForWsAuth(
               {
                 access_token: this.accessToken,
@@ -383,7 +387,9 @@ export class UiWsClient {
             );
 
             ws.send(JSON.stringify({ type: "auth", envelope }));
+            console.log("[AMToDo WS] auth sent, waiting for response...");
           } catch (e) {
+            console.error("[AMToDo WS] auth handshake error:", e);
             if (e instanceof FingerprintMismatchError) {
               this.authRejectionCode = FINGERPRINT_MISMATCH_CODE;
             }
@@ -394,6 +400,7 @@ export class UiWsClient {
         }
 
         if (msg.type === "auth_ok") {
+          console.log("[AMToDo WS] auth_ok received");
           this.reconnectAttempt = 0;
           this.setStatus("connected");
           settle(() => resolve());
@@ -401,6 +408,7 @@ export class UiWsClient {
         }
 
         if (msg.type === "auth_failed") {
+          console.error("[AMToDo WS] auth_failed:", msg.error);
           this.authRejectionCode = 4005; // invalid token
           ws.close();
           settle(() => reject(new Error(`Auth failed: ${msg.error ?? "unknown"}`)));
@@ -463,6 +471,9 @@ export class UiWsClient {
       };
 
       ws.onclose = (event) => {
+        console.log("[AMToDo WS] onclose: code=%d, reason=%s, settled=%s",
+          event.code, event.reason, settled);
+
         // Timeout already handled cleanup and reconnection
         if (timedOut) return;
 

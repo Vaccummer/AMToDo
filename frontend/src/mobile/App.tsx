@@ -13,14 +13,12 @@ import { ScheduleView } from "./views/ScheduleView";
 import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
 import { TrashView } from "./views/TrashView";
-import { NotifyView } from "./views/NotifyView";
 import { TodoDetailModal } from "./views/TodoDetailModal";
 import gearIcon from "../assets/gear.svg";
 import todoIcon from "../assets/todo.svg";
 import scheduleIcon from "../assets/schedule.svg";
 import searchIcon from "../assets/search.svg";
 import trashIcon from "../assets/trash.svg";
-import notifyIcon from "../assets/notify.svg";
 
 type Tab = "todo" | "schedule" | "search" | "trash" | "settings";
 type ConnectionStatus = "checking" | "online" | "offline";
@@ -42,8 +40,6 @@ export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
-  const [showSettings, setShowSettings] = useState(false);
-  const [username, setUsername] = useState("");
   const [pendingAction, setPendingAction] = useState<{
     type: "todo" | "schedule" | "notify";
     id: number;
@@ -163,9 +159,14 @@ export function App() {
     const bootstrap = async () => {
       const mgr = connectionManagerRef.current;
 
+      console.log("[AMToDo] bootstrap start: server_url=%s, token_len=%d, token_prefix=%s...",
+        settings.server_url, settings.access_token.length,
+        settings.access_token.slice(0, 8));
+
       // Phase 1: Health check via HTTP
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
+      console.log("[AMToDo] health OK: version=%s", result.version);
 
       if (cancelled) return;
       setHealth(result);
@@ -214,7 +215,9 @@ export function App() {
         handleWsNotification(notification);
       });
 
+      console.log("[AMToDo] WS connecting...");
       await wsClient.connect();
+      console.log("[AMToDo] WS connected OK");
 
       if (cancelled) {
         unsubStatus();
@@ -254,6 +257,7 @@ export function App() {
       try {
         await bootstrap();
       } catch (error: unknown) {
+        console.error("[AMToDo] bootstrap failed:", error);
         if (cancelled) return;
         const mgr = connectionManagerRef.current;
         const message = error instanceof FingerprintMismatchError
@@ -317,13 +321,6 @@ export function App() {
     };
   }, []);
 
-  // Fetch username
-  useEffect(() => {
-    api.user()
-      .then((result) => setUsername(result.user.name))
-      .catch(() => setUsername(""));
-  }, [api]);
-
   // Notification click handler
   useEffect(() => {
     return shell.onNotificationClicked?.((data: { id: number; trigger_at: number }) => {
@@ -360,7 +357,6 @@ export function App() {
     }).catch(() => {});
   }, []);
 
-  const connectionOk = connectionStatus === "online";
   const tApp = createTranslator(settings.language);
   const tabLabels: Record<Tab, string> = {
     todo: tApp("tab.todo"),
@@ -373,19 +369,6 @@ export function App() {
   return (
     <I18nProvider locale={settings.language}>
     <div className="mobile-shell">
-      <header className="mobile-header">
-        <div className="mobile-header-left">
-          <div className={connectionOk ? "brand-dot ok" : "brand-dot"} />
-          <span className="brand-title">AMToDo</span>
-          <span className={connectionOk ? "server-pill ok" : "server-pill"}>
-            {connectionOk ? (health ? `v${health.version}` : tApp("settings.connectionSuccess")) : healthError ? tApp("common.networkError") : "..."}
-          </span>
-        </div>
-        <div className="mobile-header-right">
-          {username && <span className="mobile-username">{username}</span>}
-        </div>
-      </header>
-
       <main className="mobile-content">
         {activeTab === "todo" && (
           <TodoView

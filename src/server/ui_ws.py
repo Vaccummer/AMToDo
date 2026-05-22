@@ -136,13 +136,22 @@ async def ui_ws_endpoint(websocket: WebSocket):
     access_token = payload.get("access_token")
     session_key_b64 = payload.get("session_key")
 
+    logger.info(
+        "UI WS auth: token_len=%d, token_prefix=%s..., has_session_key=%s",
+        len(access_token) if access_token else 0,
+        (access_token[:8] if len(access_token) >= 8 else access_token) if access_token else "None",
+        bool(session_key_b64),
+    )
+
     if not access_token or not session_key_b64:
         await _safe_close(websocket, CLOSE_MISSING_FIELDS, "missing token or session_key")
         return
 
     # --- Step 4: Validate access_token → user_id ---
     user_id = token_map.get(access_token)
-    if user_id is None:
+    if user_id is not None:
+        logger.info("UI WS auth: token found in cache, user_id=%d", user_id)
+    else:
         from models.user import User
         from sqlalchemy import select
 
@@ -151,10 +160,16 @@ async def ui_ws_endpoint(websocket: WebSocket):
                 select(User).where(User.token == access_token)
             ).scalar_one_or_none()
         if user is None:
+            logger.warning(
+                "UI WS auth failed: token not found (len=%d, prefix=%s...)",
+                len(access_token),
+                access_token[:8] if len(access_token) >= 8 else access_token,
+            )
             await _safe_close(websocket, CLOSE_INVALID_TOKEN, "invalid token")
             return
         user_id = user.id
         token_map[access_token] = user_id
+        logger.info("UI WS auth: token found in DB, user_id=%d", user_id)
 
     # --- Step 5: Store client-provided session key ---
     session_key = _b64url_decode(session_key_b64)
