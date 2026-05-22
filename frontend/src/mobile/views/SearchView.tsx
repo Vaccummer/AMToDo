@@ -166,11 +166,23 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
 
 let searchSessionConfig: SearchConfig = cloneSearchConfig(DEFAULT_SEARCH_CONFIG);
 
+/* ============================================================
+   SVG Icons
+   ============================================================ */
+
 function SearchIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-      <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
     </svg>
   );
 }
@@ -217,22 +229,79 @@ function JumpIcon() {
 
 function CalendarIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M897.9 369.2H205c-33.8 0-61.4-27.6-61.4-61.4s27.6-61.4 61.4-61.4h692.9c33.8 0 61.4 27.6 61.4 61.4s-27.6 61.4-61.4 61.4z" fill="#FFB89A" />
-      <path d="M807 171H703.3c-16.6 0-30 13.4-30 30s13.4 30 30 30H807c31.6 0 57.4 24 57.4 53.4v42.3H125.2v-42.3c0-29.5 25.7-53.4 57.4-53.4H293c16.6 0 30-13.4 30-30s-13.4-30-30-30H182.5c-64.7 0-117.4 50.9-117.4 113.4v527.7c0 62.5 52.7 113.4 117.4 113.4H807c64.7 0 117.4-50.9 117.4-113.4V284.5c0-62.6-52.7-113.5-117.4-113.5z m0 694.6H182.5c-31.6 0-57.4-24-57.4-53.4V386.8h739.2v425.4c0.1 29.5-25.7 53.4-57.3 53.4z" fill="#45484C" />
-      <path d="M700.2 514.5H200.5c-16.6 0-30 13.4-30 30s13.4 30 30 30h499.7c16.6 0 30-13.4 30-30s-13.5-30-30-30zM668.4 689.8h-74c-16.6 0-30 13.4-30 30s13.4 30 30 30h74c16.6 0 30-13.4 30-30s-13.4-30-30-30zM479.3 689.8H200.5c-16.6 0-30 13.4-30 30s13.4 30 30 30h278.8c16.6 0 30-13.4 30-30s-13.4-30-30-30z" fill="#33CC99" />
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </svg>
+  );
+}
+
+function LocationIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
     </svg>
   );
 }
 
 function NotifyIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   );
 }
+
+function AttachmentCountIcon() {
+  return (
+    <svg className="ms-attachment-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+      <path d="M431.8 350c36.8 0 71.5 7.9 104.3 23.6 24.6 11.6 46.8 27.4 66.8 47.3 19.9 19.9 35.7 42.2 47.3 66.7-15.8 15.8-34.8 23.6-57 23.6-7.8 0-15.6-1.2-23.6-3.5-13.4-21.8-31.8-40.1-53.6-53.6-25.8-15.7-53.9-23.6-84.1-23.6-21 0-41.4 4-61.1 12-19.7 8-37.4 19.8-52.9 35.3l-121 121c-15.5 15.5-27.3 33.2-35.3 52.9-7.9 19.4-12 40.1-12 61.1s4 41.4 12 61.1c8 19.8 19.7 37.4 35.3 52.9 15.6 15.6 33.2 27.3 52.9 35.3 19.4 7.9 40.2 12 61.2 12s41.4-4 61.1-12c19.7-8 37.4-19.8 52.9-35.3l84.7-84.7c26.9 7.3 54.7 11 83.5 11 4.6 0 11.1-0.2 19.5-0.6-3.2 3.5-6.4 7-9.7 10.4l-121 121c-23.3 23.3-49.7 40.9-79.3 52.9-29.1 11.9-60.3 18-91.8 18s-62.2-6-91.8-18.1c-29.7-12.1-56.1-29.7-79.3-52.8-23.3-23.3-40.9-49.7-52.9-79.2-11.9-29.1-18-60.3-18-91.8s6.1-62.7 18-91.8c12-29.5 29.6-55.9 52.9-79.2l121-121c2.3-2.3 5.8-5.5 10.4-9.8 22.5-20 47.6-35.1 75.3-45.5 27.7-10.3 56.1-15.5 85.3-15.6zM714.1 67.8c31.5 0 62.7 6.1 91.8 18 29.5 11.9 55.9 29.6 79.3 52.9 23.3 23.3 41 49.7 52.9 79.2 11.9 29.2 18 60.3 17.9 91.8 0 31.5-6.1 62.1-18.1 91.8-12.1 29.7-29.7 56.1-52.8 79.2l-121 121c-2.3 2.4-5.8 5.6-10.4 9.8-22.4 20-47.5 35.1-75.3 45.5-27.3 10.3-56.2 15.6-85.4 15.6-36.7 0-71.5-7.9-104.3-23.6-24.6-11.6-46.8-27.4-66.8-47.3-19.9-19.9-35.7-42.2-47.3-66.7 15.7-15.8 34.7-23.6 57-23.6 7.8 0 15.7 1.2 23.6 3.5 13.4 21.8 31.7 40.1 53.5 53.6 25.9 15.7 53.9 23.6 84.1 23.6 21 0 41.4-4 61.1-12 19.8-8 37.4-19.8 52.9-35.3l121-121c15.6-15.5 27.3-33.2 35.3-52.9 7.9-19.4 12-40.1 12-61.1s-4-41.4-12-61.1c-8-19.8-19.8-37.4-35.3-52.9-15.6-15.6-33.2-27.3-52.9-35.3-19.4-7.9-40.2-12-61.1-12-21 0-41.4 4-61.1 12-19.8 8-37.4 19.8-52.9 35.3L515 280.5c-26.9-7.3-54.7-11-83.5-11-4.6 0-11.1 0.2-19.5 0.6 3.2-3.5 6.4-7 9.8-10.4l121-121c23.1-23.1 49.5-40.7 79.2-52.8 29.9-12.1 60.5-18.2 92.1-18.1z m0 0" />
+    </svg>
+  );
+}
+
+function IdIcon() {
+  return (
+    <svg className="ms-id-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+      <path d="M933.933489 392.327772a38.459877 38.459877 0 0 0 38.35759-38.35759 38.459877 38.459877 0 0 0-38.35759-38.35759h-205.187534L757.488576 42.813412A38.613307 38.613307 0 0 0 723.171318 0.210916 38.562164 38.562164 0 0 0 680.773396 34.732747l-29.151769 280.879845H413.395422l28.486904-272.79918A38.562164 38.562164 0 0 0 407.769642 0.210916a38.562164 38.562164 0 0 0-42.142205 34.317257l-29.407486 281.084419H90.066511a38.459877 38.459877 0 0 0-38.35759 38.35759 38.51102 38.51102 0 0 0 38.35759 38.35759h238.175062l-24.958006 238.635352H90.066511a38.35759 38.35759 0 1 0 0 76.71518h205.187534L266.511424 980.477484a38.35759 38.35759 0 1 0 76.71518 8.080665l29.356342-280.879845h238.226206l-28.486904 272.79918a38.35759 38.35759 0 1 0 76.254889 8.080665l29.407486-280.879845h245.948866a38.35759 38.35759 0 0 0 0-76.71518h-238.175062l24.958006-238.635352z m-315.299389 238.635352H380.407895l24.958005-238.635352h238.226205z" fill="#00C080" />
+    </svg>
+  );
+}
+
+function ResetIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+      <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor"/>
+      <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+/* ============================================================
+   Utility functions
+   ============================================================ */
 
 function cloneSearchConfig(config: SearchConfig): SearchConfig {
   return {
@@ -273,27 +342,77 @@ function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t:
   return `${minutes} ${t("common.minutes")}`;
 }
 
-function AttachmentCountIcon() {
-  return (
-    <svg className="search-attachment-icon" viewBox="0 0 1024 1024" aria-hidden="true">
-      <path d="M431.8 350c36.8 0 71.5 7.9 104.3 23.6 24.6 11.6 46.8 27.4 66.8 47.3 19.9 19.9 35.7 42.2 47.3 66.7-15.8 15.8-34.8 23.6-57 23.6-7.8 0-15.6-1.2-23.6-3.5-13.4-21.8-31.8-40.1-53.6-53.6-25.8-15.7-53.9-23.6-84.1-23.6-21 0-41.4 4-61.1 12-19.7 8-37.4 19.8-52.9 35.3l-121 121c-15.5 15.5-27.3 33.2-35.3 52.9-7.9 19.4-12 40.1-12 61.1s4 41.4 12 61.1c8 19.8 19.7 37.4 35.3 52.9 15.6 15.6 33.2 27.3 52.9 35.3 19.4 7.9 40.2 12 61.2 12s41.4-4 61.1-12c19.7-8 37.4-19.8 52.9-35.3l84.7-84.7c26.9 7.3 54.7 11 83.5 11 4.6 0 11.1-0.2 19.5-0.6-3.2 3.5-6.4 7-9.7 10.4l-121 121c-23.3 23.3-49.7 40.9-79.3 52.9-29.1 11.9-60.3 18-91.8 18s-62.2-6-91.8-18.1c-29.7-12.1-56.1-29.7-79.3-52.8-23.3-23.3-40.9-49.7-52.9-79.2-11.9-29.1-18-60.3-18-91.8s6.1-62.7 18-91.8c12-29.5 29.6-55.9 52.9-79.2l121-121c2.3-2.3 5.8-5.5 10.4-9.8 22.5-20 47.6-35.1 75.3-45.5 27.7-10.3 56.1-15.5 85.3-15.6zM714.1 67.8c31.5 0 62.7 6.1 91.8 18 29.5 11.9 55.9 29.6 79.3 52.9 23.3 23.3 41 49.7 52.9 79.2 11.9 29.2 18 60.3 17.9 91.8 0 31.5-6.1 62.1-18.1 91.8-12.1 29.7-29.7 56.1-52.8 79.2l-121 121c-2.3 2.4-5.8 5.6-10.4 9.8-22.4 20-47.5 35.1-75.3 45.5-27.3 10.3-56.2 15.6-85.4 15.6-36.7 0-71.5-7.9-104.3-23.6-24.6-11.6-46.8-27.4-66.8-47.3-19.9-19.9-35.7-42.2-47.3-66.7 15.7-15.8 34.7-23.6 57-23.6 7.8 0 15.7 1.2 23.6 3.5 13.4 21.8 31.7 40.1 53.5 53.6 25.9 15.7 53.9 23.6 84.1 23.6 21 0 41.4-4 61.1-12 19.8-8 37.4-19.8 52.9-35.3l121-121c15.6-15.5 27.3-33.2 35.3-52.9 7.9-19.4 12-40.1 12-61.1s-4-41.4-12-61.1c-8-19.8-19.8-37.4-35.3-52.9-15.6-15.6-33.2-27.3-52.9-35.3-19.4-7.9-40.2-12-61.1-12-21 0-41.4 4-61.1 12-19.8 8-37.4 19.8-52.9 35.3L515 280.5c-26.9-7.3-54.7-11-83.5-11-4.6 0-11.1 0.2-19.5 0.6 3.2-3.5 6.4-7 9.8-10.4l121-121c23.1-23.1 49.5-40.7 79.2-52.8 29.9-12.1 60.5-18.2 92.1-18.1z m0 0" />
-    </svg>
-  );
-}
-
-function IdIcon() {
-  return (
-    <svg className="todo-id-icon" viewBox="0 0 1024 1024" aria-hidden="true">
-      <path d="M933.933489 392.327772a38.459877 38.459877 0 0 0 38.35759-38.35759 38.459877 38.459877 0 0 0-38.35759-38.35759h-205.187534L757.488576 42.813412A38.613307 38.613307 0 0 0 723.171318 0.210916 38.562164 38.562164 0 0 0 680.773396 34.732747l-29.151769 280.879845H413.395422l28.486904-272.79918A38.562164 38.562164 0 0 0 407.769642 0.210916a38.562164 38.562164 0 0 0-42.142205 34.317257l-29.407486 281.084419H90.066511a38.459877 38.459877 0 0 0-38.35759 38.35759 38.51102 38.51102 0 0 0 38.35759 38.35759h238.175062l-24.958006 238.635352H90.066511a38.35759 38.35759 0 1 0 0 76.71518h205.187534L266.511424 980.477484a38.35759 38.35759 0 1 0 76.71518 8.080665l29.356342-280.879845h238.226206l-28.486904 272.79918a38.35759 38.35759 0 1 0 76.254889 8.080665l29.407486-280.879845h245.948866a38.35759 38.35759 0 0 0 0-76.71518h-238.175062l24.958006-238.635352z m-315.299389 238.635352H380.407895l24.958005-238.635352h238.226205z" fill="#00C080" />
-    </svg>
-  );
-}
-
 function updateFields(fields: string[], value: string, checked: boolean): string[] {
   if (checked) return Array.from(new Set([...fields, value]));
   const next = fields.filter((field) => field !== value);
   return next.length ? next : fields;
 }
+
+function resultKey(result: ResultItem): string {
+  return `${result.type}:${result.item.id}`;
+}
+
+function resultDateKey(result: ResultItem): string {
+  if (result.type === "todo") {
+    const item = result.item as TodoItem;
+    const epoch = item.planned_at ?? item.due_at ?? item.created_at;
+    return epoch ? dateKeyFromEpoch(epoch) : dateKeyFromEpoch(Math.floor(Date.now() / 1000));
+  }
+  if (result.type === "notify") {
+    return dateKeyFromEpoch(result.item.trigger_at);
+  }
+  return dateKeyFromEpoch(result.item.start_at);
+}
+
+function sortResults(items: ResultItem[], sortBy: string, sortOrder: SortOrder): ResultItem[] {
+  const dir = sortOrder === "asc" ? 1 : -1;
+  return items.sort((a, b) => {
+    const va = getSortValue(a, sortBy);
+    const vb = getSortValue(b, sortBy);
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
+}
+
+function getSortValue(result: ResultItem, sortBy: string): number | string {
+  if (result.type === "todo") {
+    const item = result.item;
+    switch (sortBy) {
+      case "updated_at": return item.updated_at ?? 0;
+      case "created_at": return item.created_at ?? 0;
+      case "planned_at": return item.planned_at ?? 0;
+      case "due_at": return item.due_at ?? 0;
+      case "priority": return item.priority ?? 0;
+      case "title": return item.title ?? "";
+      default: return 0;
+    }
+  }
+  if (result.type === "notify") {
+    const item = result.item;
+    switch (sortBy) {
+      case "trigger_at": return item.trigger_at ?? 0;
+      case "created_at": return item.created_at ?? 0;
+      case "updated_at": return item.updated_at ?? 0;
+      case "title": return item.title ?? "";
+      default: return 0;
+    }
+  }
+  const item = result.item;
+  switch (sortBy) {
+    case "updated_at": return item.updated_at ?? 0;
+    case "created_at": return item.created_at ?? 0;
+    case "start_at": return item.start_at ?? 0;
+    case "end_at": return item.end_at ?? 0;
+    case "duration": return (item.end_at ?? 0) - (item.start_at ?? 0);
+    case "title": return item.title ?? "";
+    default: return 0;
+  }
+}
+
+/* ============================================================
+   Main Component
+   ============================================================ */
 
 export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, onConnectionError }: Props) {
   const { t } = useI18n();
@@ -332,6 +451,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   const [detail, setDetail] = useState<ResultItem | null>(null);
   const [editingNotifyId, setEditingNotifyId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ key: string; x: number; y: number } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
 
   const currentFields = mode === "todo" ? todoFields : mode === "schedule" ? scheduleFields : notifyFields;
@@ -343,6 +463,26 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     [contextMenu, results]
   );
 
+  // Check if any filter is active (for the floating button dot)
+  const matchHasValue = useRegex || idSearch || !ignoreCase || currentFields.length < (mode === "todo" ? 3 : mode === "schedule" ? 4 : 2);
+
+  function hasTimeRangeValue(ranges: Record<string, { start: string; end: string }>) {
+    return Object.values(ranges).some((r) => r.start || r.end);
+  }
+  const timeHasValue = mode === "todo"
+    ? hasTimeRangeValue(todoTimeRanges)
+    : mode === "schedule"
+      ? hasTimeRangeValue(scheduleTimeRanges)
+      : hasTimeRangeValue(notifyTimeRanges);
+
+  const todoHasValue = todoStatus !== "all" || priorityMin || priorityMax || tag.trim() || description.trim();
+  const scheduleHasValue = category.trim() || location.trim();
+  const notifyHasValue = description.trim();
+
+  const anyFilterActive = matchHasValue || timeHasValue ||
+    (mode === "todo" ? todoHasValue : mode === "schedule" ? scheduleHasValue : notifyHasValue);
+
+  // Session persistence
   useEffect(() => {
     searchSessionConfig = {
       mode,
@@ -401,6 +541,10 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     const sortBy = mode === "todo" ? todoSortBy : mode === "schedule" ? scheduleSortBy : notifySortBy;
     setResults((prev) => sortResults([...prev], sortBy, sortOrder));
   }, [todoSortBy, scheduleSortBy, notifySortBy, sortOrder]);
+
+  /* ============================================================
+     Search logic (preserved from desktop)
+     ============================================================ */
 
   async function runSearch() {
     setBusy(true);
@@ -562,6 +706,10 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     }
   }
 
+  /* ============================================================
+     CRUD actions (preserved from desktop)
+     ============================================================ */
+
   function beginRename(result: ResultItem) {
     if (result.type === "notify") {
       setEditingNotifyId(result.item.id);
@@ -655,33 +803,12 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     cancelRename();
   }
 
-  // Helper: check if a group has active values
-  const matchHasValue = useRegex || idSearch || !ignoreCase || currentFields.length < (mode === "todo" ? 3 : mode === "schedule" ? 4 : 2);
-
-  function hasTimeRangeValue(ranges: Record<string, { start: string; end: string }>) {
-    return Object.values(ranges).some((r) => r.start || r.end);
-  }
-  const timeHasValue = mode === "todo"
-    ? hasTimeRangeValue(todoTimeRanges)
-    : mode === "schedule"
-      ? hasTimeRangeValue(scheduleTimeRanges)
-      : hasTimeRangeValue(notifyTimeRanges);
+  /* ============================================================
+     Filter actions
+     ============================================================ */
 
   function timeOptionsWithValues(options: { value: string; label: string }[], ranges: Record<string, { start: string; end: string }>) {
     return options.map((o) => ({ ...o, hasValue: Boolean(ranges[o.value]?.start || ranges[o.value]?.end) }));
-  }
-
-  const todoHasValue = todoStatus !== "all" || priorityMin || priorityMax || tag.trim() || description.trim();
-  const scheduleHasValue = category.trim() || location.trim();
-  const notifyHasValue = description.trim();
-
-  function ResetIcon() {
-    return (
-      <svg width="10" height="10" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-        <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor"/>
-        <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z" fill="currentColor"/>
-      </svg>
-    );
   }
 
   function resetMatch() {
@@ -689,7 +816,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     setIgnoreCase(true);
     setIdSearch(false);
     if (mode === "todo") setTodoFields(["title", "description", "tag"]);
-    else setScheduleFields(["title", "description", "location", "category"]);
+    else if (mode === "schedule") setScheduleFields(["title", "description", "location", "category"]);
+    else setNotifyFields(["title", "description"]);
   }
 
   function resetTime() {
@@ -700,10 +828,6 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     } else {
       setNotifyTimeRanges({ trigger: { ...EMPTY_TIME_RANGES }, created: { ...EMPTY_TIME_RANGES }, updated: { ...EMPTY_TIME_RANGES } });
     }
-  }
-
-  function resetNotifyFilters() {
-    setDescription("");
   }
 
   function resetTodoFilters() {
@@ -719,27 +843,102 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     setLocation("");
   }
 
+  function resetNotifyFilters() {
+    setDescription("");
+  }
+
+  function resetAllFilters() {
+    resetMatch();
+    resetTime();
+    if (mode === "todo") resetTodoFilters();
+    else if (mode === "schedule") resetScheduleFilters();
+    else resetNotifyFilters();
+  }
+
+  function handleSearchSubmit() {
+    void runSearch();
+    setSheetOpen(false);
+  }
+
+  /* ============================================================
+     Render helpers
+     ============================================================ */
+
+  function getTodoCardStatus(todo: TodoItem): { label: string; className: string } {
+    const overdue = isOverdueTodo(todo);
+    const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
+    if (overdue) return { label: t("common.overdue"), className: "overdue" };
+    if (lateDone) return { label: `${t("common.overdue")} ${t("common.completed")}`, className: "overdue" };
+    if (todo.completed) return { label: t("common.completed"), className: "done" };
+    return { label: t("common.inProgress"), className: "pending" };
+  }
+
+  function getScheduleCardStatus(schedule: ScheduleItem): { label: string; className: string } {
+    const now = Math.floor(Date.now() / 1000);
+    if (schedule.end_at && schedule.end_at < now) return { label: t("common.completed"), className: "done" };
+    if (schedule.start_at && schedule.start_at > now) return { label: t("common.inProgress"), className: "pending" };
+    return { label: t("common.inProgress"), className: "pending" };
+  }
+
+  function getNotifyCardStatus(notify: NotificationItem): { label: string; className: string } {
+    const now = Math.floor(Date.now() / 1000);
+    if (notify.trigger_at < now) return { label: t("common.completed"), className: "done" };
+    return { label: t("common.inProgress"), className: "pending" };
+  }
+
+  /* ============================================================
+     JSX
+     ============================================================ */
+
   return (
-    <div className="search-view">
-      <div className="search-topbar">
-        <div className="search-tabs" role="tablist">
+    <div className="ms-container">
+      {/* Top section: dark gradient header */}
+      <div className="ms-top-section">
+        <div className="ms-top-row">
+          <h2 className="ms-title">{t("tab.search") || "Search"}</h2>
           <button
             type="button"
-            className={mode === "todo" ? "active" : ""}
+            className={`ms-regex-toggle${useRegex ? " active" : ""}`}
+            onClick={() => setUseRegex(!useRegex)}
+            disabled={idSearch}
+            aria-label={t("common.regex")}
+          >
+            .*
+          </button>
+        </div>
+
+        <div className="ms-search-field">
+          <SearchIcon />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSearchSubmit(); }}
+            placeholder={idSearch ? t("search.inputIdPlaceholder") : mode === "todo" ? t("search.searchTodos") : mode === "schedule" ? t("search.searchSchedules") : t("search.searchNotifications")}
+          />
+          <button type="button" className="ms-go-btn" disabled={busy} onClick={handleSearchSubmit}>
+            {busy ? "..." : t("common.search")}
+          </button>
+        </div>
+
+        <div className="ms-segmented-control">
+          <button
+            type="button"
+            className={`ms-segment${mode === "todo" ? " active" : ""}`}
             onClick={() => handleModeChange("todo")}
           >
             {t("tab.todo")}
           </button>
           <button
             type="button"
-            className={mode === "schedule" ? "active" : ""}
+            className={`ms-segment${mode === "schedule" ? " active" : ""}`}
             onClick={() => handleModeChange("schedule")}
           >
             {t("tab.schedule")}
           </button>
           <button
             type="button"
-            className={mode === "notify" ? "active" : ""}
+            className={`ms-segment${mode === "notify" ? " active" : ""}`}
             onClick={() => handleModeChange("notify")}
           >
             {t("tab.notify")}
@@ -747,269 +946,17 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         </div>
       </div>
 
-      <div className="search-layout">
-        <aside className="search-options">
-          <div className="search-sidebar-box">
-            <div className="search-sidebar-input-wrap">
-              <SearchIcon />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void runSearch(); } }}
-                placeholder={idSearch ? t("search.inputIdPlaceholder") : mode === "todo" ? t("search.searchTodos") : mode === "schedule" ? t("search.searchSchedules") : t("search.searchNotifications")}
-              />
-            </div>
-            <button type="button" className="search-sidebar-btn" disabled={busy} onClick={() => void runSearch()}>
-              {t("common.search")}
-            </button>
-          </div>
-
-          {/* 匹配 */}
-          <details className={`opt-collapsible${matchHasValue ? " has-group-value" : ""}`} open>
-            <summary>
-              <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                {t("search.match")}
-                <span className="has-value-dot" />
-              </span>
-              <button
-                type="button"
-                className={`opt-reset-btn${matchHasValue ? " has-value" : ""}`}
-                onClick={(e) => { e.stopPropagation(); resetMatch(); }}
-              >
-                <ResetIcon /> {t("common.reset")}
-              </button>
-            </summary>
-            <div className="opt-body">
-              <div className="search-toggle-row">
-                <label className="search-toggle">
-                  <input type="checkbox" checked={useRegex} onChange={(e) => setUseRegex(e.target.checked)} disabled={idSearch} />
-                  <span>{t("common.regex")}</span>
-                </label>
-                <label className="search-toggle">
-                  <input type="checkbox" checked={ignoreCase} onChange={(e) => setIgnoreCase(e.target.checked)} disabled={idSearch} />
-                  <span>{t("common.ignoreCase")}</span>
-                </label>
-                <label className="search-toggle">
-                  <input type="checkbox" checked={idSearch} onChange={(e) => setIdSearch(e.target.checked)} />
-                  <span>ID</span>
-                </label>
-              </div>
-              {!idSearch ? (
-                <div className="field-chip-row" style={{ marginTop: 6 }}>
-                  {(mode === "todo" ? getTodoFieldOptions(t) : mode === "schedule" ? getScheduleFieldOptions(t) : getNotifyFieldOptions(t)).map((field) => (
-                    <label className="field-chip" key={field.value}>
-                      <input
-                        type="checkbox"
-                        checked={currentFields.includes(field.value)}
-                        onChange={(e) => {
-                          if (mode === "todo") setTodoFields((f) => updateFields(f, field.value, e.target.checked));
-                          else if (mode === "schedule") setScheduleFields((f) => updateFields(f, field.value, e.target.checked));
-                          else setNotifyFields((f) => updateFields(f, field.value, e.target.checked));
-                        }}
-                      />
-                      <span>{field.label}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="search-id-hint">{t("search.idHint")}</div>
-              )}
-            </div>
-          </details>
-
-          {!idSearch ? (
-            <>
-              {/* 时间 */}
-              <details className={`opt-collapsible${timeHasValue ? " has-group-value" : ""}`}>
-                <summary>
-                  <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    {t("search.time")}
-                    <span className="has-value-dot" />
-                  </span>
-                  <button
-                    type="button"
-                    className={`opt-reset-btn${timeHasValue ? " has-value" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); resetTime(); }}
-                  >
-                    <ResetIcon /> {t("common.reset")}
-                  </button>
-                </summary>
-                <div className="opt-body">
-                  {mode === "todo" ? (
-                    <>
-                      <Dropdown
-                        value={todoTimeField}
-                        options={timeOptionsWithValues(getTodoTimeOptions(t), todoTimeRanges)}
-                        onChange={(v) => setTodoTimeField(v as TodoTimeField)}
-                      />
-                      <div className="time-stack" style={{ marginTop: 6 }}>
-                        <div className={`time-row${todoTimeRanges[todoTimeField].start || todoTimeRanges[todoTimeField].end ? " has-value" : ""}`}>
-                          <div className="time-row-singles">
-                            <DatePicker value={todoTimeRanges[todoTimeField].start} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], start: v } }))} placeholder={t("common.startDate")} />
-                            <DatePicker value={todoTimeRanges[todoTimeField].end} onChange={(v) => setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], end: v } }))} placeholder={t("common.endDate")} />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : mode === "schedule" ? (
-                    <>
-                      <Dropdown
-                        value={scheduleTimeField}
-                        options={timeOptionsWithValues(getScheduleTimeOptions(t), scheduleTimeRanges)}
-                        onChange={(v) => setScheduleTimeField(v as ScheduleTimeField)}
-                      />
-                      <div className="time-stack" style={{ marginTop: 6 }}>
-                        <div className={`time-row${scheduleTimeRanges[scheduleTimeField].start || scheduleTimeRanges[scheduleTimeField].end ? " has-value" : ""}`}>
-                          <div className="time-row-singles">
-                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].start} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], start: v } }))} placeholder={t("common.startDate")} />
-                            <DatePicker value={scheduleTimeRanges[scheduleTimeField].end} onChange={(v) => setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], end: v } }))} placeholder={t("common.endDate")} />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Dropdown
-                        value={notifyTimeField}
-                        options={timeOptionsWithValues(getNotifyTimeOptions(t), notifyTimeRanges)}
-                        onChange={(v) => setNotifyTimeField(v as NotifyTimeField)}
-                      />
-                      <div className="time-stack" style={{ marginTop: 6 }}>
-                        <div className={`time-row${notifyTimeRanges[notifyTimeField].start || notifyTimeRanges[notifyTimeField].end ? " has-value" : ""}`}>
-                          <div className="time-row-singles">
-                            <DatePicker value={notifyTimeRanges[notifyTimeField].start} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], start: v } }))} placeholder={t("common.startDate")} />
-                            <DatePicker value={notifyTimeRanges[notifyTimeField].end} onChange={(v) => setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], end: v } }))} placeholder={t("common.endDate")} />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </details>
-
-              {/* 待办 */}
-              {mode === "todo" ? (
-                <details className={`opt-collapsible${todoHasValue ? " has-group-value" : ""}`}>
-                  <summary>
-                    <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      {t("tab.todo")}
-                      <span className="has-value-dot" />
-                    </span>
-                    <button
-                      type="button"
-                      className={`opt-reset-btn${todoHasValue ? " has-value" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); resetTodoFilters(); }}
-                    >
-                      <ResetIcon /> {t("common.reset")}
-                    </button>
-                  </summary>
-                  <div className="opt-body">
-                    <Dropdown
-                      value={todoStatus}
-                      options={[
-                        { value: "all", label: t("search.allStatus") },
-                        { value: "open", label: t("search.uncompleted") },
-                        { value: "completed", label: t("search.completed") }
-                      ]}
-                      onChange={setTodoStatus}
-                    />
-                    <div className="search-number-row" style={{ marginTop: 6 }}>
-                      <input
-                        type="number"
-                        min={0}
-                        value={priorityMin}
-                        onChange={(e) => setPriorityMin(e.target.value)}
-                        placeholder={t("search.minPriority")}
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        value={priorityMax}
-                        onChange={(e) => setPriorityMax(e.target.value)}
-                        placeholder={t("search.maxPriority")}
-                      />
-                    </div>
-                    <input
-                      className="search-filter-input"
-                      value={tag}
-                      onChange={(e) => setTag(e.target.value)}
-                      placeholder={t("common.tags")}
-                      style={{ marginTop: 6 }}
-                    />
-                    <input
-                      className="search-filter-input"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={t("common.description")}
-                      style={{ marginTop: 6 }}
-                    />
-                  </div>
-                </details>
-              ) : mode === "schedule" ? (
-                <details className={`opt-collapsible${scheduleHasValue ? " has-group-value" : ""}`}>
-                  <summary>
-                    <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      {t("tab.schedule")}
-                      <span className="has-value-dot" />
-                    </span>
-                    <button
-                      type="button"
-                      className={`opt-reset-btn${scheduleHasValue ? " has-value" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); resetScheduleFilters(); }}
-                    >
-                      <ResetIcon /> {t("common.reset")}
-                    </button>
-                  </summary>
-                  <div className="opt-body">
-                    <input
-                      className="search-filter-input"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      placeholder={t("common.category")}
-                    />
-                    <input
-                      className="search-filter-input"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      placeholder={t("common.location")}
-                      style={{ marginTop: 6 }}
-                    />
-                  </div>
-                </details>
-              ) : (
-                <details className={`opt-collapsible${notifyHasValue ? " has-group-value" : ""}`}>
-                  <summary>
-                    <span className="search-option-title" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      {t("tab.notify")}
-                      <span className="has-value-dot" />
-                    </span>
-                    <button
-                      type="button"
-                      className={`opt-reset-btn${notifyHasValue ? " has-value" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); resetNotifyFilters(); }}
-                    >
-                      <ResetIcon /> {t("common.reset")}
-                    </button>
-                  </summary>
-                  <div className="opt-body">
-                    <input
-                      className="search-filter-input"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={t("common.description")}
-                    />
-                  </div>
-                </details>
-              )}
-            </>
-          ) : null}
-        </aside>
-
-        <section className="search-results">
-          <div className="search-results-toolbar">
-            <span>{connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error") ? (connectionStatus.status === "offline" ? t("common.connectionFailed") : t("common.authFailed")) : status || `${results.length}/${total} ${t("common.items")}`}</span>
-            <div className="search-sort-controls">
+      {/* Results area */}
+      <div className="ms-results-scroll">
+        {/* Results meta: count + sort */}
+        {results.length > 0 || (status && status !== t("search.notSearched")) ? (
+          <div className="ms-results-meta">
+            <span className="ms-results-count">
+              {connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error")
+                ? (connectionStatus.status === "offline" ? t("common.connectionFailed") : t("common.authFailed"))
+                : status || `${results.length}/${total} ${t("common.items")}`}
+            </span>
+            <div className="ms-sort-controls">
               <Dropdown
                 value={currentSortBy}
                 options={currentSortOptions}
@@ -1021,273 +968,511 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               />
               <button
                 type="button"
-                className="sort-order-btn"
-                onClick={() => setSortOrder((value) => (value === "desc" ? "asc" : "desc"))}
+                className="ms-sort-order-btn"
+                onClick={() => setSortOrder((v) => (v === "desc" ? "asc" : "desc"))}
                 aria-label={sortOrder === "desc" ? t("common.descending") : t("common.ascending")}
-                title={sortOrder === "desc" ? t("common.descending") : t("common.ascending")}
               >
                 {sortOrder === "desc" ? "↓" : "↑"}
               </button>
             </div>
           </div>
+        ) : null}
 
-          <div className="search-result-list">
-            {results.map((result) => {
-              const key = resultKey(result);
-              const isEditing = editingKey === key;
-              if (result.type === "todo") {
-                const todo = result.item;
-                const overdue = isOverdueTodo(todo);
-                const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
-                const hasDue = todo.due_at !== null;
-                const statusLabel = overdue
-                  ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, undefined, t)}`
-                  : lateDone
-                    ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, todo.completed_at!, t)}${t("common.completed")}`
-                    : todo.completed
-                      ? t("common.completed")
-                      : t("common.inProgress");
-                const rowClass = [
-                  "todo-row",
-                  todo.completed ? "completed" : "",
-                  overdue ? "overdue" : "",
-                  lateDone ? "late-done" : ""
-                ].filter(Boolean).join(" ");
-                return (
-                  <div
-                    className={rowClass}
-                    key={key}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setContextMenu({ key, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="check-button"
-                      onClick={(e) => { e.stopPropagation(); void toggleTodo(result); }}
-                      title={todo.completed ? t("common.cancelComplete") : t("common.markComplete")}
-                    >
-                      {todo.completed ? "✓" : ""}
-                    </button>
-                    <div className="todo-main">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          className="todo-edit-input"
-                          value={editText}
-                          onChange={(event) => setEditText(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") void saveRename(result);
-                            if (event.key === "Escape") cancelRename();
-                          }}
-                          onBlur={() => void saveRename(result)}
-                          autoFocus
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          className="todo-title"
-                          style={{ textAlign: "left", border: 0, background: "transparent", font: "inherit", cursor: "pointer", width: "100%" }}
-                          onDoubleClick={() => beginRename(result)}
-                          onClick={() => setDetail(result)}
-                        >
-                          {todo.title}
-                        </button>
-                      )}
-                      <div className="todo-meta">
-                        <span className="todo-status-badge">{statusLabel}</span>
-                        {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
-                        {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
-                      </div>
-                    </div>
-                    <div className="todo-right">
-                      <span className="todo-id-badge" title={`id:${todo.id}`}>
-                        <IdIcon />
-                        <span>{todo.id}</span>
-                      </span>
-                      <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
-                        <AttachmentCountIcon />
-                        <span>{todo.attachment_count ?? 0}</span>
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
-              // Schedule result
-              if (result.type === "schedule") {
-                const schedule = result.item;
-                return (
-                  <div
-                    className={["search-result-row", "schedule"].filter(Boolean).join(" ")}
-                    key={key}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setContextMenu({ key, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <span className="search-result-kind" title={`id:${schedule.id}`}>
-                      <CalendarIcon />
-                    </span>
-                    <div className="search-result-main">
-                      {isEditing ? (
-                        <input
-                          className="search-title-input"
-                          value={editText}
-                          onChange={(event) => setEditText(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") void saveRename(result);
-                            if (event.key === "Escape") cancelRename();
-                          }}
-                          onBlur={() => void saveRename(result)}
-                          autoFocus
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          className="search-result-title"
-                          onDoubleClick={() => beginRename(result)}
-                          onClick={() => setDetail(result)}
-                        >
-                          {schedule.title}
-                        </button>
-                      )}
-                      <div className="search-result-meta">
-                        <span>{formatEpoch(schedule.start_at)} - {formatEpoch(schedule.end_at)}</span>
-                        {schedule.category ? <span>{schedule.category}</span> : null}
-                        {schedule.location ? <span>{schedule.location}</span> : null}
-                        <span className="search-result-id">id:{schedule.id}</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="search-delete-btn"
-                      onClick={(e) => { e.stopPropagation(); void deleteResult(result); }}
-                      title={t("common.delete")}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                );
-              }
-              // Notify result
-              const notify = result.item;
+        {/* Result cards */}
+        <div className="ms-result-list">
+          {results.map((result) => {
+            const key = resultKey(result);
+            const isEditing = editingKey === key;
+
+            if (result.type === "todo") {
+              const todo = result.item;
+              const cardStatus = getTodoCardStatus(todo);
+              const overdue = isOverdueTodo(todo);
+              const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
               return (
                 <div
-                  className={["search-result-row", "notify"].filter(Boolean).join(" ")}
+                  className={`ms-result-card${todo.completed ? " ms-completed" : ""}${overdue ? " ms-overdue" : ""}${lateDone ? " ms-late-done" : ""}`}
                   key={key}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setContextMenu({ key, x: event.clientX, y: event.clientY });
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ key, x: e.clientX, y: e.clientY });
                   }}
+                  onClick={() => setDetail(result)}
                 >
-                  <span className="search-result-kind" title={`id:${notify.id}`}>
-                    <NotifyIcon />
-                  </span>
-                  <div className="search-result-main">
-                    {isEditing ? (
-                      <input
-                        className="search-title-input"
-                        value={editText}
-                        onChange={(event) => setEditText(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") void saveRename(result);
-                          if (event.key === "Escape") cancelRename();
-                        }}
-                        onBlur={() => void saveRename(result)}
-                        autoFocus
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="search-result-title"
-                        onClick={() => setEditingNotifyId(notify.id)}
-                      >
-                        {notify.title}
-                      </button>
-                    )}
-                    <div className="search-result-meta">
-                      <span>{t("common.trigger")} {formatEpoch(notify.trigger_at)}</span>
-                      {notify.description ? <span>{notify.description}</span> : null}
-                      <span className="search-result-id">id:{notify.id}</span>
-                    </div>
+                  <div className="ms-card-top">
+                    <span className="ms-type-badge ms-type-badge--todo">{t("tab.todo")}</span>
+                    <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="search-delete-btn"
-                    onClick={(e) => { e.stopPropagation(); void deleteResult(result); }}
-                    title={t("common.delete")}
-                  >
-                    <TrashIcon />
-                  </button>
+
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="ms-card-edit-input"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") void saveRename(result);
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                      onBlur={() => void saveRename(result)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <div
+                      className="ms-card-title"
+                      onDoubleClick={() => beginRename(result)}
+                    >
+                      {todo.completed ? <s>{todo.title}</s> : todo.title}
+                    </div>
+                  )}
+
+                  {todo.description ? (
+                    <div className="ms-card-desc">{todo.description}</div>
+                  ) : null}
+
+                  <div className="ms-card-meta">
+                    {todo.due_at !== null ? (
+                      <span className="ms-meta-item">
+                        <CalendarIcon />
+                        <span>{formatDueTime(todo.due_at)}</span>
+                      </span>
+                    ) : (
+                      <span className="ms-meta-item">
+                        <CalendarIcon />
+                        <span>{t("common.noDueDate")}</span>
+                      </span>
+                    )}
+                    {todo.tag ? (
+                      <span className="ms-meta-item">
+                        <TagIcon />
+                        <span>{todo.tag}</span>
+                      </span>
+                    ) : null}
+                    {todo.attachment_count ? (
+                      <span className="ms-meta-item">
+                        <AttachmentCountIcon />
+                        <span>{todo.attachment_count}</span>
+                      </span>
+                    ) : null}
+                    <span className="ms-meta-item ms-meta-id">
+                      <IdIcon />
+                      <span>{todo.id}</span>
+                    </span>
+                  </div>
                 </div>
               );
-            })}
-            {results.length === 0 && (
-              status === t("search.notSearched") ? (
-                <div className="search-empty search-empty-initial">
-                  <span className="search-empty-title">{t("search.searchDimension")}</span>
-                  <span className="search-empty-sub">{t("search.searchDimensionHint")}</span>
-                  <div className="search-cards">
-                    <button type="button" className="search-card card-todo" onClick={() => setMode("todo")}>
-                      <div className="card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                      </div>
-                      <div className="card-text">
-                        <span className="card-label">{t("tab.todo")}</span>
-                        <span className="card-hint">{t("search.todoHint")}</span>
-                      </div>
-                    </button>
-                    <button type="button" className="search-card card-schedule" onClick={() => setMode("schedule")}>
-                      <div className="card-icon">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                      </div>
-                      <div className="card-text">
-                        <span className="card-label">{t("tab.schedule")}</span>
-                        <span className="card-hint">{t("search.scheduleHint")}</span>
-                      </div>
-                    </button>
-                    <button type="button" className="search-card card-notify" onClick={() => setMode("notify")}>
-                      <div className="card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-                      </div>
-                      <div className="card-text">
-                        <span className="card-label">{t("tab.notify")}</span>
-                        <span className="card-hint">{t("search.notificationHint")}</span>
-                      </div>
-                    </button>
-                    <button type="button" className="search-card card-id" onClick={() => setIdSearch(true)}>
-                      <div className="card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                      </div>
-                      <div className="card-text">
-                        <span className="card-label">{t("search.idLookup")}</span>
-                        <span className="card-hint">{t("search.idLookupHint")}</span>
-                      </div>
-                    </button>
+            }
+
+            if (result.type === "schedule") {
+              const schedule = result.item;
+              const cardStatus = getScheduleCardStatus(schedule);
+              return (
+                <div
+                  className="ms-preview-card"
+                  key={key}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ key, x: e.clientX, y: e.clientY });
+                  }}
+                  onClick={() => setDetail(result)}
+                >
+                  <div className="ms-card-top">
+                    <span className="ms-type-badge ms-type-badge--schedule">{t("tab.schedule")}</span>
+                    <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
+                  </div>
+
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="ms-card-edit-input"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") void saveRename(result);
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                      onBlur={() => void saveRename(result)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <div
+                      className="ms-card-title"
+                      onDoubleClick={() => beginRename(result)}
+                    >
+                      {schedule.title}
+                    </div>
+                  )}
+
+                  {schedule.description ? (
+                    <div className="ms-card-desc">{schedule.description}</div>
+                  ) : null}
+
+                  <div className="ms-card-meta">
+                    <span className="ms-meta-item">
+                      <ClockIcon />
+                      <span>{formatEpoch(schedule.start_at)} - {formatEpoch(schedule.end_at)}</span>
+                    </span>
+                    {schedule.location ? (
+                      <span className="ms-meta-item">
+                        <LocationIcon />
+                        <span>{schedule.location}</span>
+                      </span>
+                    ) : null}
+                    {schedule.category ? (
+                      <span className="ms-meta-item">
+                        <TagIcon />
+                        <span>{schedule.category}</span>
+                      </span>
+                    ) : null}
+                    <span className="ms-meta-item ms-meta-id">
+                      <IdIcon />
+                      <span>{schedule.id}</span>
+                    </span>
                   </div>
                 </div>
-              ) : (
-                <div className="search-empty search-empty-no-result">
-                  <div className="search-empty-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                  </div>
-                  <span className="search-empty-title">{t("search.noMatchFound")}</span>
-                  <span className="search-empty-sub">{query ? t("search.noResultsFor", { query }) : t("search.tryDifferent")}</span>
-                  <div className="search-empty-badge">
-                    <div className="search-empty-badge-dot" />
-                    {t("search.matchCount", { count: 0 })}
-                  </div>
+              );
+            }
+
+            // Notify result
+            const notify = result.item;
+            const cardStatus = getNotifyCardStatus(notify);
+            return (
+              <div
+                className="ms-preview-card"
+                key={key}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ key, x: e.clientX, y: e.clientY });
+                }}
+                onClick={() => setEditingNotifyId(notify.id)}
+              >
+                <div className="ms-card-top">
+                  <span className="ms-type-badge ms-type-badge--notify">{t("tab.notify")}</span>
+                  <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
                 </div>
-              )
-            )}
-          </div>
-        </section>
+
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="ms-card-edit-input"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") void saveRename(result);
+                      if (e.key === "Escape") cancelRename();
+                    }}
+                    onBlur={() => void saveRename(result)}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <div
+                    className="ms-card-title"
+                    onDoubleClick={() => beginRename(result)}
+                  >
+                    {notify.title}
+                  </div>
+                )}
+
+                {notify.description ? (
+                  <div className="ms-card-desc">{notify.description}</div>
+                ) : null}
+
+                <div className="ms-card-meta">
+                  <span className="ms-meta-item">
+                    <NotifyIcon />
+                    <span>{t("common.trigger")} {formatEpoch(notify.trigger_at)}</span>
+                  </span>
+                  <span className="ms-meta-item ms-meta-id">
+                    <IdIcon />
+                    <span>{notify.id}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Empty states */}
+          {results.length === 0 && (
+            status === t("search.notSearched") ? (
+              <div className="ms-empty-initial">
+                <span className="ms-empty-title">{t("search.searchDimension")}</span>
+                <span className="ms-empty-desc">{t("search.searchDimensionHint")}</span>
+                <div className="ms-dimension-cards">
+                  <button type="button" className="ms-dimension-card ms-card-todo" onClick={() => handleModeChange("todo")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                    <span className="ms-dimension-card-label">{t("tab.todo")}</span>
+                    <span className="ms-empty-card-hint">{t("search.todoHint")}</span>
+                  </button>
+                  <button type="button" className="ms-dimension-card ms-card-schedule" onClick={() => handleModeChange("schedule")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                    <span className="ms-dimension-card-label">{t("tab.schedule")}</span>
+                    <span className="ms-empty-card-hint">{t("search.scheduleHint")}</span>
+                  </button>
+                  <button type="button" className="ms-dimension-card ms-card-notify" onClick={() => handleModeChange("notify")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                    <span className="ms-dimension-card-label">{t("tab.notify")}</span>
+                    <span className="ms-empty-card-hint">{t("search.notificationHint")}</span>
+                  </button>
+                  <button type="button" className="ms-dimension-card ms-card-id" onClick={() => setIdSearch(true)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                    <span className="ms-dimension-card-label">{t("search.idLookup")}</span>
+                    <span className="ms-empty-card-hint">{t("search.idLookupHint")}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="ms-empty-no-results">
+                <div className="ms-empty-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </div>
+                <span className="ms-empty-title">{t("search.noMatchFound")}</span>
+                <span className="ms-empty-desc">{query ? t("search.noResultsFor", { query }) : t("search.tryDifferent")}</span>
+                <div className="ms-empty-badge">
+                  <div className="ms-empty-badge-dot" />
+                  {t("search.matchCount", { count: 0 })}
+                </div>
+              </div>
+            )
+          )}
+        </div>
+
+        {/* Floating filter button */}
+        <button
+          type="button"
+          className="ms-floating-filter"
+          onClick={() => setSheetOpen(true)}
+          aria-label={t("search.match")}
+        >
+          <FilterIcon />
+          {anyFilterActive && <span className="ms-filter-active-dot" />}
+        </button>
       </div>
 
+      {/* Filter bottom sheet */}
+      {sheetOpen && (
+        <>
+          <div className="ms-sheet-overlay" onClick={() => setSheetOpen(false)} />
+          <div className="ms-bottom-sheet">
+            <div className="ms-sheet-handle" />
+            <div className="ms-sheet-header">
+              <h3>{t("search.match")}</h3>
+              <button type="button" className="ms-sheet-reset" onClick={resetAllFilters}>
+                <ResetIcon /> {t("common.reset")}
+              </button>
+            </div>
+            <div className="ms-sheet-body">
+              {/* Match group */}
+              <div className="ms-filter-group">
+                <div className="ms-filter-group-title">{t("search.match")}</div>
+                <div className="ms-filter-chips">
+                  <button
+                    type="button"
+                    className={`ms-filter-chip${useRegex ? " selected" : ""}`}
+                    onClick={() => setUseRegex(!useRegex)}
+                    disabled={idSearch}
+                  >
+                    {t("common.regex")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`ms-filter-chip${ignoreCase ? " selected" : ""}`}
+                    onClick={() => setIgnoreCase(!ignoreCase)}
+                    disabled={idSearch}
+                  >
+                    {t("common.ignoreCase")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`ms-filter-chip${idSearch ? " selected" : ""}`}
+                    onClick={() => setIdSearch(!idSearch)}
+                  >
+                    ID
+                  </button>
+                </div>
+                {!idSearch && (
+                  <div className="ms-filter-chips" style={{ marginTop: 8 }}>
+                    {(mode === "todo" ? getTodoFieldOptions(t) : mode === "schedule" ? getScheduleFieldOptions(t) : getNotifyFieldOptions(t)).map((field) => (
+                      <button
+                        key={field.value}
+                        type="button"
+                        className={`ms-filter-chip${currentFields.includes(field.value) ? " selected" : ""}`}
+                        onClick={() => {
+                          const checked = !currentFields.includes(field.value);
+                          if (mode === "todo") setTodoFields((f) => updateFields(f, field.value, checked));
+                          else if (mode === "schedule") setScheduleFields((f) => updateFields(f, field.value, checked));
+                          else setNotifyFields((f) => updateFields(f, field.value, checked));
+                        }}
+                      >
+                        {field.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Time range group */}
+              {!idSearch && (
+                <div className="ms-filter-group">
+                  <div className="ms-filter-group-title">{t("search.time")}</div>
+                  <div className="ms-filter-chips">
+                    {mode === "todo" ? (
+                      getTodoTimeOptions(t).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`ms-filter-chip${todoTimeField === opt.value ? " selected" : ""}`}
+                          onClick={() => setTodoTimeField(opt.value as TodoTimeField)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))
+                    ) : mode === "schedule" ? (
+                      getScheduleTimeOptions(t).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`ms-filter-chip${scheduleTimeField === opt.value ? " selected" : ""}`}
+                          onClick={() => setScheduleTimeField(opt.value as ScheduleTimeField)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))
+                    ) : (
+                      getNotifyTimeOptions(t).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`ms-filter-chip${notifyTimeField === opt.value ? " selected" : ""}`}
+                          onClick={() => setNotifyTimeField(opt.value as NotifyTimeField)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="ms-date-row">
+                    <DatePicker
+                      value={mode === "todo" ? todoTimeRanges[todoTimeField].start : mode === "schedule" ? scheduleTimeRanges[scheduleTimeField].start : notifyTimeRanges[notifyTimeField].start}
+                      onChange={(v) => {
+                        if (mode === "todo") setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], start: v } }));
+                        else if (mode === "schedule") setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], start: v } }));
+                        else setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], start: v } }));
+                      }}
+                      placeholder={t("common.startDate")}
+                    />
+                    <DatePicker
+                      value={mode === "todo" ? todoTimeRanges[todoTimeField].end : mode === "schedule" ? scheduleTimeRanges[scheduleTimeField].end : notifyTimeRanges[notifyTimeField].end}
+                      onChange={(v) => {
+                        if (mode === "todo") setTodoTimeRanges((prev) => ({ ...prev, [todoTimeField]: { ...prev[todoTimeField], end: v } }));
+                        else if (mode === "schedule") setScheduleTimeRanges((prev) => ({ ...prev, [scheduleTimeField]: { ...prev[scheduleTimeField], end: v } }));
+                        else setNotifyTimeRanges((prev) => ({ ...prev, [notifyTimeField]: { ...prev[notifyTimeField], end: v } }));
+                      }}
+                      placeholder={t("common.endDate")}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Mode-specific filters */}
+              {!idSearch && mode === "todo" && (
+                <div className="ms-filter-group">
+                  <div className="ms-filter-group-title">{t("tab.todo")}</div>
+                  <div className="ms-filter-chips">
+                    {[
+                      { value: "all", label: t("search.allStatus") },
+                      { value: "open", label: t("search.uncompleted") },
+                      { value: "completed", label: t("search.completed") }
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`ms-filter-chip${todoStatus === opt.value ? " selected" : ""}`}
+                        onClick={() => setTodoStatus(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ms-filter-inputs">
+                    <input
+                      type="number"
+                      min={0}
+                      value={priorityMin}
+                      onChange={(e) => setPriorityMin(e.target.value)}
+                      placeholder={t("search.minPriority")}
+                      className="ms-filter-input"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={priorityMax}
+                      onChange={(e) => setPriorityMax(e.target.value)}
+                      placeholder={t("search.maxPriority")}
+                      className="ms-filter-input"
+                    />
+                  </div>
+                  <input
+                    className="ms-filter-input ms-filter-input-full"
+                    value={tag}
+                    onChange={(e) => setTag(e.target.value)}
+                    placeholder={t("common.tags")}
+                  />
+                  <input
+                    className="ms-filter-input ms-filter-input-full"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={t("common.description")}
+                  />
+                </div>
+              )}
+
+              {!idSearch && mode === "schedule" && (
+                <div className="ms-filter-group">
+                  <div className="ms-filter-group-title">{t("tab.schedule")}</div>
+                  <input
+                    className="ms-filter-input ms-filter-input-full"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder={t("common.category")}
+                  />
+                  <input
+                    className="ms-filter-input ms-filter-input-full"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder={t("common.location")}
+                  />
+                </div>
+              )}
+
+              {!idSearch && mode === "notify" && (
+                <div className="ms-filter-group">
+                  <div className="ms-filter-group-title">{t("tab.notify")}</div>
+                  <input
+                    className="ms-filter-input ms-filter-input-full"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={t("common.description")}
+                  />
+                </div>
+              )}
+            </div>
+            <button type="button" className="ms-sheet-apply" onClick={handleSearchSubmit}>
+              {t("common.search")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Context menu */}
       {contextMenu && contextItem ? (
         <ContextMenu
           x={contextMenu.x}
@@ -1323,6 +1508,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         />
       ) : null}
 
+      {/* Detail modals */}
       {detail?.type === "todo" ? (
         <TodoDetailModal
           todo={detail.item}
@@ -1363,66 +1549,4 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
       {confirmDialog}
     </div>
   );
-}
-
-function resultKey(result: ResultItem): string {
-  return `${result.type}:${result.item.id}`;
-}
-
-function resultDateKey(result: ResultItem): string {
-  if (result.type === "todo") {
-    const item = result.item as TodoItem;
-    const epoch = item.planned_at ?? item.due_at ?? item.created_at;
-    return epoch ? dateKeyFromEpoch(epoch) : dateKeyFromEpoch(Math.floor(Date.now() / 1000));
-  }
-  if (result.type === "notify") {
-    return dateKeyFromEpoch(result.item.trigger_at);
-  }
-  return dateKeyFromEpoch(result.item.start_at);
-}
-
-function sortResults(items: ResultItem[], sortBy: string, sortOrder: SortOrder): ResultItem[] {
-  const dir = sortOrder === "asc" ? 1 : -1;
-  return items.sort((a, b) => {
-    const va = getSortValue(a, sortBy);
-    const vb = getSortValue(b, sortBy);
-    if (va < vb) return -1 * dir;
-    if (va > vb) return 1 * dir;
-    return 0;
-  });
-}
-
-function getSortValue(result: ResultItem, sortBy: string): number | string {
-  if (result.type === "todo") {
-    const item = result.item;
-    switch (sortBy) {
-      case "updated_at": return item.updated_at ?? 0;
-      case "created_at": return item.created_at ?? 0;
-      case "planned_at": return item.planned_at ?? 0;
-      case "due_at": return item.due_at ?? 0;
-      case "priority": return item.priority ?? 0;
-      case "title": return item.title ?? "";
-      default: return 0;
-    }
-  }
-  if (result.type === "notify") {
-    const item = result.item;
-    switch (sortBy) {
-      case "trigger_at": return item.trigger_at ?? 0;
-      case "created_at": return item.created_at ?? 0;
-      case "updated_at": return item.updated_at ?? 0;
-      case "title": return item.title ?? "";
-      default: return 0;
-    }
-  }
-  const item = result.item;
-  switch (sortBy) {
-    case "updated_at": return item.updated_at ?? 0;
-    case "created_at": return item.created_at ?? 0;
-    case "start_at": return item.start_at ?? 0;
-    case "end_at": return item.end_at ?? 0;
-    case "duration": return (item.end_at ?? 0) - (item.start_at ?? 0);
-    case "title": return item.title ?? "";
-    default: return 0;
-  }
 }

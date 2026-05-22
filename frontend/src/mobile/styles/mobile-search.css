@@ -1,0 +1,991 @@
+/* ── Mobile Search View (Concept C: Rich Preview Cards) ── */
+/* All selectors scoped under .mobile-shell .ms-container */
+
+/* ── Hide desktop search layout entirely on mobile ── */
+
+.mobile-shell .ms-container .search-topbar,
+.mobile-shell .ms-container .search-sidebar-box,
+.mobile-shell .ms-container .search-body,
+.mobile-shell .ms-container .search-empty-icon,
+.mobile-shell .ms-container .search-empty-title,
+.mobile-shell .ms-container .search-empty-desc,
+.mobile-shell .ms-container .search-hint-title,
+.mobile-shell .ms-container .search-hint-list,
+.mobile-shell .ms-container .search-result-row .search-result-checkbox,
+.mobile-shell .ms-container .search-result-row .search-result-arrow {
+  display: none;
+}
+
+/* ── View container ── */
+
+.mobile-shell .ms-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
+  overflow: hidden;
+}
+
+/* ── Top Section (dark gradient area) ── */
+
+.mobile-shell .ms-top-section {
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
+  padding: 12px 16px 14px;
+  flex-shrink: 0;
+}
+
+/* Title row: "Search" heading + regex toggle */
+
+.mobile-shell .ms-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.mobile-shell .ms-title {
+  font-family: 'Fraunces', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+
+.mobile-shell .ms-regex-toggle {
+  min-width: 34px;
+  min-height: 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'IBM Plex Sans', monospace;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+
+.mobile-shell .ms-regex-toggle:active {
+  transform: scale(0.92);
+}
+
+.mobile-shell .ms-regex-toggle.active {
+  background: rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #4ade80;
+}
+
+/* Search field: icon + input + Go button */
+
+.mobile-shell .ms-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.mobile-shell .ms-search-field:focus-within {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mobile-shell .ms-search-field svg {
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.mobile-shell .ms-search-field input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 15px;
+  font-family: inherit;
+  -webkit-appearance: none;
+}
+
+.mobile-shell .ms-search-field input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.mobile-shell .ms-search-field input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  margin-left: 4px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2.5' stroke-linecap='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") center / contain no-repeat;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-shell .ms-go-btn {
+  padding: 7px 16px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: #4ade80;
+  color: #1a2820;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+.mobile-shell .ms-go-btn:active {
+  transform: scale(0.92);
+}
+
+/* Segmented control (mode tabs) */
+
+.mobile-shell .ms-segmented-control {
+  display: flex;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.mobile-shell .ms-segment {
+  flex: 1;
+  padding: 7px 0;
+  min-height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+
+.mobile-shell .ms-segment:active {
+  opacity: 0.7;
+}
+
+.mobile-shell .ms-segment.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ── Results Scroll Area ── */
+
+.mobile-shell .ms-results-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px 16px;
+  position: relative;
+}
+
+/* ── Results Meta Row ── */
+
+.mobile-shell .ms-results-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mobile-shell .ms-results-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a8078;
+  letter-spacing: 0.3px;
+}
+
+.mobile-shell .ms-sort-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-primary-base, #1a7f72);
+  background: var(--status-primary-badge-bg, #e8f3f1);
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
+}
+
+.mobile-shell .ms-sort-chip:active {
+  opacity: 0.7;
+}
+
+/* ── Rich Preview Cards ── */
+
+.mobile-shell .ms-preview-card {
+  background: rgba(250, 247, 242, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(229, 223, 215, 0.4);
+  transition: transform 0.1s;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .ms-preview-card:active {
+  transform: scale(0.98);
+}
+
+.mobile-shell .ms-preview-card:last-of-type {
+  margin-bottom: 80px; /* space for floating filter button */
+}
+
+/* Card top row: type badge + status badge */
+
+.mobile-shell .ms-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mobile-shell .ms-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.mobile-shell .ms-type-badge--todo {
+  background: #e8f3f1;
+  color: #1a7f72;
+}
+
+.mobile-shell .ms-type-badge--schedule {
+  background: #e8ecf4;
+  color: #4a6fa5;
+}
+
+.mobile-shell .ms-type-badge--notify {
+  background: #fef3cd;
+  color: #856404;
+}
+
+.mobile-shell .ms-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.mobile-shell .ms-status-badge--pending {
+  background: #fef3cd;
+  color: #856404;
+}
+
+.mobile-shell .ms-status-badge--done {
+  background: #d4edda;
+  color: #155724;
+}
+
+.mobile-shell .ms-status-badge--overdue {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.mobile-shell .ms-status-badge--upcoming {
+  background: #fef3cd;
+  color: #856404;
+}
+
+/* Card title */
+
+.mobile-shell .ms-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--global-text-primary, #342f2a);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+/* Card description (2-line clamp) */
+
+.mobile-shell .ms-card-desc {
+  font-size: 12px;
+  color: #5c5650;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Card metadata row */
+
+.mobile-shell .ms-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(229, 223, 215, 0.4);
+}
+
+.mobile-shell .ms-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8a8078;
+}
+
+.mobile-shell .ms-meta-item svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* ── Floating Filter Button ── */
+
+.mobile-shell .ms-floating-filter {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #1a2820;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+.mobile-shell .ms-floating-filter:active {
+  transform: scale(0.9);
+}
+
+.mobile-shell .ms-floating-filter svg {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mobile-shell .ms-filter-active-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  border: 2px solid #1a2820;
+}
+
+/* ── Empty States ── */
+
+/* Initial empty state (before first search) */
+
+.mobile-shell .ms-empty-initial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.mobile-shell .ms-empty-initial svg {
+  width: 48px;
+  height: 48px;
+  color: rgba(138, 128, 120, 0.3);
+  margin-bottom: 16px;
+}
+
+.mobile-shell .ms-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--global-text-primary, #342f2a);
+  margin-bottom: 6px;
+}
+
+.mobile-shell .ms-empty-desc {
+  font-size: 13px;
+  color: #8a8078;
+  line-height: 1.5;
+  max-width: 260px;
+}
+
+/* Search dimension cards (shown in initial state) */
+
+.mobile-shell .ms-dimension-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+  margin-top: 20px;
+}
+
+.mobile-shell .ms-dimension-card {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+
+.mobile-shell .ms-dimension-card:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mobile-shell .ms-dimension-card svg {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 auto 6px;
+}
+
+.mobile-shell .ms-dimension-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* No results empty state */
+
+.mobile-shell .ms-empty-no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.mobile-shell .ms-empty-no-results svg {
+  width: 48px;
+  height: 48px;
+  color: rgba(138, 128, 120, 0.3);
+  margin-bottom: 16px;
+}
+
+.mobile-shell .ms-empty-no-results .ms-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--global-text-primary, #342f2a);
+  margin-bottom: 6px;
+}
+
+.mobile-shell .ms-empty-no-results .ms-empty-desc {
+  font-size: 13px;
+  color: #8a8078;
+  line-height: 1.5;
+  max-width: 260px;
+}
+
+/* ── Loading Skeleton ── */
+
+.mobile-shell .ms-skeleton-card {
+  background: rgba(250, 247, 242, 0.95);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(229, 223, 215, 0.4);
+  animation: ms-shimmer 1.5s ease-in-out infinite;
+}
+
+.mobile-shell .ms-skeleton-badges {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.mobile-shell .ms-skeleton-badge {
+  width: 48px;
+  height: 18px;
+  border-radius: 6px;
+  background: rgba(229, 223, 215, 0.5);
+}
+
+.mobile-shell .ms-skeleton-title {
+  width: 70%;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(229, 223, 215, 0.5);
+  margin-bottom: 8px;
+}
+
+.mobile-shell .ms-skeleton-desc {
+  width: 100%;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(229, 223, 215, 0.4);
+  margin-bottom: 4px;
+}
+
+.mobile-shell .ms-skeleton-desc-short {
+  width: 60%;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(229, 223, 215, 0.4);
+  margin-bottom: 10px;
+}
+
+.mobile-shell .ms-skeleton-meta {
+  display: flex;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(229, 223, 215, 0.3);
+}
+
+.mobile-shell .ms-skeleton-meta-item {
+  width: 60px;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(229, 223, 215, 0.4);
+}
+
+@keyframes ms-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Filter Bottom Sheet ── */
+
+.mobile-shell .ms-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+
+.mobile-shell .ms-sheet-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-shell .ms-bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #faf7f2;
+  border-radius: 20px 20px 0 0;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 201;
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-shell .ms-bottom-sheet.open {
+  transform: translateY(0);
+}
+
+/* Sheet handle (drag indicator) */
+
+.mobile-shell .ms-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #d1c7ba;
+  margin: 10px auto 0;
+  flex-shrink: 0;
+}
+
+/* Sheet header */
+
+.mobile-shell .ms-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  flex-shrink: 0;
+}
+
+.mobile-shell .ms-sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--global-text-primary, #342f2a);
+  margin: 0;
+}
+
+.mobile-shell .ms-sheet-reset {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-primary-base, #1a7f72);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .ms-sheet-reset:active {
+  opacity: 0.6;
+}
+
+/* Sheet body (scrollable) */
+
+.mobile-shell .ms-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 20px 24px;
+}
+
+/* Filter groups */
+
+.mobile-shell .ms-filter-group {
+  margin-bottom: 20px;
+}
+
+.mobile-shell .ms-filter-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #8a8078;
+  margin-bottom: 10px;
+}
+
+.mobile-shell .ms-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mobile-shell .ms-filter-chip {
+  padding: 7px 14px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e4ddd3;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5c5650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+
+.mobile-shell .ms-filter-chip:active {
+  transform: scale(0.95);
+}
+
+.mobile-shell .ms-filter-chip.selected {
+  background: var(--status-primary-base, #1a7f72);
+  border-color: var(--status-primary-base, #1a7f72);
+  color: #fff;
+}
+
+/* Apply button */
+
+.mobile-shell .ms-sheet-apply {
+  margin: 12px 20px 20px;
+  padding: 14px;
+  min-height: 48px;
+  border-radius: 14px;
+  border: none;
+  background: var(--status-primary-base, #1a7f72);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+}
+
+.mobile-shell .ms-sheet-apply:active {
+  transform: scale(0.97);
+}
+
+/* ── Sort Controls ── */
+
+.mobile-shell .ms-sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-shell .ms-sort-order-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(229, 223, 215, 0.6);
+  background: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #5c5650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+
+.mobile-shell .ms-sort-order-btn:active {
+  transform: scale(0.92);
+  background: #f3f0eb;
+}
+
+/* ── Result List Container ── */
+
+.mobile-shell .ms-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Card Inline Edit Input ── */
+
+.mobile-shell .ms-card-edit-input {
+  width: 100%;
+  border: 1px solid var(--status-primary-base, #1a7f72);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  background: #fff;
+  color: var(--global-text-primary, #342f2a);
+  outline: none;
+}
+
+/* ── Meta ID Badge ── */
+
+.mobile-shell .ms-meta-id {
+  font-family: 'IBM Plex Sans', monospace;
+  font-size: 10px;
+  color: #8a8078;
+  opacity: 0.7;
+}
+
+/* ── Attachment & ID Icons ── */
+
+.mobile-shell .ms-attachment-icon,
+.mobile-shell .ms-id-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+}
+
+/* ── Todo Status Badges in Cards ── */
+
+.mobile-shell .ms-card-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.mobile-shell .ms-status-pending {
+  background: #fef3cd;
+  color: #856404;
+}
+
+.mobile-shell .ms-status-done {
+  background: #d4edda;
+  color: #155724;
+}
+
+.mobile-shell .ms-status-overdue {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.mobile-shell .ms-status-late-done {
+  background: #fff3cd;
+  color: #856404;
+}
+
+/* ── Empty State Extras ── */
+
+.mobile-shell .ms-empty-icon {
+  width: 48px;
+  height: 48px;
+  color: rgba(138, 128, 120, 0.3);
+  margin-bottom: 16px;
+}
+
+.mobile-shell .ms-empty-card-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.mobile-shell .ms-empty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a8078;
+  background: rgba(138, 128, 120, 0.1);
+  padding: 5px 12px;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.mobile-shell .ms-empty-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d1c7ba;
+}
+
+/* ── Filter Sheet Inputs ── */
+
+.mobile-shell .ms-filter-inputs {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.mobile-shell .ms-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #e4ddd3;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--global-text-primary, #342f2a);
+  outline: none;
+  transition: border-color 0.15s;
+  min-height: 40px;
+}
+
+.mobile-shell .ms-filter-input:focus {
+  border-color: var(--status-primary-base, #1a7f72);
+}
+
+.mobile-shell .ms-filter-input::placeholder {
+  color: #b0a89e;
+}
+
+.mobile-shell .ms-filter-input-full {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.mobile-shell .ms-date-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ── Keyboard / input adjustments ── */
+
+@supports (height: 100dvh) {
+  .mobile-shell .ms-container {
+    height: 100%;
+  }
+}
+
+/* ── Small screen adjustments (SE / mini) ── */
+
+@media (max-height: 700px) {
+  .mobile-shell .ms-top-section {
+    padding: 8px 14px 10px;
+  }
+
+  .mobile-shell .ms-title {
+    font-size: 18px;
+  }
+
+  .mobile-shell .ms-search-field {
+    padding: 9px 12px;
+    margin-bottom: 8px;
+  }
+
+  .mobile-shell .ms-search-field input {
+    font-size: 14px;
+  }
+
+  .mobile-shell .ms-segment {
+    padding: 5px 0;
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  .mobile-shell .ms-preview-card {
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+
+  .mobile-shell .ms-card-title {
+    font-size: 14px;
+  }
+
+  .mobile-shell .ms-card-desc {
+    font-size: 11px;
+  }
+
+  .mobile-shell .ms-card-meta {
+    gap: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .mobile-shell .ms-empty-initial,
+  .mobile-shell .ms-empty-no-results {
+    padding: 30px 20px;
+  }
+}
+
+/* ── Wider phones ── */
+
+@media (min-width: 400px) {
+  .mobile-shell .ms-top-section {
+    padding: 14px 20px 16px;
+  }
+
+  .mobile-shell .ms-results-scroll {
+    padding: 14px 20px 16px;
+  }
+
+  .mobile-shell .ms-floating-filter {
+    right: 20px;
+  }
+}
