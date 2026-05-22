@@ -182,7 +182,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [scheduleEndHour, setScheduleEndHour] = useState(String(initial.scheduler_end_hour));
   const [slotMinutes, setSlotMinutes] = useState(String(initial.scheduler_slot_minutes));
   const [showToken, setShowToken] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("connection");
 
   // Connection
   const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
@@ -251,6 +250,29 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
+
+  // Status bar + browser back handling
+  useEffect(() => {
+    // Push a history entry so Android back gesture/button closes the modal
+    history.pushState({ settingsModal: true }, "");
+    const handlePopState = () => { onClose(); };
+    window.addEventListener("popstate", handlePopState);
+
+    // Match status bar to settings background
+    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+      StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#f5f2ec" }).catch(() => {});
+    }).catch(() => {});
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      // Restore status bar to theme color
+      import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+        StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+        StatusBar.setBackgroundColor({ color: "#1a2820" }).catch(() => {});
+      }).catch(() => {});
+    };
+  }, [onClose]);
 
   // Auto-revert wsEnabled if connection fails after user toggle
   useEffect(() => {
@@ -654,13 +676,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     );
   }
 
-  // ── Tab items ──
-  const tabItems = [
-    { key: "connection" as const, label: MOB.tabConnection, icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> },
-    { key: "general" as const, label: MOB.tabGeneral, icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
-    { key: "notification" as const, label: MOB.tabNotification, icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> },
-  ];
-
   // ── JSX ──
 
   return (
@@ -680,426 +695,222 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="settings-modal-tabs" role="tablist">
-          {tabItems.map(({ key, label, icon }) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={activeSettingsTab === key}
-              className={`settings-modal-tab${activeSettingsTab === key ? " active" : ""}`}
-              onClick={() => setActiveSettingsTab(key)}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Body */}
         <div className="settings-modal-body">
 
-          {/* ══════════════════════════════════════ */}
-          {/* Connection                             */}
-          {/* ══════════════════════════════════════ */}
-          {activeSettingsTab === "connection" && (
-            <>
-              <div className="settings-modal-section-label">{MOB.tabConnection}</div>
+          {/* Connection */}
+          <div className={`settings-group conn-group${wsEnabled ? " conn-locked" : ""}`}>
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.tabConnection}</span>
+              <button
+                type="button"
+                className={`settings-sw${wsEnabled ? " on" : ""}`}
+                onClick={handleWsToggle}
+                role="switch"
+                aria-checked={wsEnabled}
+                aria-label={MOB.connToggle}
+              >
+                <span className="settings-sw-knob" />
+              </button>
+            </div>
 
-              <div className="settings-group">
-                <div className="settings-row">
-                  <div className="settings-row-left">
-                    <div className="settings-row-icon blue">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                    </div>
-                    <div className="settings-row-text">
-                      <span className="settings-row-label">{MOB.connToggle}</span>
-                      <span className="settings-row-hint">{wsEnabled ? MOB.connConnected : MOB.connDisconnected}</span>
-                    </div>
-                  </div>
+            {/* LAN Address */}
+            <div className="settings-inline-field">
+              <div className="settings-inline-label">{MOB.lanAddress}</div>
+              <div className="settings-inline-row">
+                <input
+                  type="text"
+                  className="settings-inline-input"
+                  value={lanAddress}
+                  onChange={(e) => setLanAddress(e.target.value)}
+                  onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
+                  placeholder="http://192.168.x.x:8000"
+                  disabled={connLocked}
+                />
+                <button
+                  type="button"
+                  className="settings-inline-btn"
+                  onClick={handleLanFetch}
+                  disabled={connLocked || !lanAddress || lanLoading}
+                >
+                  {lanLoading ? MOB.fetching : MOB.fetch}
+                </button>
+              </div>
+            </div>
+
+            {/* Server URL */}
+            <div className="settings-inline-field">
+              <div className="settings-inline-label">{MOB.serverUrl}</div>
+              <div className="settings-inline-row">
+                <input
+                  type="text"
+                  className={urlInputClass}
+                  value={serverUrl}
+                  onChange={handleUrlChange}
+                  onBlur={() => onUpdateField?.({ server_url: serverUrl })}
+                  disabled={connLocked}
+                  placeholder="http://127.0.0.1:8000"
+                />
+                <button
+                  type="button"
+                  className="settings-inline-btn"
+                  onClick={() => checkUrl()}
+                  disabled={connLocked || !serverUrl || urlChecking}
+                >
+                  {urlChecking ? MOB.checking : MOB.check}
+                </button>
+              </div>
+              {renderUrlStatus()}
+            </div>
+
+            {/* Access Token */}
+            <div className="settings-inline-field">
+              <div className="settings-inline-label">{MOB.accessToken}</div>
+              <div className="settings-inline-row">
+                <div className="settings-inline-input-wrap">
+                  <input
+                    type={showToken ? "text" : "password"}
+                    className={tokenInputClass}
+                    value={accessToken}
+                    onChange={handleTokenChange}
+                    onBlur={() => onUpdateField?.({ access_token: accessToken })}
+                    disabled={!tokenEditable}
+                    placeholder={!tokenEditable && !connLocked ? MOB.checkServerFirst : MOB.enterToken}
+                  />
                   <button
                     type="button"
-                    className={`settings-sw${wsEnabled ? " on" : ""}`}
-                    onClick={handleWsToggle}
-                    role="switch"
-                    aria-checked={wsEnabled}
-                    aria-label={MOB.connToggle}
+                    className="settings-inline-eye"
+                    onClick={() => setShowToken((v) => !v)}
+                    disabled={!tokenEditable}
                   >
-                    <span className="settings-sw-knob" />
-                  </button>
-                </div>
-                <div className="settings-row">
-                  <div className="settings-row-left">
-                    <div className="settings-row-icon amber">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    </div>
-                    <div className="settings-row-text">
-                      <span className="settings-row-label">{MOB.disconnectNotify}</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`settings-sw${notifyOnDisconnect ? " on" : ""}`}
-                    onClick={handleNotifyDisconnectToggle}
-                    disabled={connLocked}
-                    role="switch"
-                    aria-checked={notifyOnDisconnect}
-                  >
-                    <span className="settings-sw-knob" />
-                  </button>
-                </div>
-                <div className="settings-row">
-                  <div className="settings-row-left">
-                    <div className="settings-row-icon violet">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                    </div>
-                    <div className="settings-row-text">
-                      <span className="settings-row-label">{MOB.maxReconnect}</span>
-                    </div>
-                  </div>
-                  <div className="settings-row-right">
-                    <input
-                      type="number"
-                      className="settings-inline-number"
-                      value={reconnectMaxAttempts}
-                      min={0}
-                      disabled={connLocked}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
-                      }}
-                      onBlur={handleReconnectBlur}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Server URL */}
-              <div className="settings-modal-section-label">{MOB.serverUrl}</div>
-              <div className="settings-group">
-                <div className="settings-inline-field">
-                  <div className="settings-inline-row">
-                    <input
-                      type="text"
-                      className={urlInputClass}
-                      value={serverUrl}
-                      onChange={handleUrlChange}
-                      onBlur={() => onUpdateField?.({ server_url: serverUrl })}
-                      disabled={connLocked}
-                      placeholder="http://127.0.0.1:8000"
-                    />
-                    <button
-                      type="button"
-                      className="settings-inline-btn"
-                      onClick={() => checkUrl()}
-                      disabled={connLocked || !serverUrl || urlChecking}
-                    >
-                      {urlChecking ? MOB.checking : MOB.check}
-                    </button>
-                  </div>
-                  {renderUrlStatus()}
-                </div>
-              </div>
-
-              {/* LAN Address */}
-              <div className="settings-modal-section-label">{MOB.lanAddress}</div>
-              <div className="settings-group">
-                <div className="settings-inline-field">
-                  <div className="settings-inline-row">
-                    <input
-                      type="text"
-                      className="settings-inline-input"
-                      value={lanAddress}
-                      onChange={(e) => setLanAddress(e.target.value)}
-                      onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
-                      placeholder="http://192.168.x.x:8000"
-                      disabled={connLocked}
-                    />
-                    <button
-                      type="button"
-                      className="settings-inline-btn"
-                      onClick={handleLanFetch}
-                      disabled={connLocked || !lanAddress || lanLoading}
-                    >
-                      {lanLoading ? MOB.fetching : MOB.fetch}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Access Token */}
-              <div className="settings-modal-section-label">{MOB.accessToken}</div>
-              <div className="settings-group">
-                <div className="settings-inline-field">
-                  <div className="settings-inline-row">
-                    <div className="settings-inline-input-wrap">
-                      <input
-                        type={showToken ? "text" : "password"}
-                        className={tokenInputClass}
-                        value={accessToken}
-                        onChange={handleTokenChange}
-                        onBlur={() => onUpdateField?.({ access_token: accessToken })}
-                        disabled={!tokenEditable}
-                        placeholder={!tokenEditable && !connLocked ? MOB.checkServerFirst : MOB.enterToken}
-                      />
-                      <button
-                        type="button"
-                        className="settings-inline-eye"
-                        onClick={() => setShowToken((v) => !v)}
-                        disabled={!tokenEditable}
-                      >
-                        {showToken ? (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                            <line x1="1" y1="1" x2="23" y2="23" />
-                          </svg>
-                        ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="settings-inline-btn"
-                      onClick={() => verifyToken()}
-                      disabled={!tokenEditable || !accessToken || tokenVerifying}
-                    >
-                      {tokenVerifying ? MOB.verifying : MOB.verify}
-                    </button>
-                  </div>
-                  {renderTokenStatus()}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ══════════════════════════════════════ */}
-          {/* General                                */}
-          {/* ══════════════════════════════════════ */}
-          {activeSettingsTab === "general" && (
-            <>
-              <div className="settings-modal-section-label">{MOB.appearance}</div>
-              <div className="settings-group">
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.theme}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={theme}
-                      options={themeOptions}
-                      onChange={handleThemeChange}
-                    />
-                  </div>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.language}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={language}
-                      options={[{ value: "zh-CN", label: "中文" }, { value: "en", label: "English" }]}
-                      onChange={(v) => { setLanguage(v); onUpdateField?.({ language: v }); }}
-                    />
-                  </div>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.timezone}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={timezone}
-                      options={TIMEZONE_OPTIONS}
-                      onChange={(v) => { setTimezone(v); onUpdateField?.({ timezone: v }); }}
-                      searchable
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-modal-section-label">{MOB.calendar}</div>
-              <div className="settings-group">
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.weekStart}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={weekStart}
-                      options={[
-                        { value: "0", label: MOB.sunday },
-                        { value: "1", label: MOB.monday },
-                      ]}
-                      onChange={(v) => { setWeekStart(v); onUpdateField?.({ week_start: Number(v) }); }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-modal-section-label">{MOB.scheduler}</div>
-              <div className="settings-group">
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.scheduleStart}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={scheduleStartHour}
-                      options={SCHEDULE_START_HOUR_OPTIONS}
-                      onChange={(v) => { setScheduleStartHour(v); onUpdateField?.({ scheduler_start_hour: Number(v) }); }}
-                    />
-                  </div>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.scheduleEnd}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={scheduleEndHour}
-                      options={SCHEDULE_END_HOUR_OPTIONS}
-                      onChange={(v) => { setScheduleEndHour(v); onUpdateField?.({ scheduler_end_hour: Number(v) }); }}
-                    />
-                  </div>
-                </div>
-                {!validScheduleHours && (
-                  <div style={{ padding: "0 18px 12px" }}>
-                    <span className="settings-field-msg err">{MOB.scheduleWarn}</span>
-                  </div>
-                )}
-                <div className="settings-row">
-                  <span className="settings-row-label">{MOB.slotMinutes}</span>
-                  <div className="settings-row-right">
-                    <Dropdown
-                      value={slotMinutes}
-                      options={[
-                        { value: "15", label: MOB.slotLabel(15) },
-                        { value: "30", label: MOB.slotLabel(30) },
-                        { value: "45", label: MOB.slotLabel(45) },
-                        { value: "60", label: MOB.slotLabel(60) },
-                      ]}
-                      onChange={(v) => { setSlotMinutes(v); onUpdateField?.({ scheduler_slot_minutes: Number(v) }); }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Cache */}
-              <div className="settings-modal-section-label">{MOB.cache}</div>
-              <div className="settings-group">
-                <div className="settings-cache-card">
-                  <div className="settings-cache-left">
-                    <div className="settings-cache-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
+                    {showToken ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
                       </svg>
-                    </div>
-                    <div className="settings-cache-text">
-                      <span className="settings-cache-title">{MOB.attachmentCache}</span>
-                      <span className="settings-cache-detail">
-                        {cacheSize
-                          ? MOB.cacheDetail(cacheSize.count, formatSize(cacheSize.bytes))
-                          : MOB.cacheLoading}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="settings-cache-btn"
-                    disabled={clearingCache || !cacheSize || cacheSize.count === 0}
-                    onClick={handleClearCache}
-                  >
-                    {clearingCache ? MOB.clearingCache : MOB.clearCache}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ══════════════════════════════════════ */}
-          {/* Notification                           */}
-          {/* ══════════════════════════════════════ */}
-          {activeSettingsTab === "notification" && (
-            <>
-              <div className="settings-modal-section-label">{MOB.tabNotification}</div>
-              <div className="settings-group">
-                <div className="settings-notify-header">
-                  <div className="settings-notify-header-left">
-                    <div className="settings-notify-bell">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
                       </svg>
-                    </div>
-                    <div className="settings-notify-info">
-                      <span className={`settings-notify-title${notifyEnabled ? "" : " off"}`}>
-                        {notifyEnabled ? MOB.notifyEnabled : MOB.notifyDisabled}
-                      </span>
-                      <span className="settings-notify-sub">
-                        {notifyEnabled ? MOB.notifyEnabledDesc : MOB.notifyDisabledDesc}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`settings-sw${notifyEnabled ? " on" : ""}`}
-                    onClick={() => setNotifyEnabled((v) => { onUpdateField?.({ notification_enabled: !v }); return !v; })}
-                    role="switch"
-                    aria-checked={notifyEnabled}
-                    aria-label={MOB.notifyToggle}
-                  >
-                    <span className="settings-sw-knob" />
+                    )}
                   </button>
                 </div>
-                <div className={`settings-notify-options${notifyEnabled ? "" : " hidden"}`}>
-                  <div className="settings-row">
-                    <div className="settings-row-left">
-                      <div className="settings-row-icon rose">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                          <line x1="23" y1="9" x2="17" y2="15" />
-                          <line x1="17" y1="9" x2="23" y2="15" />
-                        </svg>
-                      </div>
-                      <div className="settings-row-text">
-                        <span className="settings-row-label">{MOB.silentMode}</span>
-                        <span className="settings-row-hint">{MOB.silentModeDesc}</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`settings-sw${notifSilent ? " on" : ""}`}
-                      onClick={() => setNotifSilent((v) => { onUpdateField?.({ notification_silent: !v }); return !v; })}
-                      role="switch"
-                      aria-checked={notifSilent}
-                    >
-                      <span className="settings-sw-knob" />
-                    </button>
-                  </div>
-                  <div className="settings-row">
-                    <div className="settings-row-left">
-                      <div className="settings-row-icon amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="1" y="3" width="15" height="13" rx="2" />
-                          <polygon points="23 7 16 12 23 17" />
-                        </svg>
-                      </div>
-                      <div className="settings-row-text">
-                        <span className="settings-row-label">{MOB.timeout}</span>
-                        <span className="settings-row-hint">{MOB.timeoutDesc}</span>
-                      </div>
-                    </div>
-                    <div className="settings-row-right">
-                      <Dropdown
-                        value={notifTimeout}
-                        options={[
-                          { value: "default", label: MOB.autoTimeout },
-                          { value: "never", label: MOB.neverTimeout },
-                        ]}
-                        onChange={(v) => { setNotifTimeout(v as "default" | "never"); onUpdateField?.({ notification_timeout: v as "default" | "never" }); }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  className="settings-inline-btn"
+                  onClick={() => verifyToken()}
+                  disabled={!tokenEditable || !accessToken || tokenVerifying}
+                >
+                  {tokenVerifying ? MOB.verifying : MOB.verify}
+                </button>
               </div>
-            </>
-          )}
+              {renderTokenStatus()}
+            </div>
+
+            <div className="settings-divider" />
+
+            {/* Disconnect notify */}
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.disconnectNotify}</span>
+              <button
+                type="button"
+                className={`settings-sw${notifyOnDisconnect ? " on" : ""}`}
+                onClick={handleNotifyDisconnectToggle}
+                disabled={connLocked}
+                role="switch"
+                aria-checked={notifyOnDisconnect}
+              >
+                <span className="settings-sw-knob" />
+              </button>
+            </div>
+
+            {/* Max reconnect */}
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.maxReconnect}</span>
+              <div className="settings-row-right">
+                <input
+                  type="number"
+                  className="settings-inline-number"
+                  value={reconnectMaxAttempts}
+                  min={0}
+                  disabled={connLocked}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
+                  }}
+                  onBlur={handleReconnectBlur}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* General + Notification */}
+          <div className="settings-group">
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.theme}</span>
+              <div className="settings-row-right">
+                <Dropdown
+                  value={theme}
+                  options={themeOptions}
+                  onChange={handleThemeChange}
+                />
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.language}</span>
+              <div className="settings-row-right">
+                <Dropdown
+                  value={language}
+                  options={[{ value: "zh-CN", label: "中文" }, { value: "en", label: "English" }]}
+                  onChange={(v) => { setLanguage(v); onUpdateField?.({ language: v }); }}
+                />
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.timezone}</span>
+              <div className="settings-row-right">
+                <Dropdown
+                  value={timezone}
+                  options={TIMEZONE_OPTIONS}
+                  onChange={(v) => { setTimezone(v); onUpdateField?.({ timezone: v }); }}
+                  searchable
+                />
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.tabNotification}</span>
+              <button
+                type="button"
+                className={`settings-sw${notifyEnabled ? " on" : ""}`}
+                onClick={() => setNotifyEnabled((v) => { onUpdateField?.({ notification_enabled: !v }); return !v; })}
+                role="switch"
+                aria-checked={notifyEnabled}
+                aria-label={MOB.notifyToggle}
+              >
+                <span className="settings-sw-knob" />
+              </button>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">{MOB.attachmentCache}</span>
+              <div className="settings-row-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="settings-row-hint" style={{ margin: 0 }}>
+                  {cacheSize
+                    ? MOB.cacheDetail(cacheSize.count, formatSize(cacheSize.bytes))
+                    : MOB.cacheLoading}
+                </span>
+                <button
+                  type="button"
+                  className="settings-inline-btn"
+                  style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }}
+                  disabled={clearingCache || !cacheSize || cacheSize.count === 0}
+                  onClick={handleClearCache}
+                >
+                  {clearingCache ? MOB.clearingCache : MOB.clearCache}
+                </button>
+              </div>
+            </div>
+          </div>
 
         </div>
       </div>

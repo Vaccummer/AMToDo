@@ -142,6 +142,11 @@
 
 .mobile-shell .settings-modal-backdrop {
   place-items: stretch;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding-top: 0;
+  overflow: hidden;
 }
 
 .mobile-shell .settings-modal-card {
@@ -415,10 +420,6 @@
 
 /* ── Mobile Settings Modal (iOS Grouped List) ── */
 
-.mobile-shell .settings-modal-backdrop {
-  place-items: stretch;
-}
-
 .mobile-shell .settings-modal-card {
   width: 100%;
   height: 100%;
@@ -437,7 +438,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px;
+  padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
   background: #f5f2ec;
   flex-shrink: 0;
   border-bottom: none;
@@ -480,51 +481,6 @@
   background: rgba(0, 0, 0, 0.1);
 }
 
-/* Tabs (segmented control) */
-.mobile-shell .settings-modal-tabs {
-  display: flex;
-  gap: 0;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 10px;
-  padding: 3px;
-  margin: 0 16px 16px;
-  flex-shrink: 0;
-}
-
-.mobile-shell .settings-modal-tab {
-  flex: 1;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
-  color: #9a9ab0;
-  font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mobile-shell .settings-modal-tab svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
-.mobile-shell .settings-modal-tab.active {
-  color: #1a1a2e;
-  font-weight: 600;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-}
-
 /* Body */
 .mobile-shell .settings-modal-body {
   flex: 1;
@@ -532,6 +488,11 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 0 0 calc(24px + env(safe-area-inset-bottom));
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* IE/Edge */
+}
+.mobile-shell .settings-modal-body::-webkit-scrollbar {
+  display: none;                  /* Chrome/Safari */
 }
 
 /* Section label */
@@ -545,6 +506,7 @@
   padding: 0 20px;
   margin-bottom: 10px;
   margin-top: 4px;
+  flex-shrink: 0;
 }
 
 /* Grouped card */
@@ -555,6 +517,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   border: 1px solid #ece8e1;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 /* Rows */
@@ -817,7 +780,7 @@
 
 .mobile-shell .settings-inline-input {
   flex: 1;
-  height: 38px;
+  height: 44px;
   border: 1.5px solid #e0dbd3;
   border-radius: 9px;
   padding: 0 12px;
@@ -860,7 +823,7 @@
 }
 
 .mobile-shell .settings-inline-btn {
-  height: 38px;
+  height: 44px;
   padding: 0 14px;
   border: none;
   border-radius: 9px;
@@ -1039,9 +1002,9 @@
 /* Number input */
 .mobile-shell .settings-inline-number {
   width: 64px;
-  height: 38px;
+  height: 30px;
   border: 1.5px solid #e0dbd3;
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 0 10px;
   font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
   font-size: 0.85rem;
@@ -1058,6 +1021,34 @@
 
 .mobile-shell .settings-inline-number:disabled {
   opacity: 0.45;
+}
+
+/* ── Divider line between settings rows ── */
+.mobile-shell .settings-divider {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #ece8e1;
+}
+
+/* Connection group — dims inner fields when connection is active */
+.mobile-shell .conn-group.conn-locked .settings-inline-field,
+.mobile-shell .conn-group.conn-locked .settings-row {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.mobile-shell .conn-group.conn-locked > .settings-row:first-child {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Ensure no blue tap highlight on interactive elements */
+.mobile-shell .settings-sw,
+.mobile-shell .settings-inline-btn,
+.mobile-shell .settings-inline-eye,
+.mobile-shell .settings-fp-compact-btn,
+.mobile-shell .settings-modal-close,
+.mobile-shell .settings-row {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Error message */
