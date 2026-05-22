@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "../api/client";
+import { AMToDoApi, type HealthResponse, type TodoItem } from "../api/client";
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "../api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "../api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
@@ -150,6 +150,13 @@ export function App() {
 
   // Bootstrap API
   useEffect(() => {
+    if (!settings.ws_enabled) {
+      connectionManagerRef.current.reportIdle();
+      setApi(new AMToDoApi(settings.server_url, settings.access_token));
+      setHealth(null);
+      setConnectionStatus("offline");
+      return;
+    }
     let cancelled = false;
     let retryTimer: number | undefined;
 
@@ -230,7 +237,6 @@ export function App() {
       );
 
       if (cancelled) return;
-      setHealth(result);
       setHealthError(null);
       setApi(readyApi);
       setConnectionStatus("online");
@@ -251,7 +257,7 @@ export function App() {
         if (cancelled) return;
         const mgr = connectionManagerRef.current;
         const message = error instanceof FingerprintMismatchError
-          ? error.message
+          ? error.messageKey
           : error instanceof Error ? error.message : "common.connectionFailed";
         if (error instanceof FingerprintMismatchError) {
           mgr.reportFingerprintMismatch(message);
