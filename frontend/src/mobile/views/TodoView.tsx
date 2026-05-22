@@ -110,6 +110,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [todoRefreshKey, setTodoRefreshKey] = useState(0);
+  const [swipedId, setSwipedId] = useState<number | null>(null);
+  const swipeTouchRef = useRef({ id: 0, startX: 0, startY: 0, moved: false, cancelled: false });
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t, locale } = useI18n();
@@ -268,6 +270,14 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     setSelectedDayKey(dateKey);
   }
 
+  function prevDay() {
+    setSelectedDayKey(addDaysToDateKey(selectedDayKey, -1));
+  }
+
+  function nextDay() {
+    setSelectedDayKey(addDaysToDateKey(selectedDayKey, 1));
+  }
+
   async function deleteTodo(id: number) {
     try {
       await api.deleteTodo(id);
@@ -299,12 +309,9 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         todos={todos}
         selectedDateKey={selectedDayKey}
         todayKey={todayKey}
-        weekDays={days}
         locale={locale}
-        onPrevWeek={prevWeek}
-        onNextWeek={nextWeek}
-        onToday={goToToday}
-        onSelectDate={setSelectedDayKey}
+        onPrevDay={prevDay}
+        onNextDay={nextDay}
       />
       <DateBar
         ref={calendarStripRef}
@@ -460,51 +467,94 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             lateDone ? "late-done" : ""
           ]
             .filter(Boolean).join(" ");
+          const isSwiped = swipedId === todo.id;
           return (
-          <div
-            className={rowClass}
-            key={todo.id}
-            onContextMenu={(e) => handleContextMenu(e, todo.id)}
-          >
-            <button type="button" className="check-button" onClick={(e) => { e.stopPropagation(); void toggle(todo); }}>
-              {todo.completed ? "✓" : ""}
-            </button>
-            <div className="todo-main">
-              {isEditing ? (
-                <input
-                  type="text"
-                  className="todo-edit-input"
-                  size={Math.max(editText.length + 4, 8)}
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => handleEditKey(e, todo.id)}
-                  onBlur={() => saveEdit(todo.id)}
-                  autoFocus
-                />
-              ) : (
-                <span
-                  className="todo-title"
-                  onDoubleClick={() => startEdit(todo)}
-                  title={t("common.doubleClickEdit")}
-                >
-                  {todo.title}
-                </span>
-              )}
-              <div className="todo-meta">
-                <span className="todo-status-badge">{statusLabel}</span>
-                {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
-                {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
+          <div className="todo-row-wrapper" key={todo.id}>
+            {isSwiped && (
+              <button
+                type="button"
+                className="todo-swipe-delete"
+                onClick={() => { setSwipedId(null); void askDeleteTodo(todo.id); }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            )}
+            <div
+              className={`${rowClass}${isSwiped ? " swiped" : ""}`}
+              onContextMenu={(e) => handleContextMenu(e, todo.id)}
+              onTouchStart={(e) => {
+                const touch = e.touches[0];
+                swipeTouchRef.current = { id: todo.id, startX: touch.clientX, startY: touch.clientY, moved: false, cancelled: false };
+              }}
+              onTouchMove={(e) => {
+                if (swipeTouchRef.current.cancelled || swipeTouchRef.current.id !== todo.id) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - swipeTouchRef.current.startX;
+                const dy = touch.clientY - swipeTouchRef.current.startY;
+                if (!swipeTouchRef.current.moved && Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > 10) {
+                  swipeTouchRef.current.cancelled = true;
+                  return;
+                }
+                if (Math.abs(dx) > 5) swipeTouchRef.current.moved = true;
+              }}
+              onTouchEnd={(e) => {
+                if (swipeTouchRef.current.id !== todo.id) return;
+                if (swipeTouchRef.current.cancelled || !swipeTouchRef.current.moved) {
+                  if (isSwiped) { setSwipedId(null); e.preventDefault(); }
+                  return;
+                }
+                const touch = e.changedTouches[0];
+                const dx = touch.clientX - swipeTouchRef.current.startX;
+                if (dx < -50) {
+                  setSwipedId(todo.id);
+                } else if (dx > 30 && isSwiped) {
+                  setSwipedId(null);
+                }
+              }}
+              onDoubleClick={() => setDetailId(todo.id)}
+            >
+              <button type="button" className="check-button" onClick={(e) => { e.stopPropagation(); void toggle(todo); }}>
+                {todo.completed ? "✓" : ""}
+              </button>
+              <div className="todo-main">
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="todo-edit-input"
+                    size={Math.max(editText.length + 4, 8)}
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => handleEditKey(e, todo.id)}
+                    onBlur={() => saveEdit(todo.id)}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="todo-title"
+                    onClick={() => startEdit(todo)}
+                  >
+                    {todo.title}
+                  </span>
+                )}
+                <div className="todo-meta">
+                  <span className="todo-status-badge">{statusLabel}</span>
+                  {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
+                  {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
+                </div>
               </div>
-            </div>
-            <div className="todo-right">
-              <span className="todo-id-badge" title={`id:${todo.id}`}>
-                <IdIcon />
-                <span>{todo.id}</span>
-              </span>
-              <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
-                <AttachmentCountIcon />
-                <span>{todo.attachment_count ?? 0}</span>
-              </span>
+              <div className="todo-right">
+                <span className="todo-id-badge" title={`id:${todo.id}`}>
+                  <IdIcon />
+                  <span>{todo.id}</span>
+                </span>
+                <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
+                  <AttachmentCountIcon />
+                  <span>{todo.attachment_count ?? 0}</span>
+                </span>
+              </div>
             </div>
           </div>
           );
@@ -540,6 +590,19 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         </button>
       </div>
 
+      {selectedDayKey !== todayKey && (
+        <button
+          type="button"
+          className="mobile-fab go-today-fab"
+          onClick={goToToday}
+          title={locale === "en" ? "Go to today" : "回到今天"}
+        >
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1001.235558 448.9728L860.179558 329.2672V166.4a64 64 0 0 0-128 0v54.272l-161.792-137.2672-20.48-17.2032A63.0272 63.0272 0 0 0 512.019558 51.2a63.0272 63.0272 0 0 0-37.9392 15.0016l-20.48 17.2032-430.7968 365.568a65.3824 65.3824 0 0 0-7.8848 91.1872 63.6928 63.6928 0 0 0 90.1632 7.9872L512.019558 202.8032l406.9376 345.344a63.6928 63.6928 0 0 0 90.1632-7.9872 65.3824 65.3824 0 0 0-7.8848-91.1872z" fill="#FFFFFF" />
+            <path d="M512.019558 332.8l-384 307.2v256a76.8 76.8 0 0 0 76.8 76.8h192v-281.6h230.4v281.6H819.219558a76.8 76.8 0 0 0 76.8-76.8v-256z" fill="#FFFFFF" />
+          </svg>
+        </button>
+      )}
       <button
         type="button"
         className="mobile-fab"

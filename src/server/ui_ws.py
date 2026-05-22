@@ -180,8 +180,12 @@ async def ui_ws_endpoint(websocket: WebSocket):
     await _send_json(websocket, {"type": "auth_ok"})
 
     # --- Step 7: Message loop ---
+    upload_token_store = getattr(app.state, "upload_token_store", None)
+    download_token_store = getattr(app.state, "download_token_store", None)
     router_handler = UiMessageRouter(
-        user_id, db, settings, app.state.attachment_root
+        user_id, db, settings, app.state.attachment_root,
+        upload_token_store=upload_token_store,
+        download_token_store=download_token_store,
     )
     last_pong = time.monotonic()
 

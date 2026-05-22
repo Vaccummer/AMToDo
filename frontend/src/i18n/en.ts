@@ -99,7 +99,6 @@ export const en: Record<string, string> = {
   "common.deleteAttachment": "Delete Attachment",
   "common.deleteAttachmentConfirm": "Delete attachment \"{{name}}\"?",
   "common.fileTooLarge": "File \"{{name}}\" ({{size}}) exceeds the limit ({{max}})",
-  "common.tooManyAttachments": "Attachment count will exceed the limit ({{max}})",
   "common.previousMonth": "Previous Month",
   "common.nextMonth": "Next Month",
   "common.backToToday": "Back to Today",

@@ -260,6 +260,22 @@
   border-radius: var(--radius-pill);
 }
 
+.attachment-progress-bar--pct {
+  height: 4px;
+  background: var(--color-border, #e0dbd3);
+  animation: none;
+  background-size: unset;
+  overflow: hidden;
+  position: relative;
+}
+
+.attachment-progress-fill {
+  height: 100%;
+  background: var(--color-accent, var(--status-primary-base, #4a6fa5));
+  transition: width 0.15s ease;
+  border-radius: 2px;
+}
+
 .modal-save-progress {
   border-radius: 0;
 }

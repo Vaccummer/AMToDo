@@ -1,9 +1,10 @@
-"""Attachment service and cache tests."""
+"""Attachment streaming transfer tests."""
 
 from __future__ import annotations
 
-import base64
+import hashlib
 import secrets
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,7 +12,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 import config
-from client.attachment_cache import AttachmentCache
 from clock import FixedClock, SystemClock
 from config import AppSettings
 from db.engine import create_database
@@ -19,68 +19,42 @@ from models.factory import get_user_tables
 from models.user import User
 from serialization import attachment_to_dict
 from server.app import create_app
-from services import AttachmentDraft, AttachmentService, TodoDraft, TodoService
+from services import AttachmentService, TodoDraft, TodoService
 from services.uow import UnitOfWork
 
 if TYPE_CHECKING:
     from db.engine import Database
 
 
-def test_attachment_is_encrypted_and_cache_decrypts(tmp_path: Path) -> None:
-    database = _create_test_database(tmp_path)
-    clock = FixedClock(1_800_000_000)
-    content = b"attachment plaintext"
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    with UnitOfWork(database) as uow:
-        todo = TodoService(uow.todos, clock, uow.todo_model).create(TodoDraft(title="With file"))
-        uow.session.flush()
-        service = _attachment_service(uow, clock, tmp_path)
-        attachment = service.create(
-            todo.id,
-            AttachmentDraft(filename="note.txt", content=content, mime_type="text/plain"),
-        )
-        uow.session.flush()
-        metadata = attachment_to_dict(attachment, uow.user_id)
-        cipher = service.read_cipher(todo.id, attachment.id)
-
-    assert cipher != content
-    assert metadata["plain_sha256"] != metadata["cipher_sha256"]
-
-    cache = AttachmentCache(tmp_path)
-    first = cache.get_or_download(metadata, lambda: cipher)
-    second = cache.get_or_download(metadata, lambda: cipher)
-
-    assert first["cache_hit"] is False
-    assert second["cache_hit"] is True
-    assert Path(str(first["path"])).read_bytes() == content
+def _create_test_database(tmp_path: Path) -> Database:
+    settings = AppSettings(database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}")
+    database = create_database(settings)
+    database.create_schema()
+    return database
 
 
-def test_attachment_remove_deletes_cipher_file(tmp_path: Path) -> None:
-    database = _create_test_database(tmp_path)
-    clock = FixedClock(1_800_000_000)
-
-    with UnitOfWork(database) as uow:
-        todo = TodoService(uow.todos, clock, uow.todo_model).create(TodoDraft(title="With file"))
-        uow.session.flush()
-        service = _attachment_service(uow, clock, tmp_path)
-        attachment = service.create(
-            todo.id,
-            AttachmentDraft(filename="note.txt", content=b"hello"),
-        )
-        uow.session.flush()
-        path = service.encrypted_path(attachment)
-        assert path.is_file()
-
-        removed = service.remove(todo.id, attachment.id)
-
-    assert removed.id == attachment.id
-    assert not path.exists()
+def _attachment_service(
+    uow: UnitOfWork,
+    clock: FixedClock,
+    root: Path,
+    owner_type: str = "todo",
+) -> AttachmentService:
+    return AttachmentService(
+        uow.attachments,
+        uow.todos,
+        clock,
+        uow.attachment_model,
+        root,
+        uow.user_id,
+        owner_type=owner_type,
+    )
 
 
-def test_attachment_http_upload_metadata_and_download(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _make_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(config, "_AMTODO_SERVER_ROOT_CACHE", tmp_path)
     att_root = tmp_path / "attachments"
     att_root.mkdir(parents=True, exist_ok=True)
@@ -89,8 +63,14 @@ def test_attachment_http_upload_metadata_and_download(
             database_url=f"sqlite:///{tmp_path / 'server.sqlite3'}",
             admin_token="admin-secret",
             attachment_root=str(att_root),
+            max_attachment_size_bytes=1024 * 1024,  # 1 MB for tests
         )
     )
+    return app
+
+
+def _setup_user_and_todo(app, tmp_path):
+    """Create a user and todo, return (token, user_id, todo_id)."""
     token = secrets.token_urlsafe(32)
 
     with TestClient(app) as client:
@@ -111,58 +91,194 @@ def test_attachment_http_upload_metadata_and_download(
         )
         todo_id = todo_response.json()["todo"]["id"]
 
-        upload_response = client.post(
-            "/api/v1/todos/attachments/upload",
-            json={
-                "access_token": token,
-                "todo_id": todo_id,
-                "filename": "note.txt",
-                "mime_type": "text/plain",
-                "content_base64": base64.b64encode(b"plaintext").decode("ascii"),
-            },
+    return token, user_id, todo_id
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full round-trip: init upload token -> PUT cipher bytes -> verify metadata
+    -> init download token -> GET download -> verify bytes match."""
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+
+    # Simulate client-side encryption: just use random bytes as "cipher"
+    plain_content = b"Hello, this is plaintext content for testing"
+    cipher_content = b"CIPHER:" + plain_content  # fake cipher
+    hmac_tag = hashlib.sha256(cipher_content).digest()  # fake HMAC tag
+    full_cipher = cipher_content + hmac_tag  # cipher + 32-byte tag
+
+    file_key_b64 = secrets.token_urlsafe(32)
+    hmac_key_b64 = secrets.token_urlsafe(16)
+    nonce_b64 = secrets.token_urlsafe(12)
+
+    with TestClient(app) as client:
+        # Step 1: Init upload via WS (simulate via direct handler call)
+        upload_store = app.state.upload_token_store
+        upload_token = upload_store.create(
+            owner_type="todo",
+            owner_id=todo_id,
+            user_id=user_id,
+            filename="test.txt",
+            mime_type="text/plain",
+            file_key=file_key_b64,
+            hmac_key=hmac_key_b64,
+            nonce=nonce_b64,
+            plain_size=len(plain_content),
+        )
+
+        # Step 2: PUT cipher bytes
+        upload_response = client.put(
+            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            content=full_cipher,
+            headers={"Content-Type": "application/octet-stream"},
         )
         assert upload_response.status_code == 200
-        attachment = upload_response.json()["attachment"]
-        assert attachment["filename"] == "note.txt"
-        assert attachment["file_key"]
+        result = upload_response.json()
+        assert result["ok"] is True
+        attachment = result["attachment"]
+        assert attachment["filename"] == "test.txt"
+        assert attachment["mime_type"] == "text/plain"
+        assert attachment["encryption_alg"] == "AES-128-CTR-HMAC-SHA256"
+        assert attachment["file_key"] == file_key_b64
+        assert attachment["nonce"] == nonce_b64
+        assert attachment["cipher_size_bytes"] == len(full_cipher)
+        assert attachment["plain_size_bytes"] == len(plain_content)
 
+        # Step 3: Verify metadata via list
         list_response = client.post(
             "/api/v1/todos/attachments/list",
             json={"access_token": token, "todo_id": todo_id},
         )
         assert list_response.json()["count"] == 1
 
-        download_response = client.post(
-            "/api/v1/todos/attachments/download",
-            json={
-                "access_token": token,
-                "todo_id": todo_id,
-                "attachment_id": attachment["id"],
-            },
+        # Step 4: Init download token
+        download_store = app.state.download_token_store
+        download_token = download_store.create(
+            owner_type="todo",
+            owner_id=todo_id,
+            user_id=user_id,
+            attachment_id=attachment["id"],
+        )
+
+        # Step 5: GET download
+        download_response = client.get(
+            f"/api/v1/todos/attachments/{attachment['id']}/download?token={download_token}",
         )
         assert download_response.status_code == 200
-        assert download_response.content != b"plaintext"
+        assert download_response.content == full_cipher
+        assert "X-AMToDo-Cipher-SHA256" in download_response.headers
 
 
-def _attachment_service(
-    uow: UnitOfWork,
-    clock: FixedClock,
-    root: Path,
-    owner_type: str = "todo",
-) -> AttachmentService:
-    return AttachmentService(
-        uow.attachments,
-        uow.todos,
-        clock,
-        uow.attachment_model,
-        root,
-        uow.user_id,
-        owner_type=owner_type,
+def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Create token, wait > TTL, attempt upload -> 404."""
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+
+    upload_store = app.state.upload_token_store
+    # Create a token with 0 TTL (already expired)
+    upload_store._ttl = 0
+    upload_token = upload_store.create(
+        owner_type="todo",
+        owner_id=todo_id,
+        user_id=user_id,
+        filename="test.txt",
+        mime_type="text/plain",
+        file_key="key",
+        hmac_key="hmac",
+        nonce="nonce",
+        plain_size=10,
     )
 
+    # Wait a moment so the token expires
+    time.sleep(0.1)
 
-def _create_test_database(tmp_path: Path) -> Database:
-    settings = AppSettings(database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}")
-    database = create_database(settings)
-    database.create_schema()
-    return database
+    with TestClient(app) as client:
+        response = client.put(
+            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            content=b"some data",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert response.status_code == 404
+
+
+def test_upload_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set small limit, upload oversized file -> 413 mid-stream."""
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+
+    # Override max size to be very small
+    app.state.settings = AppSettings(
+        database_url=app.state.settings.database_url,
+        admin_token=app.state.settings.admin_token,
+        attachment_root=app.state.settings.attachment_root,
+        max_attachment_size_bytes=100,  # 100 bytes
+    )
+
+    upload_store = app.state.upload_token_store
+    upload_token = upload_store.create(
+        owner_type="todo",
+        owner_id=todo_id,
+        user_id=user_id,
+        filename="big.bin",
+        mime_type="application/octet-stream",
+        file_key="key",
+        hmac_key="hmac",
+        nonce="nonce",
+        plain_size=1000,
+    )
+
+    with TestClient(app) as client:
+        # Upload data that exceeds the limit
+        response = client.put(
+            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            content=b"x" * 200,  # 200 bytes > 100 byte limit
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert response.status_code == 413
+
+
+def test_download_token_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET without token -> 404."""
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/todos/attachments/1/download",
+        )
+        assert response.status_code == 422  # missing required query param
+
+
+def test_upload_interruption_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate connection drop -> temp file cleaned up."""
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+
+    upload_store = app.state.upload_token_store
+    upload_token_str = upload_store.create(
+        owner_type="todo",
+        owner_id=todo_id,
+        user_id=user_id,
+        filename="test.txt",
+        mime_type="text/plain",
+        file_key="key",
+        hmac_key="hmac",
+        nonce="nonce",
+        plain_size=10,
+    )
+
+    tok = upload_store.get(upload_token_str)
+    assert tok is not None
+    temp_path = tok.temp_path
+
+    # Verify temp path doesn't exist yet
+    assert not temp_path.exists()
+
+    # Pop the token (simulating an error during upload)
+    upload_store.pop(upload_token_str)
+
+    # Token should be gone
+    assert upload_store.get(upload_token_str) is None

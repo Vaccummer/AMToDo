@@ -4,7 +4,7 @@
   height: 100%;
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   background: var(--global-surface-bg);
   overflow: hidden;
 }
@@ -12,7 +12,7 @@
 .trash-filter-bar {
   display: flex;
   align-items: center;
-  padding: 8px 14px;
+  padding: 10px 14px;
   background: var(--components-nav-bg);
   border-bottom: 1px solid var(--global-surface-border-warm);
   overflow-x: auto;
@@ -47,10 +47,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 7px 14px;
   border: 0;
   border-radius: var(--radius-sm);
-  font-size: var(--font-base);
+  font-size: var(--font-lg);
   font-weight: 700;
   cursor: pointer;
   background: transparent;
@@ -197,6 +197,158 @@
   min-width: 0;
 }
 
+/* ── Desktop trash list ── */
+.trash-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 14px 20px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--global-surface-line);
+  transition: background var(--duration-fast);
+}
+
+.trash-item:last-child {
+  border-bottom: none;
+}
+
+.trash-item:hover {
+  background: color-mix(in srgb, var(--global-surface-line) 50%, transparent);
+}
+
+.trash-type-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.trash-type-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.trash-type-icon.todo {
+  background: color-mix(in srgb, var(--views-notify-mention-green) 12%, transparent);
+  color: var(--views-notify-mention-green);
+}
+
+.trash-type-icon.schedule {
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 12%, transparent);
+  color: var(--views-notify-mention-purple);
+}
+
+.trash-type-icon.notify {
+  background: color-mix(in srgb, var(--views-notify-event-bg) 12%, transparent);
+  color: var(--views-notify-event-bg);
+}
+
+.trash-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.trash-item-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--global-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trash-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--global-text-muted);
+}
+
+.trash-item-type-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.trash-item-type-tag.todo {
+  background: color-mix(in srgb, var(--views-notify-mention-green) 10%, transparent);
+  color: var(--views-notify-mention-green);
+}
+
+.trash-item-type-tag.schedule {
+  background: color-mix(in srgb, var(--views-notify-mention-purple) 10%, transparent);
+  color: var(--views-notify-mention-purple);
+}
+
+.trash-item-type-tag.notify {
+  background: color-mix(in srgb, var(--views-notify-event-bg) 10%, transparent);
+  color: var(--views-notify-event-bg);
+}
+
+.trash-item-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--global-text-muted);
+}
+
+.trash-item-deleted {
+  font-size: 12px;
+  color: var(--global-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.trash-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.trash-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--global-text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  padding: 0;
+}
+
+.trash-action-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.trash-action-btn.restore:hover:not(:disabled) {
+  color: var(--status-primary-base);
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+}
+
+.trash-action-btn.purge:hover:not(:disabled) {
+  color: var(--status-danger-base);
+  background: color-mix(in srgb, var(--status-danger-base) 10%, transparent);
+}
+
+/* ── Mobile trash timeline ── */
 .trash-timeline {
   min-height: 0;
   overflow-y: auto;

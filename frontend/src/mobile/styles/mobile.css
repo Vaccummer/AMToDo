@@ -183,7 +183,7 @@
   display: none;
 }
 
-/* ── Mobile Todo Hero (Concept E) ── */
+/* ── Mobile Hero: Glass Card + Ring (Concept D) ── */
 
 .mobile-shell .todo-view {
   background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
@@ -191,172 +191,116 @@
 
 .mobile-shell .mobile-hero {
   background: linear-gradient(160deg, #1a2820 0%, #1a3a32 40%, #1a2820 100%);
-  padding: 12px 20px 16px;
+  padding: 14px 20px 12px;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
-/* ── Mobile Hero: Week Strip ── */
-
-.mobile-shell .mobile-hero-week-header {
+.mobile-shell .hero-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
 }
 
-.mobile-shell .mobile-hero-month-label {
-  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
-  font-size: 13px;
+/* TODAY highlight */
+.mobile-shell .hero-card.is-today {
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.25);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.15), 0 0 20px rgba(74, 222, 128, 0.1);
+}
+
+.mobile-shell .hero-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mobile-shell .hero-weekday {
+  font-size: 10px;
   font-weight: 600;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-shell .hero-card.is-today .hero-weekday {
+  color: rgba(74, 222, 128, 0.6);
+}
+
+.mobile-shell .hero-date-big {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 800;
   color: #fff;
-  letter-spacing: 0.3px;
-  flex: 1;
-  text-align: center;
+  line-height: 1;
+  letter-spacing: -1px;
 }
 
-.mobile-shell .mobile-hero-nav-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  flex-shrink: 0;
-}
-
-.mobile-shell .mobile-hero-nav-btn:active {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.mobile-shell .mobile-hero-today-btn {
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.5);
-  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  margin: 0 4px;
-}
-
-.mobile-shell .mobile-hero-today-btn.active {
-  background: rgba(74, 222, 128, 0.15);
+.mobile-shell .hero-card.is-today .hero-date-big {
   color: #4ade80;
 }
 
-.mobile-shell .mobile-hero-today-btn:active {
-  opacity: 0.7;
-}
-
-.mobile-shell .mobile-hero-week-strip {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-}
-
-.mobile-shell .mobile-hero-day-cell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 0;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s;
-}
-
-.mobile-shell .mobile-hero-day-cell:active {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.mobile-shell .mobile-hero-day-cell.selected {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.mobile-shell .mobile-hero-day-label {
-  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
-  font-size: 10px;
+.mobile-shell .hero-month-year {
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0.3px;
+  margin-top: 2px;
 }
 
-.mobile-shell .mobile-hero-day-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 15px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  transition: background 0.15s, color 0.15s;
+.mobile-shell .hero-card.is-today .hero-month-year {
+  color: rgba(74, 222, 128, 0.5);
 }
 
-.mobile-shell .mobile-hero-day-cell.today .mobile-hero-day-num {
-  background: #4ade80;
-  color: #1a2820;
-}
-
-.mobile-shell .mobile-hero-day-cell.selected .mobile-hero-day-num {
-  color: #fff;
-}
-
-.mobile-shell .mobile-hero-day-cell.selected.today .mobile-hero-day-num {
-  background: #4ade80;
-  color: #1a2820;
-}
-
-.mobile-shell .mobile-hero-day-dot-spacer {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: transparent;
-}
-
-/* ── Mobile Hero: Micro Ring Stats ── */
-
-.mobile-shell .mobile-hero-ring-stats {
+.mobile-shell .hero-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.mobile-shell .mobile-hero-ring {
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.mobile-shell .mobile-hero-ring-text {
-  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  line-height: 1.4;
+.mobile-shell .hero-ring-wrap {
+  width: 60px;
+  height: 60px;
+  position: relative;
 }
 
-.mobile-shell .mobile-hero-ring-text strong {
+.mobile-shell .hero-ring-wrap svg {
+  width: 60px;
+  height: 60px;
+  transform: rotate(-90deg);
+}
+
+.mobile-shell .hero-ring-bg {
+  fill: none;
+  stroke: rgba(255,255,255,0.08);
+  stroke-width: 3.5;
+}
+
+.mobile-shell .hero-ring-fill {
+  fill: none;
+  stroke: #4ade80;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.mobile-shell .hero-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
   color: #fff;
-  font-weight: 600;
-}
-
-.mobile-shell .mobile-hero-ring-text .mobile-hero-overdue {
-  color: #f87171;
-}
-
-.mobile-shell .mobile-hero-ring-empty {
-  color: rgba(255, 255, 255, 0.35);
-  font-style: italic;
 }
 
 /* ── Glass Panel ── */
@@ -412,13 +356,16 @@
 }
 
 .mobile-shell .todo-row {
+  display: flex;
+  align-items: flex-start;
   border-radius: 14px;
   border: 1px solid rgba(229, 223, 215, 0.6);
   background: #fff;
-  padding: 14px;
+  padding: 16px 14px;
   gap: 12px;
   margin-bottom: 0;
-  min-height: auto;
+  min-height: 0;
+  overflow: visible;
   transition: transform 0.1s;
 }
 
@@ -452,6 +399,49 @@
   font-weight: 500;
 }
 
+.mobile-shell .todo-main {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.mobile-shell .todo-meta {
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.mobile-shell .todo-status-badge {
+  min-width: auto;
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.mobile-shell .due-time {
+  white-space: normal;
+  font-size: 12px;
+}
+
+.mobile-shell .todo-completed-time {
+  font-size: 11px;
+}
+
+.mobile-shell .todo-right {
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.mobile-shell .todo-id-badge {
+  min-width: 36px;
+  height: 20px;
+  font-size: 11px;
+  gap: 3px;
+}
+
+.mobile-shell .todo-attachment-count {
+  font-size: 11px;
+}
+
 .mobile-shell .todo-row.overdue {
   background: linear-gradient(135deg, #fff5f5, #fff);
   border-color: rgba(198, 47, 47, 0.15);
@@ -467,12 +457,50 @@
   border-color: rgba(212, 134, 10, 0.15);
 }
 
+/* ── Swipe to Delete ── */
+
+.mobile-shell .todo-row-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.mobile-shell .todo-swipe-delete {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 64px;
+  background: #ef4444;
+  border: none;
+  border-radius: 0 14px 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .todo-swipe-delete:active {
+  background: #dc2626;
+}
+
+.mobile-shell .todo-row {
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.mobile-shell .todo-row.swiped {
+  transform: translateX(-64px);
+}
+
 /* ── FAB ── */
 
 .mobile-shell .mobile-fab {
   position: absolute;
   bottom: 72px;
-  right: 28px;
+  right: 16px;
   width: 52px;
   height: 52px;
   border-radius: 14px;
@@ -491,6 +519,20 @@
 
 .mobile-shell .mobile-fab:active {
   transform: scale(0.9);
+}
+
+/* ── Go to Today FAB (above add-todo FAB) ── */
+
+.mobile-shell .go-today-fab {
+  bottom: 132px;
+  right: 16px;
+  background: linear-gradient(135deg, #b45309, #d97706);
+  box-shadow: 0 6px 24px rgba(180, 83, 9, 0.4);
+}
+
+.mobile-shell .go-today-fab svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* ── Hide bottom bar on mobile (replaced by FAB) ── */

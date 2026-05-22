@@ -74,8 +74,6 @@ async def health(request: Request) -> dict[str, object]:
         **({"name": settings.server_name} if settings.server_name else {}),
         "limits": {
             "max_attachment_size_bytes": settings.max_attachment_size_bytes,
-            "max_attachment_request_body_bytes": settings.max_attachment_request_body_bytes,
-            "max_attachments_per_todo": settings.max_attachments_per_todo,
         },
     }
 

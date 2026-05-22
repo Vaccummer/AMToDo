@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 import json
 
-from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, __version__, AppSettings, server_root
+from config import DEFAULT_DOWNLOAD_TOKEN_TTL_SECONDS, DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, server_root
 from amtodo_crypto import ReplayProtector, is_envelope, open_envelope_with_key, seal_response
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
@@ -234,6 +234,10 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
 
+        # Streaming upload passes through unencrypted (token-authenticated)
+        if request.method == "PUT" and request.url.path.rstrip("/").endswith("/attachments/upload"):
+            return await call_next(request)
+
         content_type = request.headers.get("content-type", "")
         if "application/json" not in content_type:
             return JSONResponse(
@@ -323,37 +327,6 @@ def _is_json_response(response) -> bool:
     return "application/json" in content_type
 
 
-def _setup_request_size_middleware(app: FastAPI, settings: AppSettings) -> None:
-    """Add middleware to reject oversized JSON attachment upload bodies early."""
-
-    import re
-
-    _json_upload_pattern = re.compile(
-        r"^/api/v1/(todos|schedules)/attachments/upload$"
-    )
-
-    @app.middleware("http")
-    async def request_size_middleware(request, call_next):
-        if request.method == "POST" and _json_upload_pattern.match(
-            request.url.path
-        ):
-            content_length = request.headers.get("content-length")
-            if content_length:
-                try:
-                    if int(content_length) > settings.max_attachment_request_body_bytes:
-                        return JSONResponse(
-                            status_code=413,
-                            content=error_to_dict(
-                                ValidationError,
-                                f"request body ({content_length} bytes) exceeds limit "
-                                f"({settings.max_attachment_request_body_bytes} bytes)",
-                            ),
-                        )
-                except ValueError:
-                    pass
-        return await call_next(request)
-
-
 def _setup_rate_limit_middleware(app: FastAPI, settings: AppSettings) -> None:
     """Add per-IP rate limiting middleware for public (unauthenticated) endpoints."""
     limiter = RateLimiter(
@@ -381,10 +354,21 @@ def create_app(settings: AppSettings) -> FastAPI:
     resolved_attachment_root.mkdir(parents=True, exist_ok=True)
     app.state.attachment_root = resolved_attachment_root
 
+    # Upload/download token stores for streaming attachment transfer
+    from services.upload_tokens import DownloadTokenStore, UploadTokenStore
+
+    temp_root = Path(DEFAULT_UPLOAD_TEMP_ROOT)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    app.state.upload_token_store = UploadTokenStore(
+        temp_root=temp_root,
+        ttl_seconds=DEFAULT_UPLOAD_TOKEN_TTL_SECONDS,
+    )
+    app.state.download_token_store = DownloadTokenStore(
+        ttl_seconds=DEFAULT_DOWNLOAD_TOKEN_TTL_SECONDS,
+    )
+
     if settings.server_private_key_path:
         _setup_encryption_middleware(app, settings)
-
-    _setup_request_size_middleware(app, settings)
 
     if settings.rate_limit_requests > 0:
         _setup_rate_limit_middleware(app, settings)
@@ -454,10 +438,6 @@ def main() -> None:
     max_attachment_size_bytes = storage_cfg.get(
         "max_attachment_size_bytes", DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
     )
-    max_attachment_request_body_bytes = storage_cfg.get(
-        "max_attachment_request_body_bytes",
-        int(max_attachment_size_bytes * 1.5),
-    )
     private_key_path = encryption_cfg.get("private_key_path", "")
     public_key_path = encryption_cfg.get("public_key_path", "")
     tolerance = encryption_cfg.get("request_timestamp_tolerance_seconds", 300)
@@ -494,7 +474,6 @@ def main() -> None:
         request_timestamp_tolerance_seconds=tolerance,
         attachment_root=attachment_root,
         max_attachment_size_bytes=max_attachment_size_bytes,
-        max_attachment_request_body_bytes=max_attachment_request_body_bytes,
         rate_limit_requests=rate_limit_requests,
         rate_limit_window_seconds=rate_limit_window_seconds,
         ip_cache_ttl_seconds=ip_cache_ttl,
