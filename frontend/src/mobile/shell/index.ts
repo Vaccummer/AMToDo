@@ -40,10 +40,22 @@ function patchFetchForNativeHttp(): void {
       const method = (init?.method ?? "GET").toUpperCase();
 
       try {
+        // Normalize headers: Headers object → plain object for Capacitor plugin
+        let headers: Record<string, string> = {};
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((v, k) => { headers[k] = v; });
+          } else if (Array.isArray(init.headers)) {
+            for (const [k, v] of init.headers) headers[k] = v;
+          } else {
+            headers = init.headers as Record<string, string>;
+          }
+        }
+
         const options: Parameters<typeof Http.request>[0] = {
           url,
           method: method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD",
-          headers: init?.headers as Record<string, string> ?? {},
+          headers,
           params: {},
           responseType: "text",
         };
