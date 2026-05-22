@@ -660,3 +660,429 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
 }
+
+/* ================================================================
+   Concept B: Agenda List — mobile schedule layout
+   ================================================================ */
+
+.schedule-view {
+  position: relative;
+}
+
+.schedule-hero {
+  padding: 12px 20px 16px;
+  flex-shrink: 0;
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 50%, #1a2820 100%);
+}
+
+.schedule-hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.schedule-hero-date {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.5px;
+}
+
+.schedule-hero-calendar-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+
+.schedule-hero-calendar-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.schedule-hero-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.3px;
+  margin: 0 0 12px;
+}
+
+.schedule-hero-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.schedule-stat-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.schedule-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.schedule-stat-num.green {
+  color: #4ade80;
+}
+
+.schedule-stat-num.amber {
+  color: #fbbf24;
+}
+
+.schedule-stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.schedule-week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #1a2820 0%, #17221b 100%);
+}
+
+.schedule-week-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.schedule-week-nav-arrows {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.schedule-week-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+
+.schedule-week-nav-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.schedule-week-nav-btn.today-btn {
+  width: auto;
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.schedule-day-selector {
+  display: flex;
+  gap: 4px;
+  padding: 6px 16px 10px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: linear-gradient(180deg, #17221b 0%, #141e18 100%);
+}
+
+.schedule-day-selector::-webkit-scrollbar {
+  display: none;
+}
+
+.schedule-day-chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.schedule-day-chip-weekday {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.schedule-day-chip-num {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.schedule-day-chip.active {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.schedule-day-chip.today {
+  position: relative;
+}
+
+.schedule-day-chip.today::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+}
+
+.schedule-agenda-panel {
+  flex: 1;
+  min-height: 0;
+  margin: 0 10px;
+  background: rgba(250, 247, 242, 0.96);
+  border-radius: 18px 18px 0 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 0 0 80px;
+}
+
+.schedule-agenda-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.schedule-agenda-day {
+  padding: 0 16px;
+}
+
+.schedule-agenda-day-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+  position: sticky;
+  top: 0;
+  background: rgba(250, 247, 242, 0.96);
+  z-index: 5;
+}
+
+.schedule-agenda-day-header-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1a7f72;
+  flex-shrink: 0;
+}
+
+.schedule-agenda-day-header.today .schedule-agenda-day-header-dot {
+  background: #ef4444;
+}
+
+.schedule-agenda-day-header-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #342f2a;
+}
+
+.schedule-agenda-day-header-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(26, 127, 114, 0.2), transparent);
+}
+
+.schedule-agenda-card {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 223, 215, 0.6);
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.schedule-agenda-card:active {
+  transform: scale(0.98);
+}
+
+.schedule-agenda-card-color {
+  width: 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.schedule-agenda-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.schedule-agenda-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #342f2a;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+
+.schedule-agenda-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #9a8f85;
+}
+
+.schedule-agenda-card-meta-icon {
+  font-size: 11px;
+}
+
+.schedule-agenda-card-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #ede5d8;
+  color: #624c10;
+}
+
+.schedule-agenda-card-notify-icon {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.schedule-agenda-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+  font-size: 10px;
+  color: #c5bfb7;
+  letter-spacing: 0.3px;
+}
+
+.schedule-agenda-fab {
+  position: absolute;
+  bottom: 72px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1a7f72, #14967e);
+  color: #fff;
+  border: none;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(26, 127, 114, 0.4);
+  z-index: 50;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.schedule-agenda-fab:active {
+  transform: scale(0.95);
+}
+
+/* Skeleton cards for agenda loading state */
+.schedule-skel-agenda {
+  padding: 0 16px;
+}
+
+.schedule-skel-day-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+}
+
+.schedule-skel-day-header-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ddd;
+}
+
+.schedule-skel-day-header-line {
+  flex: 1;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e8e8e8 0%, #f0f0f0 100%);
+  animation: skel-agenda-shimmer 1.5s ease-in-out infinite;
+}
+
+.schedule-skel-card {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 223, 215, 0.4);
+  background: #fff;
+}
+
+.schedule-skel-card-bar {
+  width: 4px;
+  border-radius: 2px;
+  background: #e8e8e8;
+  align-self: stretch;
+}
+
+.schedule-skel-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schedule-skel-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e8e8e8 0%, #f0f0f0 100%);
+  animation: skel-agenda-shimmer 1.5s ease-in-out infinite;
+}
+
+.schedule-skel-line.short {
+  width: 45%;
+}
+
+.schedule-skel-line.medium {
+  width: 70%;
+}
+
+@keyframes skel-agenda-shimmer {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
