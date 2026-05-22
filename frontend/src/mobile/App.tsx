@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AMToDoApi, notifyNetworkStatus, type HealthResponse, type TodoItem } from "../api/client";
+import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "../api/ws-client";
+import { ConnectionStatusManager, useConnectionStatus } from "../api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
-import { importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
+import { verifyOrEnrollKey, FingerprintMismatchError } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
@@ -61,6 +63,10 @@ export function App() {
     () => new AMToDoApi(settings.server_url, settings.access_token)
   );
 
+  const wsClientRef = useRef<UiWsClient | null>(null);
+  const connectionManagerRef = useRef(new ConnectionStatusManager());
+  const connStatus = useConnectionStatus(connectionManagerRef.current);
+
   const handleTodoDateChange = useCallback((key: string) => {
     setSelectedDateCache((prev) => prev.todo === key ? prev : { ...prev, todo: key });
   }, []);
@@ -97,11 +103,34 @@ export function App() {
     setPendingAction({ type, id, action, dateKey });
   }
 
+  function handleWsNotification(notification: WsNotificationPayload) {
+    const epoch = typeof notification.trigger_at === "number" ? notification.trigger_at : 0;
+    const d = new Date(epoch * 1000);
+    const timeStr = isNaN(d.getTime())
+      ? ""
+      : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+    const desc = notification.description ?? "";
+    const t = createTranslator(settings.language);
+    const triggerLabel = t("common.trigger");
+    const body = desc ? `${desc}\n${triggerLabel}: ${timeStr}` : `${triggerLabel}: ${timeStr}`;
+
+    import("@capacitor/local-notifications").then(({ LocalNotifications }) => {
+      LocalNotifications.schedule({
+        notifications: [{
+          title: notification.title || "AMToDo",
+          body,
+          id: notification.id % 2147483647,
+          extra: { id: notification.id, trigger_at: notification.trigger_at },
+        }],
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
   // Configure status bar
   useEffect(() => {
     import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
       StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: "#1a1a1a" }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#1a2820" }).catch(() => {});
     }).catch(() => {});
   }, []);
 
@@ -123,11 +152,17 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
-    let wasOffline = false;
 
     const bootstrap = async () => {
+      const mgr = connectionManagerRef.current;
+
+      // Phase 1: Health check via HTTP
       const baseApi = new AMToDoApi(settings.server_url, settings.access_token);
       const result = await baseApi.health();
+
+      if (cancelled) return;
+      setHealth(result);
+      mgr.reportHealthOk(result.version, result.name);
 
       // TOFU: verify server public key fingerprint
       let currentFingerprint = settings.known_key_fingerprint;
@@ -140,30 +175,71 @@ export function App() {
       }
 
       const limits = result.limits;
-      let readyApi = baseApi;
-      if (result.public_key) {
-        const p256Key = await importP256PublicKey(result.public_key);
-        readyApi = new AMToDoApi(
-          settings.server_url,
-          settings.access_token,
-          p256Key,
-          limits.max_attachment_size_bytes,
-          limits.max_attachments_per_todo
-        );
-      } else {
-        baseApi.maxAttachmentSize = limits.max_attachment_size_bytes;
-        baseApi.maxAttachmentsPerTodo = limits.max_attachments_per_todo;
+
+      // Phase 2: Connect UI WebSocket
+      const wsClient = new UiWsClient(
+        settings.server_url,
+        settings.access_token,
+        settings.ws_reconnect_interval_ms,
+        currentFingerprint,
+        (enrolledFp: string) => {
+          setSettings((prev) => ({ ...prev, known_key_fingerprint: enrolledFp }));
+          shell.writeSettings({ known_key_fingerprint: enrolledFp }).catch(() => {});
+        },
+        settings.reconnect_max_attempts
+      );
+
+      const unsubStatus = wsClient.onStatusChange((status) => {
+        if (!cancelled) mgr.reportWsStatus(status);
+      });
+
+      const unsubDisconnect = wsClient.onDisconnectReason((code) => {
+        if (cancelled) return;
+        if (code === RECONNECT_EXHAUSTED_CODE) {
+          mgr.reportReconnectExhausted();
+        } else {
+          mgr.reportWsStatus("disconnected", code);
+        }
+      });
+
+      const unsubNotif = wsClient.onNotification((notification) => {
+        if (cancelled) return;
+        handleWsNotification(notification);
+      });
+
+      await wsClient.connect();
+
+      if (cancelled) {
+        unsubStatus();
+        unsubDisconnect();
+        unsubNotif();
+        wsClient.disconnect();
+        return;
       }
+
+      wsClientRef.current = wsClient;
+
+      // Phase 3: Create API client with WS transport
+      const readyApi = new AMToDoApi(
+        settings.server_url,
+        settings.access_token,
+        null,
+        limits.max_attachment_size_bytes,
+        limits.max_attachments_per_todo,
+        wsClient
+      );
 
       if (cancelled) return;
       setHealth(result);
       setHealthError(null);
       setApi(readyApi);
       setConnectionStatus("online");
-      if (wasOffline) {
-        notifyNetworkStatus(true);
-      }
-      wasOffline = false;
+    };
+
+    const scheduleRetry = () => {
+      retryTimer = window.setTimeout(() => {
+        if (!cancelled) void runBootstrap();
+      }, 2000);
     };
 
     const runBootstrap = async () => {
@@ -173,11 +249,20 @@ export function App() {
         await bootstrap();
       } catch (error: unknown) {
         if (cancelled) return;
-        wasOffline = true;
+        const mgr = connectionManagerRef.current;
+        const message = error instanceof FingerprintMismatchError
+          ? error.message
+          : error instanceof Error ? error.message : "common.connectionFailed";
+        if (error instanceof FingerprintMismatchError) {
+          mgr.reportFingerprintMismatch(message);
+        } else {
+          const kind = error instanceof TypeError ? "network" : "token";
+          mgr.reportHealthError(kind, message);
+        }
         setHealth(null);
-        setHealthError(error instanceof Error ? error.message : "common.connectionFailed");
+        setHealthError(message);
         setConnectionStatus("offline");
-        retryTimer = window.setTimeout(() => void runBootstrap(), 2000);
+        if (!(error instanceof FingerprintMismatchError)) scheduleRetry();
       }
     };
 
@@ -185,8 +270,12 @@ export function App() {
     return () => {
       cancelled = true;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+        wsClientRef.current = null;
+      }
     };
-  }, [settings.server_url, settings.access_token]);
+  }, [settings.server_url, settings.access_token, settings.ws_enabled]);
 
   // Fetch username
   useEffect(() => {
