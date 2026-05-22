@@ -18,6 +18,47 @@ type TrashResult =
   | { type: "schedule"; item: ScheduleItem }
   | { type: "notify"; item: NotificationItem };
 
+type TimeGroup = "today" | "yesterday" | "this-week" | "earlier";
+
+const TIME_GROUP_META: Record<TimeGroup, { label: string; dotClass: string }> = {
+  today: { label: "今天", dotClass: "today" },
+  yesterday: { label: "昨天", dotClass: "yesterday" },
+  "this-week": { label: "本周", dotClass: "this-week" },
+  earlier: { label: "更早", dotClass: "earlier" },
+};
+
+const GROUP_ORDER: TimeGroup[] = ["today", "yesterday", "this-week", "earlier"];
+
+function startOfDay(ts: number): number {
+  const d = new Date(ts * 1000);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+}
+
+function groupByDate(items: TrashResult[]): Map<TimeGroup, TrashResult[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const todayStart = startOfDay(now);
+  const yesterdayStart = todayStart - 86400;
+  const d = new Date(todayStart * 1000);
+  const dayOfWeek = d.getDay();
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = todayStart - mondayOffset * 86400;
+
+  const groups = new Map<TimeGroup, TrashResult[]>();
+  for (const g of GROUP_ORDER) groups.set(g, []);
+
+  for (const entry of items) {
+    const deleted = entry.item.deleted_at ?? now;
+    let group: TimeGroup;
+    if (deleted >= todayStart) group = "today";
+    else if (deleted >= yesterdayStart) group = "yesterday";
+    else if (deleted >= weekStart) group = "this-week";
+    else group = "earlier";
+    groups.get(group)!.push(entry);
+  }
+  return groups;
+}
+
 function getFilterTabs(t: (key: string) => string) {
   return [
     { value: "all" as TrashMode, label: t("common.all") },
@@ -25,34 +66,6 @@ function getFilterTabs(t: (key: string) => string) {
     { value: "schedule" as TrashMode, label: t("tab.schedule"), dotClass: "sch" },
     { value: "notify" as TrashMode, label: t("tab.notify"), dotClass: "notify" },
   ];
-}
-
-function TodoIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function ScheduleIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function NotifyIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  );
 }
 
 function RestoreIcon() {
@@ -78,32 +91,6 @@ function SearchIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
       <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashBinIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function SearchSmallIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M16.5 16.5L21 21" />
     </svg>
   );
 }
@@ -183,6 +170,8 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
     }
     return counts;
   }, [items]);
+
+  const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
 
   async function restore(entry: TrashResult) {
     const key = resultKey(entry);
@@ -298,6 +287,9 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="trash-search-bar">
         <div className="trash-search-wrap">
           <SearchIcon />
           <input
@@ -322,48 +314,63 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
         </button>
       </div>
 
-      <div className="trash-list">
-        {filteredItems.map((entry) => {
-          const busy = busyKey === resultKey(entry);
+      <div className="trash-timeline">
+        {GROUP_ORDER.map((groupKey) => {
+          const groupItems = grouped.get(groupKey) ?? [];
+          if (groupItems.length === 0) return null;
+          const meta = TIME_GROUP_META[groupKey];
           return (
-            <div className="trash-item" key={resultKey(entry)}>
-              <div className={`trash-type-icon ${entry.type}`}>
-                {entry.type === "todo" ? <TodoIcon /> : entry.type === "schedule" ? <ScheduleIcon /> : <NotifyIcon />}
+            <div className="timeline-group" key={groupKey}>
+              <div className="timeline-label">
+                <span className={`timeline-dot ${meta.dotClass}`} />
+                <span className="timeline-date">{meta.label}</span>
+                <span className="timeline-count">{groupItems.length} 项</span>
               </div>
-              <div className="trash-item-content">
-                <div className="trash-item-title">{entry.item.title}</div>
-                <div className="trash-item-meta">
-                  <span className={`trash-item-type-tag ${entry.type}`}>
-                    {entry.type === "todo" ? t("tab.todo") : entry.type === "schedule" ? t("tab.schedule") : t("tab.notify")}
-                  </span>
-                  <span className="trash-item-id" title={`id:${entry.item.id}`}>#{entry.item.id}</span>
-                  {renderMeta(entry, t)}
-                </div>
-              </div>
-              <span className="trash-item-deleted">{formatDeletedAt(entry.item.deleted_at, t)}</span>
-              <div className="trash-item-actions">
-                <button
-                  type="button"
-                  className="trash-action-btn restore"
-                  disabled={busy}
-                  onClick={() => void restore(entry)}
-                  title={t("common.restore")}
-                >
-                  <RestoreIcon />
-                </button>
-                <button
-                  type="button"
-                  className="trash-action-btn purge"
-                  disabled={busy}
-                  onClick={() => void purge(entry)}
-                  title={t("common.purge")}
-                >
-                  <PurgeIcon />
-                </button>
+              <div className="row-list">
+                {groupItems.map((entry) => {
+                  const busy = busyKey === resultKey(entry);
+                  return (
+                    <div className="trash-row" key={resultKey(entry)}>
+                      <span className={`row-type-dot ${entry.type}`} />
+                      <div className="row-content">
+                        <div className="row-title">{entry.item.title}</div>
+                        <div className="row-meta">
+                          <span className={`row-tag ${entry.type}`}>
+                            {entry.type === "todo" ? t("tab.todo") : entry.type === "schedule" ? t("tab.schedule") : t("tab.notify")}
+                          </span>
+                          <span className="row-id">#{entry.item.id}</span>
+                          {renderMeta(entry, t)}
+                        </div>
+                      </div>
+                      <span className="row-time">{formatDeletedAt(entry.item.deleted_at, t)}</span>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="row-btn restore"
+                          disabled={busy}
+                          onClick={() => void restore(entry)}
+                          title={t("common.restore")}
+                        >
+                          <RestoreIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="row-btn purge"
+                          disabled={busy}
+                          onClick={() => void purge(entry)}
+                          title={t("common.purge")}
+                        >
+                          <PurgeIcon />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
         })}
+
         {status ? (
           status === t("trash.empty") ? (
             <div className="trash-empty">
