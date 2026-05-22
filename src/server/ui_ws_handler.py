@@ -6,7 +6,6 @@ Parameter names are fully aligned with the REST API schemas.
 
 from __future__ import annotations
 
-import base64
 import logging
 import time
 from pathlib import Path
@@ -24,7 +23,6 @@ from serialization import (
     user_to_dict,
 )
 from services import (
-    AttachmentDraft,
     AttachmentService,
     NotificationDraft,
     NotificationService,
@@ -52,12 +50,16 @@ class UiMessageRouter:
         settings: Any,
         attachment_root: Path,
         clock: Clock | None = None,
+        upload_token_store: Any = None,
+        download_token_store: Any = None,
     ) -> None:
         self.user_id = user_id
         self.db = db
         self.settings = settings
         self.attachment_root = attachment_root
         self.clock = clock or SystemClock()
+        self.upload_token_store = upload_token_store
+        self.download_token_store = download_token_store
         self._handlers: dict[str, Any] = {}
         self._register_all()
 
@@ -107,8 +109,8 @@ class UiMessageRouter:
         # Attachment
         self._handlers["attachment.list"] = self._handle_attachment_list
         self._handlers["attachment.get"] = self._handle_attachment_get
-        self._handlers["attachment.upload"] = self._handle_attachment_upload
-        self._handlers["attachment.download"] = self._handle_attachment_download
+        self._handlers["attachment.init_upload"] = self._handle_init_upload
+        self._handlers["attachment.init_download"] = self._handle_init_download
         self._handlers["attachment.remove"] = self._handle_attachment_remove
         self._handlers["attachment.remove_orphaned"] = self._handle_attachment_remove_orphaned
         # Changelog
@@ -815,32 +817,52 @@ class UiMessageRouter:
             dict_fn = attachment_to_dict if owner_type == "todo" else schedule_attachment_to_dict
             return {"ok": True, "attachment": dict_fn(attachment, self.user_id)}
 
-    def _handle_attachment_upload(self, p: dict) -> dict:
-        with self._uow() as uow:
-            owner_type, owner_id = self._resolve_attachment_owner(p)
-            changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
-            svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
-            content = _decode_base64(p["content_base64"])
-            draft = AttachmentDraft(
-                filename=p["filename"],
-                content=content,
-                mime_type=p.get("mime_type"),
-            )
-            attachment = svc.create(owner_id, draft)
-            dict_fn = attachment_to_dict if owner_type == "todo" else schedule_attachment_to_dict
-            return {"ok": True, "attachment": dict_fn(attachment, self.user_id)}
+    def _handle_init_upload(self, p: dict) -> dict:
+        owner_type = p["owner_type"]
+        owner_id = p["owner_id"]
 
-    def _handle_attachment_download(self, p: dict) -> dict:
         with self._uow() as uow:
-            owner_type, owner_id = self._resolve_attachment_owner(p)
+            svc = self._make_attachment_service(uow, owner_type)
+            # Validate owner exists
+            svc.list_for_owner(owner_id)
+
+        if self.upload_token_store is None:
+            raise ValidationError("upload token store not configured")
+
+        token = self.upload_token_store.create(
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=self.user_id,
+            filename=p["filename"],
+            mime_type=p.get("mime_type"),
+            file_key=p["file_key"],
+            hmac_key=p["hmac_key"],
+            nonce=p["nonce"],
+            plain_size=p["plain_size"],
+        )
+        return {"ok": True, "token": token}
+
+    def _handle_init_download(self, p: dict) -> dict:
+        owner_type = p["owner_type"]
+        owner_id = p["owner_id"]
+        attachment_id = p["attachment_id"]
+
+        with self._uow() as uow:
             changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
             svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
-            attachment = svc.show(owner_id, p["attachment_id"])
-            cipher = svc.read_cipher(owner_id, p["attachment_id"])
-            return {
-                "name": attachment.filename,
-                "content_base64": base64.b64encode(cipher).decode("ascii"),
-            }
+            # Validate attachment exists
+            svc.show(owner_id, attachment_id)
+
+        if self.download_token_store is None:
+            raise ValidationError("download token store not configured")
+
+        token = self.download_token_store.create(
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=self.user_id,
+            attachment_id=attachment_id,
+        )
+        return {"ok": True, "token": token}
 
     def _handle_attachment_remove(self, p: dict) -> dict:
         with self._uow() as uow:
@@ -930,13 +952,6 @@ def _bulk_attachment_counts(uow: UnitOfWork, owner_type: str, owner_ids: list[in
         .group_by(id_col)
         .all()
     )
-
-
-def _decode_base64(encoded: str) -> bytes:
-    try:
-        return base64.b64decode(encoded, validate=True)
-    except ValueError as exc:
-        raise ValidationError("content_base64 must be valid base64") from exc
 
 
 def _todo_sort_value(todo: object, sort_by: str) -> object:

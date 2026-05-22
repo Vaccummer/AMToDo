@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleAttachmentMetadata, ScheduleItem, ScheduleUpdateRequest } from "../api/client";
+import type { UploadProgress } from "../lib/chunked-upload";
+import type { DownloadProgress } from "../lib/chunked-download";
 import { getAttachmentBlob } from "../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../lib/time";
 import { DatePicker } from "./DatePicker";
@@ -79,6 +81,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<ScheduleAttachmentMetadata | null>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
@@ -111,7 +115,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
         try {
           const { blob } = await getAttachmentBlob(
-            () => api.downloadScheduleAttachment(schedule.id, attachment.id),
+            (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
             attachment,
             `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
           );
@@ -179,16 +183,18 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       }
     }
 
-    if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
-      setError(t("common.attachmentCountExceeded", { max: api.maxAttachmentsPerTodo }));
-      return;
-    }
-
     setAttachmentBusy(true);
     setError(null);
     try {
       for (const file of selected) {
-        await api.uploadScheduleAttachment(schedule.id, file);
+        const key = `${file.name}-${file.size}`;
+        try {
+          await api.uploadScheduleAttachment(schedule.id, file, (progress) => {
+            setUploadProgress((prev) => ({ ...prev, [key]: progress }));
+          });
+        } finally {
+          setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        }
       }
       setAttachmentsChanged(true);
       await loadAttachments();
@@ -203,12 +209,14 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   async function openAttachment(attachment: ScheduleAttachmentMetadata) {
     if (attachment.is_orphaned) return;
     setDownloadingId(attachment.id);
+    setDownloadProgress(null);
     setError(null);
     try {
       const { blob } = await getAttachmentBlob(
-        () => api.downloadScheduleAttachment(schedule.id, attachment.id),
+        (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
         attachment,
         `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
+        (progress) => setDownloadProgress(progress),
       );
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -227,6 +235,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
       setDownloadingId(null);
+      setDownloadProgress(null);
     }
   }
 
@@ -584,7 +593,13 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               }}
             />
           </div>
-          {attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
+          {attachmentBusy && Object.keys(uploadProgress).length > 0
+            ? Object.entries(uploadProgress).map(([key, progress]) => progress && (
+                <div key={key} className="attachment-progress-bar attachment-progress-bar--pct" aria-label={`${progress.percent}%`}>
+                  <div className="attachment-progress-fill" style={{ width: `${progress.percent}%` }} />
+                </div>
+              ))
+            : attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
 
           <div className="attachment-list">
             {attachments.map((attachment) => {
@@ -632,7 +647,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                       {orphaned
                         ? t("common.fileMissing")
                         : downloadingId === attachment.id
-                          ? t("common.downloading")
+                          ? (downloadProgress ? `${downloadProgress.percent}%` : t("common.downloading"))
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>

@@ -307,12 +307,18 @@
   flex-wrap: wrap;
 }
 
+.todo-right-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .todo-id-badge {
   min-width: 42px;
   height: 22px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
-  color: var(--status-primary-light);
+  color: #aa96da;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -325,6 +331,28 @@
 .todo-id-icon {
   width: 13px;
   height: 13px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.todo-tag-badge {
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
+  color: #b8a99a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: var(--font-sm);
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 7px;
+}
+
+.todo-tag-icon {
+  width: 12px;
+  height: 12px;
   fill: currentColor;
   flex-shrink: 0;
 }
@@ -483,6 +511,16 @@
 }
 
 .todo-row.overdue .todo-attachment-count {
+  background: var(--status-overdue-badge-bg);
+  color: var(--status-danger-base);
+}
+
+.todo-row.overdue .todo-id-badge {
+  background: var(--status-overdue-badge-bg);
+  color: var(--status-danger-base);
+}
+
+.todo-row.overdue .todo-tag-badge {
   background: var(--status-overdue-badge-bg);
   color: var(--status-danger-base);
 }

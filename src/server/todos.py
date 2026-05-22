@@ -3,36 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
     Request,
     Response,
 )
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from clock import Clock
 from config import AppSettings
 from exceptions import AMToDoError, NotFoundError, ValidationError
-from serialization import attachment_to_dict, changelog_entry_to_dict, todo_to_dict
+from serialization import attachment_to_dict, changelog_entry_to_dict, schedule_attachment_to_dict, todo_to_dict
 from server.attachment_helpers import (
-    build_download_response,
-    check_base64_size,
-    decode_base64_content,
     make_attachment_service,
     unique_targets,
-    validate_attachment_limits,
 )
 from server.common import target_result as _target_result_helper
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
-    TodoAttachmentDownloadRequest,
     TodoAttachmentGetRequest,
     TodoAttachmentListRequest,
     TodoAttachmentRemoveOrphanedRequest,
     TodoAttachmentRemoveRequest,
-    TodoAttachmentUploadRequest,
     TodoBatchCreateRequest,
     TodoBatchUpdateRequest,
     TodoChangelogQueryRequest,
@@ -47,7 +44,7 @@ from server.schemas import (
     TodoTrashRestoreRequest,
     TodoUpdateRequest,
 )
-from services import AttachmentDraft, TodoDraft, TodoService, TodoUpdate
+from services import TodoDraft, TodoService, TodoUpdate
 from services.uow import UnitOfWork
 
 if TYPE_CHECKING:
@@ -267,45 +264,121 @@ def remove_attachment(
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
 
-@router.post("/attachments/upload")
-def upload_attachment_json(
-    body: TodoAttachmentUploadRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Upload a file attachment via encrypted JSON."""
-
+@router.put("/attachments/upload")
+async def stream_upload_attachment(request: Request, token: str):
+    """Stream-upload a pre-encrypted cipher file using a one-time upload token."""
+    upload_token_store = request.app.state.upload_token_store
     settings_obj = request.app.state.settings
-    check_base64_size(body.content_base64, settings_obj.max_attachment_size_bytes)
-    content = decode_base64_content(body.content_base64)
 
-    validate_attachment_limits(
-        settings_obj, body.todo_id, len(content), None, clock, request, "todo", uow=uow
-    )
+    # 1. Validate token
+    tok = upload_token_store.get(token)
+    if not tok:
+        raise HTTPException(404, "Invalid or expired token")
 
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    attachment = service.create(
-        body.todo_id,
-        AttachmentDraft(
-            filename=body.filename,
-            content=content,
-            mime_type=body.mime_type,
-        ),
-    )
-    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
+    # 2. Check Content-Length header (fast reject)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings_obj.max_attachment_size_bytes + 32:
+        upload_token_store.pop(token)
+        raise HTTPException(413, "File too large")
+
+    # 3. Stream to temp file with byte counter
+    temp_path = tok.temp_path
+    total = 0
+    try:
+        with open(temp_path, "wb") as f:
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > settings_obj.max_attachment_size_bytes + 32:
+                    raise HTTPException(413, "File too large")
+                f.write(chunk)
+    except HTTPException:
+        temp_path.unlink(missing_ok=True)
+        upload_token_store.pop(token)
+        raise
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        upload_token_store.pop(token)
+        raise
+
+    # 4. Finalize -- remove token, keep temp file
+    tok_final = upload_token_store.finalize(token)
+    if not tok_final:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(408, "Token expired during upload")
+
+    # 5. Service creates metadata + moves file to final location
+    from clock import SystemClock
+
+    clock = SystemClock()
+    db = request.app.state.db
+
+    with UnitOfWork(db, tok_final.user_id) as uow:
+        svc = make_attachment_service(uow, clock, request, tok_final.owner_type)
+        attachment = svc.create_from_cipher(
+            owner_id=tok_final.owner_id,
+            cipher_path=temp_path,
+            cipher_size=total,
+            filename=tok_final.filename,
+            mime_type=tok_final.mime_type,
+            file_key=tok_final.file_key,
+            hmac_key=tok_final.hmac_key,
+            nonce=tok_final.nonce,
+            plain_size=tok_final.plain_size,
+        )
+        uow.session.flush()
+        dict_fn = attachment_to_dict if tok_final.owner_type == "todo" else schedule_attachment_to_dict
+        result = {"ok": True, "attachment": dict_fn(attachment, uow.user_id)}
+
+    return JSONResponse(result)
 
 
-@router.post("/attachments/download")
-def download_attachment(
-    body: TodoAttachmentDownloadRequest,
+@router.get("/attachments/{attachment_id}/download")
+async def stream_download_attachment(
+    attachment_id: int,
+    token: str,
     request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> Response:
-    """Download encrypted attachment bytes."""
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    return build_download_response(service, body.todo_id, body.attachment_id)
+):
+    """Stream-download an encrypted attachment using a one-time download token."""
+    download_token_store = request.app.state.download_token_store
+
+    # 1. Validate token
+    tok = download_token_store.get(token)
+    if not tok:
+        raise HTTPException(404, "Invalid or expired token")
+
+    # 2. Resolve attachment
+    from clock import SystemClock
+
+    clock = SystemClock()
+    db = request.app.state.db
+
+    with UnitOfWork(db, tok.user_id) as uow:
+        svc = make_attachment_service(uow, clock, request, tok.owner_type)
+        attachment = svc.show(tok.owner_id, tok.attachment_id)
+        cipher_path = svc.encrypted_path(attachment)
+
+    if not cipher_path.exists():
+        raise HTTPException(404, "File not found")
+
+    # 3. Stream cipher file back
+    safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
+
+    return StreamingResponse(
+        _file_iterator(cipher_path),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}.enc"',
+            "Content-Length": str(attachment.cipher_size_bytes),
+            "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
+            "X-AMToDo-Updated-At": str(attachment.updated_at),
+        },
+    )
+
+
+def _file_iterator(path: Path, chunk_size: int = 65536):
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            yield chunk
 
 
 @router.post("/create")

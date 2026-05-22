@@ -1,4 +1,6 @@
 import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
+import type { DownloadProgress } from "./chunked-download";
+import { decryptBuffer } from "./stream-crypto";
 
 type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
 
@@ -13,21 +15,23 @@ const STORE_NAME = "attachments";
 const DB_VERSION = 1;
 
 export async function getAttachmentBlob(
-  downloadFn: () => Promise<ArrayBuffer>,
+  downloadFn: (onProgress?: (progress: DownloadProgress) => void) => Promise<ArrayBuffer>,
   metadata: CacheableMeta,
   cacheKey: string,
+  onProgress?: (progress: DownloadProgress) => void,
 ): Promise<{ blob: Blob; cacheHit: boolean }> {
   const db = await openDb();
   const cached = await getRecord(db, cacheKey);
   if (cached && metadataMatches(cached.metadata, metadata)) {
+    onProgress?.({ loaded: metadata.plain_size_bytes, total: metadata.plain_size_bytes, percent: 100 });
     return {
       blob: new Blob([cached.plain], { type: metadata.mime_type }),
       cacheHit: true
     };
   }
 
-  const cipher = await downloadFn();
-  const plain = await decryptAttachment(cipher, metadata);
+  const cipher = await downloadFn(onProgress);
+  const plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
   await putRecord(db, { key: cacheKey, metadata, plain });
   return {
     blob: new Blob([plain], { type: metadata.mime_type }),
@@ -110,23 +114,3 @@ function txDone(tx: IDBTransaction): Promise<void> {
   });
 }
 
-async function decryptAttachment(
-  cipher: ArrayBuffer,
-  metadata: CacheableMeta
-): Promise<ArrayBuffer> {
-  const keyBytes = base64ToBuffer(metadata.file_key);
-  const nonce = base64ToBuffer(metadata.nonce);
-  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, [
-    "decrypt"
-  ]);
-  return crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, cipher);
-}
-
-function base64ToBuffer(value: string): ArrayBuffer {
-  const raw = atob(value);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) {
-    bytes[i] = raw.charCodeAt(i);
-  }
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-}

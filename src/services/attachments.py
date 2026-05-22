@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import logging
 import mimetypes
-import secrets
-from dataclasses import dataclass
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from exceptions import NotFoundError, ValidationError
 
@@ -26,16 +22,7 @@ if TYPE_CHECKING:
         TodoRepository,
     )
 
-ENCRYPTION_ALG = "AES-256-GCM"
-
-
-@dataclass(frozen=True, slots=True)
-class AttachmentDraft:
-    """Input data for creating an attachment."""
-
-    filename: str
-    content: bytes
-    mime_type: str | None = None
+ENCRYPTION_ALG = "AES-128-CTR-HMAC-SHA256"
 
 
 class AttachmentService:
@@ -61,55 +48,70 @@ class AttachmentService:
         self._owner_type = owner_type
         self._changelog = changelog_service
 
-    def create(self, owner_id: int, draft: AttachmentDraft) -> object:
-        """Encrypt and store a file attachment in two phases.
+    def create_from_cipher(
+        self,
+        owner_id: int,
+        cipher_path: Path,
+        cipher_size: int,
+        filename: str,
+        mime_type: str | None,
+        file_key: str,
+        hmac_key: str,
+        nonce: str,
+        plain_size: int,
+    ) -> object:
+        """Create attachment from pre-encrypted cipher file (client-side encryption).
 
         Phase 1: create metadata row and flush to obtain attachment.id.
-        Phase 2: generate storage path from id, write file, update storage_path.
+        Phase 2: generate storage path from id, move cipher file, update storage_path.
         """
 
+        # 1. Validate owner exists
         self._require_owner(owner_id)
-        filename = _clean_filename(draft.filename)
-        if not draft.content:
-            raise ValidationError("attachment content cannot be empty")
 
-        mime_type = (
-            draft.mime_type
-            or mimetypes.guess_type(filename)[0]
+        # 2. Clean filename, guess MIME, determine preview_kind
+        clean_name = _clean_filename(filename)
+        resolved_mime = (
+            mime_type
+            or mimetypes.guess_type(clean_name)[0]
             or "application/octet-stream"
         )
-        preview_kind = _preview_kind(mime_type)
+        preview_kind = _preview_kind(resolved_mime)
+
+        # 3. Compute cipher_sha256 by streaming hash over cipher_path
+        cipher_sha256 = _sha256_hex_file(cipher_path)
+
+        # 4. Get next_file_index
         file_index = self._repository.next_file_index(owner_id)
-        key = secrets.token_bytes(32)
-        nonce = secrets.token_bytes(12)
-        cipher = AESGCM(key).encrypt(nonce, draft.content, None)
         now = self._clock.now_epoch()
 
-        # Phase 1: insert metadata with placeholder path, flush to get id
+        # 5. Insert metadata row with client-provided encryption params
         owner_field = f"{self._owner_type}_id"
         attachment = self._model(
             **{
                 owner_field: owner_id,
                 "file_index": file_index,
-                "filename": filename,
-                "mime_type": mime_type,
+                "filename": clean_name,
+                "mime_type": resolved_mime,
                 "preview_kind": preview_kind,
-                "plain_size_bytes": len(draft.content),
-                "cipher_size_bytes": len(cipher),
-                "plain_sha256": _sha256_hex(draft.content),
-                "cipher_sha256": _sha256_hex(cipher),
-                "file_key": _b64(key),
-                "nonce": _b64(nonce),
+                "plain_size_bytes": plain_size,
+                "cipher_size_bytes": cipher_size,
+                "plain_sha256": "",  # server doesn't know plaintext
+                "cipher_sha256": cipher_sha256,
+                "file_key": file_key,
+                "nonce": nonce,
                 "encryption_alg": ENCRYPTION_ALG,
                 "storage_path": "",
                 "created_at": now,
                 "updated_at": now,
             }
         )
+
+        # 6. Flush to get attachment.id
         attachment = self._repository.add(attachment)
         self._repository.flush()
 
-        # Phase 2: generate storage path from attachment.id, write file
+        # 7. Move cipher file to final storage location
         relative_path = (
             Path(self._owner_type)
             / str(self._user_id)
@@ -118,8 +120,9 @@ class AttachmentService:
         )
         absolute_path = self._storage_root / relative_path
         absolute_path.parent.mkdir(parents=True, exist_ok=True)
-        absolute_path.write_bytes(cipher)
+        shutil.move(str(cipher_path), str(absolute_path))
 
+        # 8. Update storage_path, touch owner's updated_at
         attachment.storage_path = str(relative_path)
         self._touch_owner(owner_id)
         if self._changelog:
@@ -129,6 +132,8 @@ class AttachmentService:
             else:
                 meta = schedule_attachment_to_dict(attachment, self._user_id)
             self._changelog.record_attachment_add(owner_id, meta)
+
+        # 9. Return attachment
         return attachment
 
     def list_for_owner(self, owner_id: int) -> list[object]:
@@ -236,9 +241,10 @@ def _preview_kind(mime_type: str) -> str:
     return "none"
 
 
-def _sha256_hex(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
-
-def _b64(content: bytes) -> str:
-    return base64.b64encode(content).decode("ascii")
+def _sha256_hex_file(path: Path) -> str:
+    """Compute SHA-256 hex digest by streaming over a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()

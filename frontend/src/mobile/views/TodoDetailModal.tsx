@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../../api/client";
+import type { UploadProgress } from "../../lib/chunked-upload";
+import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
@@ -81,6 +83,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
@@ -117,7 +121,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
         try {
           const { blob } = await getAttachmentBlob(
-            () => api.downloadTodoAttachment(todo.id, attachment.id),
+            (onProgress) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress),
             attachment,
             `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
           );
@@ -318,17 +322,18 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       }
     }
 
-    // Check attachment count limit
-    if (attachments.length + selected.length > api.maxAttachmentsPerTodo) {
-      setError(t("common.tooManyAttachments", { max: api.maxAttachmentsPerTodo }));
-      return;
-    }
-
     setAttachmentBusy(true);
     setError(null);
     try {
       for (const file of selected) {
-        await api.uploadTodoAttachment(todo.id, file);
+        const key = `${file.name}-${file.size}`;
+        try {
+          await api.uploadTodoAttachment(todo.id, file, (progress) => {
+            setUploadProgress((prev) => ({ ...prev, [key]: progress }));
+          });
+        } finally {
+          setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        }
       }
       setAttachmentsChanged(true);
       const updatedAttachments = await loadAttachments();
@@ -346,12 +351,14 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   async function openAttachment(attachment: AttachmentMetadata) {
     if (attachment.is_orphaned) return;
     setDownloadingId(attachment.id);
+    setDownloadProgress(null);
     setError(null);
     try {
       const { blob } = await getAttachmentBlob(
-        () => api.downloadTodoAttachment(todo.id, attachment.id),
+        (onProgress) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress),
         attachment,
         `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
+        (progress) => setDownloadProgress(progress),
       );
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -370,6 +377,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
       setDownloadingId(null);
+      setDownloadProgress(null);
     }
   }
 
@@ -549,7 +557,13 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               }}
             />
           </div>
-          {attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
+          {attachmentBusy && Object.keys(uploadProgress).length > 0
+            ? Object.entries(uploadProgress).map(([key, progress]) => progress && (
+                <div key={key} className="attachment-progress-bar attachment-progress-bar--pct" aria-label={`${progress.percent}%`}>
+                  <div className="attachment-progress-fill" style={{ width: `${progress.percent}%` }} />
+                </div>
+              ))
+            : attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
 
           <div className="attachment-list">
             {attachments.map((attachment) => {
@@ -597,7 +611,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       {orphaned
                         ? t("common.fileMissing")
                         : downloadingId === attachment.id
-                          ? t("common.downloading")
+                          ? (downloadProgress ? `${downloadProgress.percent}%` : t("common.downloading"))
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>

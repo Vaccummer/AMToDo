@@ -235,7 +235,6 @@ export function App() {
         settings.access_token,
         null,
         limits.max_attachment_size_bytes,
-        limits.max_attachments_per_todo,
         wsClient
       );
 

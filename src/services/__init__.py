@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.attachments import AttachmentDraft, AttachmentService
+from services.attachments import AttachmentService
 from services.changelogs import NotificationChangelogService, ScheduleChangelogService, TodoChangelogService
 from services.context import ApplicationContext, create_application_context
 from services.notifications import NotificationDraft, NotificationService, NotificationUpdate
@@ -11,7 +11,6 @@ from services.todos import TodoDraft, TodoService, TodoUpdate
 
 __all__ = [
     "ApplicationContext",
-    "AttachmentDraft",
     "AttachmentService",
     "NotificationChangelogService",
     "NotificationDraft",

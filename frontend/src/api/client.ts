@@ -1,5 +1,10 @@
 import { SERVER_URL } from "../config";
 import type { UiWsClient } from "./ws-client";
+import type { UploadProgress } from "../lib/chunked-upload";
+import { uploadWithProgress } from "../lib/chunked-upload";
+import type { DownloadProgress } from "../lib/chunked-download";
+import { downloadWithProgress } from "../lib/chunked-download";
+import { generateFileKeys, encryptFile } from "../lib/stream-crypto";
 
 export type HealthResponse = {
   status: string;
@@ -12,7 +17,6 @@ export type HealthResponse = {
   bind?: string[];
   limits: {
     max_attachment_size_bytes: number;
-    max_attachments_per_todo: number;
   };
 };
 
@@ -392,21 +396,18 @@ export class AMToDoApi {
   private readonly p256PublicKey: CryptoKey | null;
   private readonly wsClient: UiWsClient | null;
   maxAttachmentSize: number;
-  maxAttachmentsPerTodo: number;
 
   constructor(
     baseUrl = DEFAULT_BASE_URL,
     token: string | null = null,
     p256PublicKey: CryptoKey | null = null,
     maxAttachmentSize = 20 * 1024 * 1024,
-    maxAttachmentsPerTodo = 20,
     wsClient: UiWsClient | null = null,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
     this.p256PublicKey = p256PublicKey;
     this.maxAttachmentSize = maxAttachmentSize;
-    this.maxAttachmentsPerTodo = maxAttachmentsPerTodo;
     this.wsClient = wsClient;
   }
 
@@ -592,20 +593,51 @@ export class AMToDoApi {
     });
   }
 
-  async uploadTodoAttachment(todoId: number, file: File): Promise<AttachmentResponse> {
-    return this.post("/api/v1/todos/attachments/upload", {
-      todo_id: todoId,
-      filename: file.name,
-      mime_type: file.type || null,
-      content_base64: await fileToBase64(file)
-    });
+  async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void): Promise<AttachmentResponse> {
+    if (!this.wsClient) throw new Error("WebSocket client not available");
+    const keys = generateFileKeys();
+
+    // Encrypt file with progress (reports encryption phase)
+    const { cipher, plainSize } = await encryptFile(
+      file, keys.fileKey, keys.nonce,
+      (loaded, total) => onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100) }),
+    );
+
+    // WS: init upload → get token
+    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+      "attachment.init_upload",
+      {
+        owner_type: "todo",
+        owner_id: todoId,
+        filename: file.name,
+        mime_type: file.type || null,
+        file_key: keys.fileKey,
+        hmac_key: keys.hmacKey,
+        nonce: keys.nonce,
+        plain_size: plainSize,
+      },
+    );
+
+    // HTTP PUT with progress (reports upload phase)
+    return uploadWithProgress<AttachmentMetadata>(
+      `${this.baseUrl}/api/v1/todos/attachments/upload?token=${token}`,
+      cipher,
+      { "Content-Type": "application/octet-stream" },
+      onProgress,
+    ) as unknown as Promise<AttachmentResponse>;
   }
 
-  async downloadTodoAttachment(todoId: number, attachmentId: number): Promise<ArrayBuffer> {
-    return this.downloadAttachment("/api/v1/todos/attachments/download", {
-      todo_id: todoId,
-      attachment_id: attachmentId
-    });
+  async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void): Promise<ArrayBuffer> {
+    if (!this.wsClient) throw new Error("WebSocket client not available");
+    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+      "attachment.init_download",
+      { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
+    );
+
+    return downloadWithProgress(
+      `${this.baseUrl}/api/v1/todos/attachments/${attachmentId}/download?token=${token}`,
+      onProgress,
+    );
   }
 
   async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
@@ -638,20 +670,51 @@ export class AMToDoApi {
     });
   }
 
-  async uploadScheduleAttachment(scheduleId: number, file: File): Promise<ScheduleAttachmentResponse> {
-    return this.post("/api/v1/schedules/attachments/upload", {
-      schedule_id: scheduleId,
-      filename: file.name,
-      mime_type: file.type || null,
-      content_base64: await fileToBase64(file)
-    });
+  async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void): Promise<ScheduleAttachmentResponse> {
+    if (!this.wsClient) throw new Error("WebSocket client not available");
+    const keys = generateFileKeys();
+
+    // Encrypt file with progress (reports encryption phase)
+    const { cipher, plainSize } = await encryptFile(
+      file, keys.fileKey, keys.nonce,
+      (loaded, total) => onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100) }),
+    );
+
+    // WS: init upload → get token
+    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+      "attachment.init_upload",
+      {
+        owner_type: "schedule",
+        owner_id: scheduleId,
+        filename: file.name,
+        mime_type: file.type || null,
+        file_key: keys.fileKey,
+        hmac_key: keys.hmacKey,
+        nonce: keys.nonce,
+        plain_size: plainSize,
+      },
+    );
+
+    // HTTP PUT with progress (reports upload phase)
+    return uploadWithProgress<ScheduleAttachmentMetadata>(
+      `${this.baseUrl}/api/v1/schedules/attachments/upload?token=${token}`,
+      cipher,
+      { "Content-Type": "application/octet-stream" },
+      onProgress,
+    ) as unknown as Promise<ScheduleAttachmentResponse>;
   }
 
-  async downloadScheduleAttachment(scheduleId: number, attachmentId: number): Promise<ArrayBuffer> {
-    return this.downloadAttachment("/api/v1/schedules/attachments/download", {
-      schedule_id: scheduleId,
-      attachment_id: attachmentId
-    });
+  async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void): Promise<ArrayBuffer> {
+    if (!this.wsClient) throw new Error("WebSocket client not available");
+    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+      "attachment.init_download",
+      { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
+    );
+
+    return downloadWithProgress(
+      `${this.baseUrl}/api/v1/schedules/attachments/${attachmentId}/download?token=${token}`,
+      onProgress,
+    );
   }
 
   async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {

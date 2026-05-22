@@ -99,7 +99,6 @@ export const zhCN: Record<string, string> = {
   "common.deleteAttachment": "删除附件",
   "common.deleteAttachmentConfirm": "确定删除附件「{{name}}」吗？",
   "common.fileTooLarge": "文件 \"{{name}}\" 大小 ({{size}}) 超过上限 ({{max}})",
-  "common.tooManyAttachments": "附件总数将超过上限 ({{max}})",
   "common.previousMonth": "上一月",
   "common.nextMonth": "下一月",
   "common.backToToday": "回到今天",

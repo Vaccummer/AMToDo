@@ -205,15 +205,20 @@ class TodoAttachmentGetRequest(UserAuthMixin):
     attachment_id: int
 
 
-class TodoAttachmentUploadRequest(UserAuthMixin):
-    todo_id: int
+class AttachmentInitUploadRequest(UserAuthMixin):
+    owner_type: Literal["todo", "schedule"]
+    owner_id: int
     filename: str
-    content_base64: str
     mime_type: str | None = None
+    file_key: str             # base64
+    hmac_key: str             # base64
+    nonce: str                # base64
+    plain_size: int
 
 
-class TodoAttachmentDownloadRequest(UserAuthMixin):
-    todo_id: int
+class AttachmentInitDownloadRequest(UserAuthMixin):
+    owner_type: Literal["todo", "schedule"]
+    owner_id: int
     attachment_id: int
 
 
@@ -233,18 +238,6 @@ class ScheduleAttachmentListRequest(UserAuthMixin):
 
 
 class ScheduleAttachmentGetRequest(UserAuthMixin):
-    schedule_id: int
-    attachment_id: int
-
-
-class ScheduleAttachmentUploadRequest(UserAuthMixin):
-    schedule_id: int
-    filename: str
-    content_base64: str
-    mime_type: str | None = None
-
-
-class ScheduleAttachmentDownloadRequest(UserAuthMixin):
     schedule_id: int
     attachment_id: int
 

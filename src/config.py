@@ -14,9 +14,10 @@ __version__ = "0.1.0"
 DEFAULT_LANGUAGE = "zh-CN"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
-DEFAULT_MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
-DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES = int(DEFAULT_MAX_ATTACHMENT_SIZE_BYTES * 1.5)
-DEFAULT_MAX_ATTACHMENTS_PER_TODO = 20
+DEFAULT_MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
+DEFAULT_UPLOAD_TOKEN_TTL_SECONDS = 300  # 5 minutes
+DEFAULT_DOWNLOAD_TOKEN_TTL_SECONDS = 60
+DEFAULT_UPLOAD_TEMP_ROOT = str(Path(__import__("tempfile").gettempdir()) / "amtodo-uploads")
 DEFAULT_RATE_LIMIT_REQUESTS = 30
 DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_IP_CACHE_TTL_SECONDS = 300
@@ -41,8 +42,6 @@ class AppSettings:
     server_private_key_path: str = ""
     request_timestamp_tolerance_seconds: int = 300
     max_attachment_size_bytes: int = DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
-    max_attachment_request_body_bytes: int = DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES
-    max_attachments_per_todo: int = DEFAULT_MAX_ATTACHMENTS_PER_TODO
     attachment_root: str = ""
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
     rate_limit_window_seconds: int = DEFAULT_RATE_LIMIT_WINDOW_SECONDS
@@ -125,13 +124,6 @@ def load_settings() -> AppSettings:
         access_token=os.environ.get("AMTODO_SERVER_TOKEN", ""),
         max_attachment_size_bytes=_int_env(
             "AMTODO_MAX_ATTACHMENT_SIZE_BYTES", DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
-        ),
-        max_attachment_request_body_bytes=_int_env(
-            "AMTODO_MAX_ATTACHMENT_REQUEST_BODY_BYTES",
-            DEFAULT_MAX_ATTACHMENT_REQUEST_BODY_BYTES,
-        ),
-        max_attachments_per_todo=_int_env(
-            "AMTODO_MAX_ATTACHMENTS_PER_TODO", DEFAULT_MAX_ATTACHMENTS_PER_TODO
         ),
     )
 
