@@ -22,7 +22,7 @@ import searchIcon from "../assets/search.svg";
 import trashIcon from "../assets/trash.svg";
 import notifyIcon from "../assets/notify.svg";
 
-type Tab = "todo" | "schedule" | "search" | "trash" | "notify";
+type Tab = "todo" | "schedule" | "search" | "trash" | "settings";
 type ConnectionStatus = "checking" | "online" | "offline";
 
 const tabIcons: Record<Tab, string> = {
@@ -30,7 +30,7 @@ const tabIcons: Record<Tab, string> = {
   schedule: scheduleIcon,
   search: searchIcon,
   trash: trashIcon,
-  notify: notifyIcon,
+  settings: gearIcon,
 };
 
 const shell = window.amtodoShell!;
@@ -286,28 +286,33 @@ export function App() {
   // Disconnect WS when app goes to background, reconnect on foreground
   useEffect(() => {
     let listenerHandle: { remove: () => Promise<void> } | undefined;
+    let aborted = false;
 
     import("@capacitor/app").then(({ App }) => {
+      if (aborted) return;
       App.addListener("appStateChange", ({ isActive }) => {
         const ws = wsClientRef.current;
         if (!ws) return;
 
         if (isActive) {
-          // App came to foreground — reconnect if disconnected
           if (ws.connectionStatus === "disconnected") {
-            ws.connect().catch(() => {});
+            ws.connect().catch((err: unknown) => {
+              connectionManagerRef.current.reportHealthError(
+                "network",
+                err instanceof Error ? err.message : "common.connectionFailed"
+              );
+            });
           }
         } else {
-          // App went to background — disconnect to save battery
           ws.disconnect();
-          setConnectionStatus("offline");
         }
       }).then((handle) => {
-        listenerHandle = handle;
+        if (!aborted) listenerHandle = handle;
       });
     }).catch(() => {});
 
     return () => {
+      aborted = true;
       listenerHandle?.remove();
     };
   }, []);
@@ -362,7 +367,7 @@ export function App() {
     schedule: tApp("tab.schedule"),
     search: tApp("tab.search"),
     trash: tApp("tab.trash"),
-    notify: tApp("tab.notify"),
+    settings: tApp("settings.title"),
   };
 
   return (
@@ -378,14 +383,6 @@ export function App() {
         </div>
         <div className="mobile-header-right">
           {username && <span className="mobile-username">{username}</span>}
-          <button
-            type="button"
-            className="mobile-settings-btn"
-            onClick={() => setShowSettings(true)}
-            aria-label={tApp("settings.title")}
-          >
-            <img src={gearIcon} alt="" />
-          </button>
         </div>
       </header>
 
@@ -421,16 +418,13 @@ export function App() {
             if (dateKey) navigateTab(target as Tab);
           }} />
         )}
-        {activeTab === "notify" && (
-          <NotifyView api={api} settings={settings} onNavigate={handleMentionNavigate} />
-        )}
         {activeTab === "trash" && (
           <TrashView api={api} />
         )}
       </main>
 
       <nav className="mobile-tab-bar">
-        {(["todo", "schedule", "search", "notify", "trash"] as const).map((tab) => (
+        {(["todo", "schedule", "search", "trash", "settings"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -443,7 +437,7 @@ export function App() {
         ))}
       </nav>
 
-      {showSettings && (
+      {activeTab === "settings" && (
         <SettingsModal
           settings={settings}
           connectionStatus={connStatus}
@@ -468,7 +462,7 @@ export function App() {
           }}
           onClose={() => {
             flushSettings(settings);
-            setShowSettings(false);
+            navigateTab("todo");
           }}
         />
       )}
