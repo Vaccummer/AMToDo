@@ -363,16 +363,26 @@ export function notifyNetworkStatus(online: boolean, message?: string) {
   );
 }
 
+const FETCH_TIMEOUT_MS = 5_000;
+
 async function fetchWithNetworkStatus(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(input, init);
+    const response = await fetch(input, { ...init, signal: controller.signal });
     return response;
   } catch (error: unknown) {
+    if (controller.signal.aborted) {
+      notifyNetworkStatus(false, "client.networkError");
+      throw new Error(`Fetch timed out after ${FETCH_TIMEOUT_MS}ms`);
+    }
     notifyNetworkStatus(false, error instanceof Error ? error.message : "client.networkError");
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

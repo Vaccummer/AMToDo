@@ -30,8 +30,8 @@ type PendingRequest = {
 
 // ── Constants ──
 
-const REQUEST_TIMEOUT_MS = 30_000;
-const CONNECT_TIMEOUT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 5_000;
+const CONNECT_TIMEOUT_MS = 5_000;
 
 /** Sentinel close code for client-side fingerprint mismatch (not a real WS close code). */
 const FINGERPRINT_MISMATCH_CODE = -1;
