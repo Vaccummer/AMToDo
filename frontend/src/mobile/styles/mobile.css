@@ -195,59 +195,168 @@
   flex-shrink: 0;
 }
 
-.mobile-shell .mobile-hero-date {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
+/* ── Mobile Hero: Week Strip ── */
 
-.mobile-shell .mobile-hero-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.5px;
-  margin: 0 0 12px;
-}
-
-.mobile-shell .mobile-hero-stats {
+.mobile-shell .mobile-hero-week-header {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
-.mobile-shell .mobile-stat-card {
+.mobile-shell .mobile-hero-month-label {
+  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.3px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 12px;
   text-align: center;
 }
 
-.mobile-shell .mobile-stat-num {
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1;
-  margin-bottom: 2px;
+.mobile-shell .mobile-hero-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
 
-.mobile-shell .mobile-stat-label {
-  font-size: 10px;
+.mobile-shell .mobile-hero-nav-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mobile-shell .mobile-hero-today-btn {
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  padding: 4px 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0 4px;
 }
 
-.mobile-shell .mobile-stat-highlight .mobile-stat-num {
+.mobile-shell .mobile-hero-today-btn.active {
+  background: rgba(74, 222, 128, 0.15);
   color: #4ade80;
 }
 
-.mobile-shell .mobile-stat-danger .mobile-stat-num {
+.mobile-shell .mobile-hero-today-btn:active {
+  opacity: 0.7;
+}
+
+.mobile-shell .mobile-hero-week-strip {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.mobile-shell .mobile-hero-day-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+
+.mobile-shell .mobile-hero-day-cell:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-shell .mobile-hero-day-cell.selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mobile-shell .mobile-hero-day-label {
+  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.3px;
+}
+
+.mobile-shell .mobile-hero-day-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mobile-shell .mobile-hero-day-cell.today .mobile-hero-day-num {
+  background: #4ade80;
+  color: #1a2820;
+}
+
+.mobile-shell .mobile-hero-day-cell.selected .mobile-hero-day-num {
+  color: #fff;
+}
+
+.mobile-shell .mobile-hero-day-cell.selected.today .mobile-hero-day-num {
+  background: #4ade80;
+  color: #1a2820;
+}
+
+.mobile-shell .mobile-hero-day-dot-spacer {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+/* ── Mobile Hero: Micro Ring Stats ── */
+
+.mobile-shell .mobile-hero-ring-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-shell .mobile-hero-ring {
+  flex-shrink: 0;
+}
+
+.mobile-shell .mobile-hero-ring-text {
+  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+.mobile-shell .mobile-hero-ring-text strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.mobile-shell .mobile-hero-ring-text .mobile-hero-overdue {
   color: #f87171;
+}
+
+.mobile-shell .mobile-hero-ring-empty {
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
 }
 
 /* ── Glass Panel ── */
