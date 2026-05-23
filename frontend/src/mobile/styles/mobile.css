@@ -131,6 +131,7 @@
 
 .mobile-shell .modal-backdrop {
   place-items: stretch;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mobile-shell .modal-card {
@@ -138,6 +139,25 @@
   max-height: 100%;
   border-radius: 0;
   animation: mobile-modal-in 0.2s ease-out;
+}
+
+.mobile-shell .modal-header {
+  padding-top: calc(18px + env(safe-area-inset-top));
+}
+
+.mobile-shell .modal-card button,
+.mobile-shell .modal-card input,
+.mobile-shell .modal-card textarea,
+.mobile-shell .modal-card label,
+.mobile-shell .modal-card a,
+.mobile-shell .modal-card .attachment-thumb,
+.mobile-shell .modal-card .attachment-name,
+.mobile-shell .modal-card .attachment-remove,
+.mobile-shell .modal-card .attachment-upload-button,
+.mobile-shell .modal-card .modal-toggle,
+.mobile-shell .modal-card .modal-btn,
+.mobile-shell .modal-card .modal-close {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mobile-shell .settings-modal-backdrop {
@@ -165,6 +185,42 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ── Schedule modal: full-screen on mobile ── */
+
+.mobile-shell .schedule-modal-backdrop {
+  place-items: stretch;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .schedule-modal-card {
+  width: 100%;
+  max-height: 100%;
+  height: 100%;
+  border-radius: 0;
+  animation: mobile-modal-in 0.2s ease-out;
+}
+
+.mobile-shell .schedule-modal-header {
+  padding-top: calc(18px + env(safe-area-inset-top));
+}
+
+.mobile-shell .schedule-modal-card button,
+.mobile-shell .schedule-modal-card input,
+.mobile-shell .schedule-modal-card textarea,
+.mobile-shell .schedule-modal-card label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Calendar popup: constrain on mobile ── */
+
+.mobile-shell .calendar-popup {
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  left: 50vw !important;
+  transform: translateX(-50%) !important;
 }
 
 /* ── Mobile overrides for existing views ── */
@@ -351,22 +407,29 @@
 /* ── Todo Cards (mobile override) ── */
 
 .mobile-shell .todo-list {
-  padding: 4px 16px 80px;
+  padding: 4px 10px 80px;
   gap: 6px;
 }
 
-.mobile-shell .todo-row {
+.mobile-shell .todo-view .todo-list .todo-row {
   display: flex;
+  grid-template-columns: initial;
   align-items: flex-start;
+  justify-self: auto;
+  align-self: auto;
   border-radius: 14px;
   border: 1px solid rgba(229, 223, 215, 0.6);
   background: #fff;
   padding: 16px 14px;
   gap: 12px;
   margin-bottom: 0;
-  min-height: 0;
+  min-height: 80px;
+  height: auto;
+  max-height: none;
   overflow: visible;
-  transition: transform 0.1s;
+  flex-shrink: 0;
+  position: relative;
+  transition: transform 0.2s ease;
 }
 
 .mobile-shell .todo-row::before {
@@ -391,10 +454,15 @@
 .mobile-shell .check-button {
   width: 28px;
   height: 28px;
-  border-width: 2.5px;
+  border-width: 0;
+  border: none;
+  background: transparent;
+  align-self: center;
+  justify-self: center;
+  padding: 0;
 }
 
-.mobile-shell .todo-title {
+.mobile-shell .todo-label {
   font-size: 14px;
   font-weight: 500;
 }
@@ -402,7 +470,8 @@
 .mobile-shell .todo-main {
   min-width: 0;
   flex: 1;
-  overflow: hidden;
+  overflow: visible !important;
+  height: auto !important;
 }
 
 .mobile-shell .todo-meta {
@@ -428,18 +497,48 @@
 
 .mobile-shell .todo-right {
   flex-shrink: 0;
+  gap: 2px;
+}
+
+.mobile-shell .todo-right-top {
+  display: flex;
+  flex-direction: row;
   gap: 4px;
 }
 
 .mobile-shell .todo-id-badge {
-  min-width: 36px;
-  height: 20px;
+  min-width: 0;
+  height: 26px;
   font-size: 11px;
-  gap: 3px;
+  gap: 5px;
+  padding: 0 6px;
 }
 
 .mobile-shell .todo-attachment-count {
+  min-width: 0;
+  height: 26px;
   font-size: 11px;
+  gap: 5px;
+  padding: 0 6px;
+}
+
+.mobile-shell .todo-tag-badge {
+  min-width: 0;
+  height: 26px;
+  font-size: 11px;
+  gap: 5px;
+  padding: 0 6px;
+}
+
+.mobile-shell .todo-id-icon,
+.mobile-shell .todo-tag-icon,
+.mobile-shell .todo-attachment-icon {
+  margin-right: 2px;
+}
+
+.mobile-shell .todo-tag-icon {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .mobile-shell .todo-row.overdue {
@@ -457,12 +556,41 @@
   border-color: rgba(212, 134, 10, 0.15);
 }
 
+/* ── M Layout mobile overrides ── */
+
+.mobile-shell .todo-row.m-compact {
+  padding: 12px 14px 10px;
+  gap: 10px;
+}
+
+.mobile-shell .todo-content .todo-label {
+  font-size: 14px;
+}
+
+.mobile-shell .todo-due {
+  font-size: 11px;
+}
+
+.mobile-shell .todo-row2 {
+  margin-top: 0;
+}
+
+.mobile-shell .todo-meta-item {
+  font-size: 11px;
+}
+
+.mobile-shell .todo-meta-tag {
+  max-width: 120px;
+}
+
 /* ── Swipe to Delete ── */
 
 .mobile-shell .todo-row-wrapper {
   position: relative;
   overflow: hidden;
   border-radius: 14px;
+  flex-shrink: 0;
+  height: auto !important;
 }
 
 .mobile-shell .todo-swipe-delete {
@@ -486,12 +614,7 @@
   background: #dc2626;
 }
 
-.mobile-shell .todo-row {
-  position: relative;
-  transition: transform 0.2s ease;
-}
-
-.mobile-shell .todo-row.swiped {
+.mobile-shell .todo-view .todo-list .todo-row.swiped {
   transform: translateX(-64px);
 }
 
@@ -1371,4 +1494,353 @@
   height: 1px;
   background: #ece8e1;
   margin: 0 18px;
+}
+
+/* ── Mobile Attachment Design C ── */
+
+.mobile-shell .attach-action-bar {
+  border-radius: 14px;
+  padding: 6px 10px;
+}
+
+.mobile-shell .attach-icon-btn {
+  width: 42px;
+  height: 42px;
+}
+
+.mobile-shell .attach-row {
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.mobile-shell .attach-del-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .ring-cancel {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Mobile Completion Toggle ── */
+
+.mobile-shell .modal-field:has(.modal-completion-toggle) {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-shell .modal-field:has(.modal-completion-toggle) .modal-field-label {
+  margin-bottom: 0;
+}
+
+.mobile-shell .modal-completion-toggle {
+  padding: 8px 14px;
+  gap: 8px;
+}
+
+.mobile-shell .modal-completion-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── Mobile Extra Fields Editor (mef-) ── */
+
+.mef {
+  margin: 0;
+  padding: 0;
+}
+
+.mef-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 8px;
+}
+
+.mef-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mef-header-left svg {
+  color: #8c8277;
+  opacity: 0.7;
+}
+
+.mef-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #342f2a;
+}
+
+.mef-header-count {
+  font-size: 11px;
+  color: #8c8277;
+  margin-left: 4px;
+}
+
+.mef-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e4ddd3;
+  background: #fff;
+  color: #5c5650;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.mef-add:active {
+  background: #f5f0ea;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.mef-chips {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.mef-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.mef-chip-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  will-change: transform;
+}
+
+.mef-chip-wrapper.mef-dragging {
+  z-index: 10;
+  transform: scale(1.04);
+  opacity: 0.95;
+}
+
+.mef-chip-wrapper.mef-drop-target {
+  transform: translateY(var(--mef-shift, 0px));
+}
+
+.mef-grip {
+  flex-shrink: 0;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #c4b8a8;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.mef-grip svg {
+  pointer-events: none;
+}
+
+.mef-chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e4ddd3;
+  border-radius: 10px;
+  padding: 0 10px;
+  height: 34px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.mef-chip:active {
+  background: #faf7f2;
+  border-color: #c4b8a8;
+}
+
+.mef-chip-key {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5c5650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.mef-chip-divider {
+  font-size: 11px;
+  color: #d5cdc3;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.mef-chip-value {
+  font-size: 12px;
+  color: #8c8277;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.mef-chip-del {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #c4b8a8;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  margin-left: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mef-chip-del:active {
+  background: rgba(198, 47, 47, 0.1);
+  color: #c62f2f;
+}
+
+.mef-empty {
+  text-align: center;
+  padding: 12px 0;
+  font-size: 12px;
+  color: #b5a999;
+}
+
+/* ── Bottom Sheet Edit Panel ── */
+
+.mef-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  -webkit-tap-highlight-color: transparent;
+  animation: mef-fade-in 0.2s ease-out;
+}
+
+.mef-edit-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 201;
+  background: #faf7f2;
+  border-radius: 16px 16px 0 0;
+  padding: 12px 20px calc(20px + env(safe-area-inset-bottom));
+  animation: mef-slide-up 0.25s ease-out;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.mef-edit-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #d5cdc3;
+  margin: 0 auto 12px;
+}
+
+.mef-edit-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #342f2a;
+  margin-bottom: 14px;
+}
+
+.mef-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.mef-edit-fields input {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #e4ddd3;
+  border-radius: 10px;
+  background: #fff;
+  color: #342f2a;
+  font-size: 14px;
+  padding: 0 12px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mef-edit-fields input:focus {
+  border-color: #a09888;
+  box-shadow: 0 0 0 3px rgba(160, 152, 136, 0.12);
+}
+
+.mef-edit-fields input::placeholder {
+  color: #b5a999;
+}
+
+.mef-edit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.mef-edit-actions button {
+  flex: 1;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
+}
+
+.mef-edit-actions button:active {
+  opacity: 0.7;
+}
+
+.mef-btn-cancel {
+  background: #ebe5dc;
+  color: #5c5650;
+}
+
+.mef-btn-confirm {
+  background: #342f2a;
+  color: #faf7f2;
+}
+
+.mef-drag-lifted {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+@keyframes mef-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mef-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
