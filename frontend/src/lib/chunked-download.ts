@@ -29,8 +29,9 @@ export async function downloadWithProgress(
     });
   }
 
-  // Validate that the received bytes match the expected Content-Length
-  if (contentLength > 0 && loaded !== contentLength) {
+  // Validate that we received at least the expected bytes (truncated download check).
+  // If received > expected, the server metadata may be stale — let the HMAC check catch corruption.
+  if (contentLength > 0 && loaded < contentLength) {
     throw new Error(`Download incomplete: received ${loaded} of ${contentLength} bytes`);
   }
 

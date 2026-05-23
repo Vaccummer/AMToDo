@@ -432,14 +432,20 @@ export class AMToDoApi {
     return this.baseUrl;
   }
 
-  /** Ensure the WS client is connected. Attempts reconnect if the client exists but is disconnected. */
+  /** Ensure the WS client is connected. Attempts reconnect if the client exists but is not connected. */
   private async ensureConnected(): Promise<void> {
     if (!this.wsClient) {
       throw new Error("WebSocket client not available");
     }
-    if (this.wsClient.connectionStatus === "disconnected") {
-      await this.wsClient.connect();
+    const status = this.wsClient.connectionStatus;
+    if (status === "connected") return;
+    // "connecting" or "reconnecting" — wait briefly for the in-flight connection to land
+    if (status === "connecting" || status === "reconnecting") {
+      const ok = await this.wsClient.waitForConnected(10000);
+      if (ok) return;
     }
+    // "disconnected" or timed out above — do a fresh connect
+    await this.wsClient.connect();
   }
 
   async health(): Promise<HealthResponse> {
