@@ -315,7 +315,7 @@
 
 .todo-id-badge {
   min-width: 42px;
-  height: 22px;
+  height: 26px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
   color: #aa96da;
@@ -329,14 +329,14 @@
 }
 
 .todo-id-icon {
-  width: 13px;
-  height: 13px;
-  fill: currentColor;
+  font-size: 13px;
+  line-height: 1;
   flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .todo-tag-badge {
-  height: 22px;
+  height: 26px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
   color: #b8a99a;
@@ -351,10 +351,10 @@
 }
 
 .todo-tag-icon {
-  width: 12px;
-  height: 12px;
-  fill: currentColor;
+  font-size: 12px;
+  line-height: 1;
   flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .todo-status-badge {
@@ -413,7 +413,7 @@
 
 .todo-attachment-count {
   min-width: 42px;
-  height: 22px;
+  height: 26px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--global-surface-line) 90%, transparent);
   color: var(--global-text-warm);
@@ -427,10 +427,10 @@
 }
 
 .todo-attachment-icon {
-  width: 13px;
-  height: 13px;
-  fill: currentColor;
+  font-size: 13px;
+  line-height: 1;
   flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .todo-row.completed {
@@ -458,9 +458,7 @@
 }
 
 .todo-row.completed .check-button {
-  border-color: var(--status-primary-muted);
-  background: #e4ebe1;
-  color: var(--global-surface-cool-4);
+  color: var(--status-primary-base);
 }
 
 .todo-row.completed .todo-attachment-count {
@@ -495,8 +493,6 @@
 }
 
 .todo-row.late-done .check-button {
-  border-color: var(--modals-schedule-amber);
-  background: var(--modals-schedule-cream);
   color: var(--modals-schedule-label);
 }
 
@@ -506,7 +502,6 @@
 }
 
 .todo-row.overdue .check-button {
-  border-color: var(--status-danger-base);
   color: var(--status-danger-base);
 }
 
@@ -644,17 +639,15 @@
 .check-button {
   width: 30px;
   height: 30px;
-  border: 2px solid var(--status-primary-base);
-  border-radius: var(--radius-pill);
+  border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--status-primary-base);
   display: inline-grid;
   place-items: center;
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1;
   justify-self: center;
   align-self: center;
+  padding: 0;
 }
 
 @media (max-width: 640px) {
@@ -931,6 +924,90 @@
   font-size: 13px;
   color: #9ca3af;
   margin: 0;
+}
+
+/* ── M Layout: Inline Compact ── */
+
+.todo-row.m-compact {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: auto;
+}
+
+.todo-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-content .todo-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.todo-dates {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.todo-due {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--global-surface-muted);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.todo-due.overdue {
+  color: var(--status-danger-base);
+  font-weight: 600;
+}
+
+.todo-completed-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--global-surface-cool-1);
+  white-space: nowrap;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.todo-row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 0;
+  flex-wrap: wrap;
+}
+
+.todo-meta-item {
+  font-size: 11px;
+  color: var(--global-surface-muted);
+  white-space: nowrap;
+}
+
+.todo-meta-sep {
+  font-size: 10px;
+  color: var(--global-surface-cool-2);
+}
+
+.todo-meta-tag {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Error state (connection failed) — Style E ── */

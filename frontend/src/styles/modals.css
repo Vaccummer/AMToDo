@@ -225,24 +225,219 @@
   margin: 2px 0;
 }
 
-.attachment-dropzone {
-  min-height: 68px;
-  border: 1px dashed color-mix(in srgb, var(--status-primary-base) 36%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--status-primary-base) 4%, transparent);
+/* Attachment action bar (Design C) */
+
+.attach-action-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  color: var(--global-text-secondary);
-  font-size: var(--font-md);
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--components-input-bg, #fff);
+  border: 1px solid var(--global-surface-line);
+  border-radius: var(--radius-lg);
+  -webkit-tap-highlight-color: transparent;
 }
 
-.attachment-dropzone.active {
-  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
-  border-color: var(--status-primary-base);
+.attach-icon-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--global-text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
+
+.attach-icon-btn:active {
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+  color: var(--status-primary-base);
+}
+
+.attach-icon-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.attach-divider-v {
+  width: 1px;
+  height: 24px;
+  background: var(--global-surface-line);
+  flex-shrink: 0;
+}
+
+.attach-count {
+  font-size: var(--font-sm);
+  color: var(--global-surface-muted);
+  margin-left: auto;
+  font-weight: 500;
+}
+
+/* Ring progress indicator */
+
+.ring-progress {
+  width: 32px;
+  height: 32px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ring-progress svg {
+  width: 32px;
+  height: 32px;
+  transform: rotate(-90deg);
+}
+
+.ring-bg {
+  fill: none;
+  stroke: var(--global-surface-line, #e8e4dc);
+  stroke-width: 3;
+}
+
+.ring-fill {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.ring-fill.upload { stroke: var(--status-primary-base); }
+.ring-fill.download { stroke: #4a6fa5; }
+
+.ring-cancel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--status-danger-base);
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.ring-cancel:active {
+  background: color-mix(in srgb, var(--status-danger-base) 10%, transparent);
+}
+
+.ring-cancel svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Compact attachment row */
+
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--components-input-bg, #fff);
+  border: 1px solid var(--global-surface-line);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s, background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-row.uploading {
+  border-color: color-mix(in srgb, var(--status-primary-base) 25%, transparent);
+  background: color-mix(in srgb, var(--status-primary-base) 3%, transparent);
+}
+
+.attach-row.downloading {
+  border-color: color-mix(in srgb, #4a6fa5 25%, transparent);
+  background: color-mix(in srgb, #4a6fa5 3%, transparent);
+}
+
+.attach-row-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.attach-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-row-ext {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  color: var(--status-primary-base);
+  text-transform: uppercase;
+}
+
+.attach-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.attach-row-name {
+  font-size: var(--font-md);
+  font-weight: 500;
+  color: var(--global-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attach-row-size {
+  font-size: var(--font-sm);
+  color: var(--global-surface-muted);
+}
+
+.attach-row-size.uploading {
+  color: var(--status-primary-base);
+}
+
+.attach-row-size.downloading {
+  color: #4a6fa5;
+}
+
+.attach-del-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  color: var(--status-danger-base);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-del-btn:active {
+  transform: scale(0.9);
+}
+
+.attach-del-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.attach-del-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Attachment progress */
 
 .attachment-progress-bar,
 .modal-save-progress {
@@ -299,16 +494,43 @@
   }
 }
 
+/* Attachment dropzone (desktop) */
+
+.attachment-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--components-input-bg, #fff);
+  border: 1.5px dashed var(--global-surface-line, #e0dbd3);
+  border-radius: var(--radius-lg);
+  color: var(--global-surface-muted, #aaa);
+  font-size: var(--font-md);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.attachment-dropzone.active {
+  border-color: var(--status-primary-base);
+  background: color-mix(in srgb, var(--status-primary-base) 5%, transparent);
+}
+
 .attachment-upload-button {
-  border: 0;
-  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
   background: var(--status-primary-base);
   color: #fff;
+  font-size: var(--font-sm);
+  font-weight: 500;
   cursor: pointer;
-  font-size: var(--font-md);
-  font-weight: 600;
-  padding: 8px 12px;
+  transition: background 0.15s;
+  margin-left: auto;
   white-space: nowrap;
+}
+
+.attachment-upload-button:hover {
+  background: color-mix(in srgb, var(--status-primary-base) 85%, #000);
 }
 
 .attachment-list {
@@ -558,16 +780,72 @@
   color: var(--global-text-secondary);
 }
 
+/* Completion toggle (new) */
+
+.modal-completion-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  padding: 8px;
+  font: inherit;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.modal-completion-toggle.pending {
+  background: color-mix(in srgb, var(--global-surface-warm-3) 50%, transparent);
+  border-color: var(--global-surface-warm-3);
+  color: var(--global-text-secondary);
+}
+
+.modal-completion-toggle.pending:hover {
+  background: color-mix(in srgb, var(--global-surface-warm-3) 70%, transparent);
+}
+
+.modal-completion-toggle.completed {
+  background: color-mix(in srgb, var(--status-primary-base) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-primary-base) 30%, transparent);
+  color: var(--status-primary-hover);
+}
+
+.modal-completion-toggle.completed:hover {
+  background: color-mix(in srgb, var(--status-primary-base) 18%, transparent);
+}
+
+.modal-completion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.modal-completion-label {
+  letter-spacing: 0.3px;
+}
+
 /* Error */
 
 .modal-error {
-  margin: 0 22px;
-  padding: 8px 14px;
-  background: color-mix(in srgb, var(--status-danger-base) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--status-danger-base) 18%, transparent);
-  border-radius: var(--radius-md);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--status-danger-base) 18%, transparent);
   color: var(--status-danger-base);
   font-size: var(--font-md);
+  animation: modal-error-slide 0.25s ease-out;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@keyframes modal-error-slide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Action buttons */
@@ -2900,4 +3178,225 @@
   font-size: var(--font-sm);
   color: var(--global-text-muted);
   white-space: nowrap;
+}
+
+/* ── Extra Fields Editor (Frosted Stone) ── */
+
+/* ── Extra Fields — Frosted Stone ── */
+
+.ef {
+  border-radius: 14px;
+  background: #faf7f2;
+  border: 1px solid #e4ddd3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ef-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+
+.ef-head-l {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ef-head-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8c8277 0%, #5c5650 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: #fff;
+}
+
+.ef-head-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ef-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #342f2a;
+  letter-spacing: -0.2px;
+}
+
+.ef-head-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8c8277;
+}
+
+.ef-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #342f2a;
+  color: #faf7f2;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ef-add:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.ef-add:active {
+  transform: translateY(0);
+}
+
+.ef-add svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ef-list {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ef-card {
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid #e4ddd3;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  animation: ef-card-in 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes ef-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+
+.ef-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
+  border-color: #c4b8a8;
+}
+
+.ef-card.dragging {
+  opacity: 0.3;
+}
+
+.ef-card.drag-over {
+  border-color: #a09888;
+  box-shadow: 0 0 0 3px rgba(160, 152, 136, 0.15);
+}
+
+.ef-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex-shrink: 0;
+  cursor: grab;
+  color: rgba(0, 0, 0, 0.15);
+  border-right: 1px solid rgba(0, 0, 0, 0.04);
+  transition: all 0.15s;
+}
+
+.ef-grip:hover {
+  color: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.ef-grip:active {
+  cursor: grabbing;
+}
+
+.ef-grip svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ef-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.ef-f {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.ef-f + .ef-f {
+  border-left: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.ef-f input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #342f2a;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+
+.ef-f input.ef-k {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #5c5650;
+}
+
+.ef-f input::placeholder {
+  color: #b5a999;
+}
+
+.ef-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.ef-card:hover .ef-del {
+  color: rgba(0, 0, 0, 0.15);
+}
+
+.ef-del:hover {
+  color: #c62f2f !important;
+  background: rgba(198, 47, 47, 0.04);
+}
+
+.ef-del svg {
+  width: 13px;
+  height: 13px;
 }
