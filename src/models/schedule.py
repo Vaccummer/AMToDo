@@ -27,3 +27,4 @@ class Schedule(EpochAuditMixin, Base):
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)
     deleted_at: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    extra_fields: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

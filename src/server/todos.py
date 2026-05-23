@@ -398,6 +398,7 @@ def create_todo(
             description=body.description,
             priority=body.priority,
             tag=body.tag,
+            extra_fields=body.extra_fields,
         )
     )
     uow.session.flush()
@@ -435,7 +436,8 @@ def update_todo(
             description=body.description,
             priority=body.priority,
             tag=body.tag,
-            _fields_set=frozenset(body.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag"},
+            extra_fields=body.extra_fields,
+            _fields_set=frozenset(body.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag", "extra_fields"},
         ),
     )
     uow.session.flush()
@@ -631,6 +633,7 @@ def batch_create_todos(
                     due_at=item.due_at,
                     priority=item.priority,
                     tag=item.tag,
+                    extra_fields=item.extra_fields,
                 )
             )
             results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, settings.timezone)})
@@ -665,7 +668,8 @@ def batch_update_todos(
                     description=item.description,
                     priority=item.priority,
                     tag=item.tag,
-                    _fields_set=frozenset(item.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag"},
+                    extra_fields=item.extra_fields,
+                    _fields_set=frozenset(item.model_fields_set) & {"title", "planned_at", "due_at", "description", "priority", "tag", "extra_fields"},
                 ),
             )
             results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, settings.timezone)})

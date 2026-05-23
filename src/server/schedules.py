@@ -199,6 +199,7 @@ def create_schedule(
             description=body.description,
             location=body.location,
             category=body.category,
+            extra_fields=body.extra_fields,
         )
     )
     uow.session.flush()
@@ -234,7 +235,8 @@ def update_schedule(
             description=body.description,
             location=body.location,
             category=body.category,
-            _fields_set=frozenset(body.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category"},
+            extra_fields=body.extra_fields,
+            _fields_set=frozenset(body.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category", "extra_fields"},
         ),
     )
     uow.session.flush()
@@ -371,6 +373,7 @@ def batch_create_schedules(
                     description=item.description,
                     location=item.location,
                     category=item.category,
+                    extra_fields=item.extra_fields,
                 )
             )
             results.append({"target": idx, "ok": True, "schedule": schedule_to_dict(schedule)})
@@ -404,7 +407,8 @@ def batch_update_schedules(
                     description=item.description,
                     location=item.location,
                     category=item.category,
-                    _fields_set=frozenset(item.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category"},
+                    extra_fields=item.extra_fields,
+                    _fields_set=frozenset(item.model_fields_set) & {"title", "start_at", "end_at", "description", "location", "category", "extra_fields"},
                 ),
             )
             results.append({"target": idx, "ok": True, "schedule": schedule_to_dict(schedule)})

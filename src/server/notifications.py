@@ -59,6 +59,7 @@ def create_notification(
         title=body.title,
         trigger_at=body.trigger_at,
         description=body.description,
+        extra_fields=body.extra_fields,
         mentions=[{"target_type": m.target_type, "target_id": m.target_id} for m in body.mentions],
     )
     notification = service.create(draft)
@@ -94,12 +95,15 @@ def update_notification(
         fields_set.add("description")
     if body.trigger_at is not None:
         fields_set.add("trigger_at")
+    if body.extra_fields is not None:
+        fields_set.add("extra_fields")
     if body.mentions is not None:
         fields_set.add("mentions")
     update = NotificationUpdate(
         title=body.title,
         description=body.description,
         trigger_at=body.trigger_at,
+        extra_fields=body.extra_fields,
         mentions=[{"target_type": m.target_type, "target_id": m.target_id} for m in body.mentions] if body.mentions is not None else None,
         _fields_set=frozenset(fields_set),
     )

@@ -93,8 +93,11 @@ def todo_add(
     description: str | None = typer.Option(None, "--description", "-m", help="Optional details."),
     priority: int = typer.Option(0, "--priority", "-p", min=0, help="Higher values sort first."),
     tag: str | None = typer.Option(None, "--tag", "-t", help="Optional tag."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
 ) -> None:
     """Add a ToDo item."""
+
+    extra_json = _parse_extra_json(extra)
 
     settings = load_cli_settings()
     if settings.server_url:
@@ -122,6 +125,7 @@ def todo_add(
                     description=description,
                     priority=priority,
                     tag=tag,
+                    extra_fields=extra_json,
                 )
             )
             uow.session.flush()
@@ -317,8 +321,11 @@ def todo_update(
     description: str | None = typer.Option(None, "--description", "-m", help="New details."),
     priority: int | None = typer.Option(None, "--priority", "-p", min=0, help="New priority."),
     tag: str | None = typer.Option(None, "--tag", "-t", help="New tag."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
 ) -> None:
     """Update mutable ToDo fields."""
+
+    extra_json: str | None = _parse_extra_json(extra) if extra is not None else None
 
     settings = load_cli_settings()
     if settings.server_url:
@@ -344,16 +351,19 @@ def todo_update(
     try:
         with UnitOfWork(context.database) as uow:
             service = TodoService(uow.todos, context.clock, uow.todo_model)
+            update_kwargs: dict[str, object] = dict(
+                title=title,
+                planned_at=planned_at,
+                due_at=due_at,
+                description=description,
+                priority=priority,
+                tag=tag,
+            )
+            if extra_json is not None:
+                update_kwargs["extra_fields"] = extra_json
             todo = service.update(
                 todo_id,
-                TodoUpdate(
-                    title=title,
-                    planned_at=planned_at,
-                    due_at=due_at,
-                    description=description,
-                    priority=priority,
-                    tag=tag,
-                ),
+                TodoUpdate(**update_kwargs),
             )
             uow.session.flush()
             _echo_json({"ok": True, "todo": todo_to_dict(todo, context.settings.timezone)})
@@ -728,8 +738,11 @@ def schedule_add(
     description: str | None = typer.Option(None, "--description", "-m", help="Optional details."),
     location: str | None = typer.Option(None, "--location", "-l", help="Optional location."),
     category: str | None = typer.Option(None, "--category", "-c", help="Optional category."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
 ) -> None:
     """Add a schedule item."""
+
+    extra_json = _parse_extra_json(extra)
 
     settings = load_cli_settings()
     if settings.server_url:
@@ -754,6 +767,7 @@ def schedule_add(
                     description=description,
                     location=location,
                     category=category,
+                    extra_fields=extra_json,
                 )
             )
             uow.session.flush()
@@ -904,8 +918,11 @@ def schedule_update(
     description: str | None = typer.Option(None, "--description", "-m", help="New details."),
     location: str | None = typer.Option(None, "--location", "-l", help="New location."),
     category: str | None = typer.Option(None, "--category", "-c", help="New category."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
 ) -> None:
     """Update mutable schedule fields."""
+
+    extra_json: str | None = _parse_extra_json(extra) if extra is not None else None
 
     settings = load_cli_settings()
     if settings.server_url:
@@ -931,16 +948,19 @@ def schedule_update(
     try:
         with UnitOfWork(context.database) as uow:
             service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+            update_kwargs: dict[str, object] = dict(
+                title=title,
+                start_at=start_at,
+                end_at=end_at,
+                description=description,
+                location=location,
+                category=category,
+            )
+            if extra_json is not None:
+                update_kwargs["extra_fields"] = extra_json
             schedule = service.update(
                 schedule_id,
-                ScheduleUpdate(
-                    title=title,
-                    start_at=start_at,
-                    end_at=end_at,
-                    description=description,
-                    location=location,
-                    category=category,
-                ),
+                ScheduleUpdate(**update_kwargs),
             )
             uow.session.flush()
             _echo_json({"ok": True, "schedule": schedule_to_dict(schedule)})
@@ -1526,6 +1546,22 @@ def attachment_cache_clear() -> None:
 
 
 # ── helpers ──
+
+
+def _parse_extra_json(raw: str | None) -> str:
+    """Parse --extra JSON string, return '{}' if None."""
+    if raw is None:
+        return "{}"
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise typer.BadParameter(f"Invalid JSON: {e}") from e
+    if not isinstance(parsed, dict):
+        raise typer.BadParameter("Extra fields must be a JSON object")
+    for k, v in parsed.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise typer.BadParameter("All keys and values must be strings")
+    return json.dumps(parsed, ensure_ascii=False)
 
 
 def _run_http(operation: Callable, settings: AppSettings) -> None:

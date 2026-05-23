@@ -20,6 +20,7 @@ class NotificationDraft:
     title: str
     trigger_at: int
     description: str | None = None
+    extra_fields: str = "{}"
     mentions: list[dict[str, int | str]] = field(default_factory=list)
 
 
@@ -30,6 +31,7 @@ class NotificationUpdate:
     title: str | None = None
     description: str | None = None
     trigger_at: int | None = None
+    extra_fields: str | None = None
     mentions: list[dict[str, int | str]] | None = None
     _fields_set: frozenset[str] = frozenset()
 
@@ -65,6 +67,7 @@ class NotificationService:
             title=title,
             description=draft.description,
             trigger_at=draft.trigger_at,
+            extra_fields=draft.extra_fields,
             created_at=now,
             updated_at=None,
         )
@@ -123,6 +126,9 @@ class NotificationService:
                     raise ValidationError("trigger_at cannot be negative")
                 notification.trigger_at = update.trigger_at
                 changed = True
+            if "extra_fields" in explicit:
+                notification.extra_fields = update.extra_fields
+                changed = True
             if "mentions" in explicit and update.mentions is not None:
                 self._replace_mentions(notification.id, update.mentions)
                 changed = True
@@ -140,6 +146,9 @@ class NotificationService:
                 if update.trigger_at < 0:
                     raise ValidationError("trigger_at cannot be negative")
                 notification.trigger_at = update.trigger_at
+                changed = True
+            if update.extra_fields is not None:
+                notification.extra_fields = update.extra_fields
                 changed = True
             if update.mentions is not None:
                 self._replace_mentions(notification.id, update.mentions)

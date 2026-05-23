@@ -45,6 +45,7 @@ class TodoDraft:
     description: str | None = None
     priority: int = 0
     tag: str | None = None
+    extra_fields: str = "{}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class TodoUpdate:
     description: str | None = None
     priority: int | None = None
     tag: str | None = None
+    extra_fields: str | None = None
     _fields_set: frozenset[str] = frozenset()
 
 
@@ -96,6 +98,7 @@ class TodoService:
             completed=False,
             priority=draft.priority,
             tag=draft.tag,
+            extra_fields=draft.extra_fields,
             completed_at=None,
             created_at=now,
             updated_at=None,
@@ -256,6 +259,9 @@ class TodoService:
             if "tag" in explicit:
                 todo.tag = update.tag
                 changed = True
+            if "extra_fields" in explicit:
+                todo.extra_fields = update.extra_fields
+                changed = True
         else:
             if update.title is not None:
                 title = update.title.strip()
@@ -283,6 +289,9 @@ class TodoService:
                 changed = True
             if update.tag is not None:
                 todo.tag = update.tag
+                changed = True
+            if update.extra_fields is not None:
+                todo.extra_fields = update.extra_fields
                 changed = True
 
         if changed:

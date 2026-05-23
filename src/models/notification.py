@@ -22,3 +22,4 @@ class Notification(EpochAuditMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     trigger_at: Mapped[int] = mapped_column(Integer, nullable=False)
     deleted_at: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    extra_fields: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

@@ -42,6 +42,7 @@ def todo_to_dict(
         "updated_at": todo.updated_at,
         "completed_at": todo.completed_at,
         "deleted_at": todo.deleted_at,
+        "extra_fields": todo.extra_fields,
     }
     if attachment_count is not None:
         d["attachment_count"] = attachment_count
@@ -113,6 +114,7 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, object]:
         "created_at": schedule.created_at,
         "updated_at": schedule.updated_at,
         "deleted_at": schedule.deleted_at,
+        "extra_fields": schedule.extra_fields,
     }
 
 
@@ -126,6 +128,7 @@ def notification_to_dict(notification: object, mentions: list[object] | None = N
         "created_at": notification.created_at,
         "updated_at": notification.updated_at,
         "deleted_at": notification.deleted_at,
+        "extra_fields": notification.extra_fields,
     }
     if mentions is not None:
         result["mentions"] = [

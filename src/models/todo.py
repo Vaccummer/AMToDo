@@ -28,3 +28,4 @@ class Todo(EpochAuditMixin, Base):
     tag: Mapped[str | None] = mapped_column(String(80), nullable=True)
     completed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
     deleted_at: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    extra_fields: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

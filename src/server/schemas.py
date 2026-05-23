@@ -114,6 +114,7 @@ class TodoCreateRequest(UserAuthMixin):
     description: str | None = None
     priority: int = Field(default=0, ge=0)
     tag: str | None = None
+    extra_fields: str = "{}"
 
 
 class TodoGetRequest(UserAuthMixin):
@@ -128,6 +129,7 @@ class TodoUpdateRequest(UserAuthMixin):
     description: str | None = None
     priority: int | None = Field(default=None, ge=0)
     tag: str | None = None
+    extra_fields: str | None = None
 
 
 class TodoTargetsRequest(UserAuthMixin):
@@ -144,6 +146,7 @@ class TodoCreateFields(BaseModel):
     due_at: int | None = None
     priority: int = Field(default=0, ge=0)
     tag: str | None = None
+    extra_fields: str = "{}"
 
 
 class TodoBatchCreateRequest(UserAuthMixin):
@@ -159,6 +162,7 @@ class TodoBatchUpdateItem(BaseModel):
     due_at: int | None = None
     priority: int | None = Field(default=None, ge=0)
     tag: str | None = None
+    extra_fields: str | None = None
 
 
 class TodoBatchUpdateRequest(UserAuthMixin):
@@ -297,6 +301,7 @@ class ScheduleCreateRequest(UserAuthMixin):
     description: str | None = None
     location: str | None = None
     category: str | None = None
+    extra_fields: str = "{}"
 
 
 class ScheduleGetRequest(UserAuthMixin):
@@ -311,6 +316,7 @@ class ScheduleUpdateRequest(UserAuthMixin):
     description: str | None = None
     location: str | None = None
     category: str | None = None
+    extra_fields: str | None = None
 
 
 class ScheduleTargetsRequest(UserAuthMixin):
@@ -325,6 +331,7 @@ class ScheduleCreateFields(BaseModel):
     end_at: int
     location: str | None = None
     category: str | None = None
+    extra_fields: str = "{}"
 
 
 class ScheduleBatchCreateRequest(UserAuthMixin):
@@ -340,6 +347,7 @@ class ScheduleBatchUpdateItem(BaseModel):
     end_at: int | None = None
     location: str | None = None
     category: str | None = None
+    extra_fields: str | None = None
 
 
 class ScheduleBatchUpdateRequest(UserAuthMixin):
@@ -415,6 +423,7 @@ class NotificationCreateRequest(UserAuthMixin):
     title: str
     trigger_at: int
     description: str | None = None
+    extra_fields: str = "{}"
     mentions: list[NotificationMentionInput] = Field(default_factory=list)
 
 
@@ -427,6 +436,7 @@ class NotificationUpdateRequest(UserAuthMixin):
     title: str | None = None
     description: str | None = None
     trigger_at: int | None = None
+    extra_fields: str | None = None
     mentions: list[NotificationMentionInput] | None = None
 
 
