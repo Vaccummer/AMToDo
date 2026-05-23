@@ -4,8 +4,7 @@ import type { ConnectionStatusSnapshot } from "../../api/connection-status";
 import {
   addDaysToDateKey,
   dateKeyFromDate,
-  formatDueTime,
-  isOverdueTodo,
+  formatDateShort,
   startOfDateKeyEpoch,
   startOfWeekDateKey,
   weekOfMonth
@@ -56,22 +55,6 @@ function EditIcon() {
   );
 }
 
-function AttachmentCountIcon() {
-  return (
-    <svg className="todo-attachment-icon" viewBox="0 0 1024 1024" aria-hidden="true">
-      <path d="M431.8 350c36.8 0 71.5 7.9 104.3 23.6 24.6 11.6 46.8 27.4 66.8 47.3 19.9 19.9 35.7 42.2 47.3 66.7-15.8 15.8-34.8 23.6-57 23.6-7.8 0-15.6-1.2-23.6-3.5-13.4-21.8-31.8-40.1-53.6-53.6-25.8-15.7-53.9-23.6-84.1-23.6-21 0-41.4 4-61.1 12-19.7 8-37.4 19.8-52.9 35.3l-121 121c-15.5 15.5-27.3 33.2-35.3 52.9-7.9 19.4-12 40.1-12 61.1s4 41.4 12 61.1c8 19.8 19.7 37.4 35.3 52.9 15.6 15.6 33.2 27.3 52.9 35.3 19.4 7.9 40.2 12 61.2 12s41.4-4 61.1-12c19.7-8 37.4-19.8 52.9-35.3l84.7-84.7c26.9 7.3 54.7 11 83.5 11 4.6 0 11.1-0.2 19.5-0.6-3.2 3.5-6.4 7-9.7 10.4l-121 121c-23.3 23.3-49.7 40.9-79.3 52.9-29.1 11.9-60.3 18-91.8 18s-62.2-6-91.8-18.1c-29.7-12.1-56.1-29.7-79.3-52.8-23.3-23.3-40.9-49.7-52.9-79.2-11.9-29.1-18-60.3-18-91.8s6.1-62.7 18-91.8c12-29.5 29.6-55.9 52.9-79.2l121-121c2.3-2.3 5.8-5.5 10.4-9.8 22.5-20 47.6-35.1 75.3-45.5 27.7-10.3 56.1-15.5 85.3-15.6zM714.1 67.8c31.5 0 62.7 6.1 91.8 18 29.5 11.9 55.9 29.6 79.3 52.9 23.3 23.3 41 49.7 52.9 79.2 11.9 29.2 18 60.3 17.9 91.8 0 31.5-6.1 62.1-18.1 91.8-12.1 29.7-29.7 56.1-52.8 79.2l-121 121c-2.3 2.4-5.8 5.6-10.4 9.8-22.4 20-47.5 35.1-75.3 45.5-27.3 10.3-56.2 15.6-85.4 15.6-36.7 0-71.5-7.9-104.3-23.6-24.6-11.6-46.8-27.4-66.8-47.3-19.9-19.9-35.7-42.2-47.3-66.7 15.7-15.8 34.7-23.6 57-23.6 7.8 0 15.7 1.2 23.6 3.5 13.4 21.8 31.7 40.1 53.5 53.6 25.9 15.7 53.9 23.6 84.1 23.6 21 0 41.4-4 61.1-12 19.8-8 37.4-19.8 52.9-35.3l121-121c15.6-15.5 27.3-33.2 35.3-52.9 7.9-19.4 12-40.1 12-61.1s-4-41.4-12-61.1c-8-19.8-19.8-37.4-35.3-52.9-15.6-15.6-33.2-27.3-52.9-35.3-19.4-7.9-40.2-12-61.1-12-21 0-41.4 4-61.1 12-19.8 8-37.4 19.8-52.9 35.3L515 280.5c-26.9-7.3-54.7-11-83.5-11-4.6 0-11.1 0.2-19.5 0.6 3.2-3.5 6.4-7 9.8-10.4l121-121c23.1-23.1 49.5-40.7 79.2-52.8 29.9-12.1 60.5-18.2 92.1-18.1z m0 0" />
-    </svg>
-  );
-}
-
-function IdIcon() {
-  return (
-    <svg className="todo-id-icon" viewBox="0 0 1024 1024" aria-hidden="true">
-      <path d="M933.933489 392.327772a38.459877 38.459877 0 0 0 38.35759-38.35759 38.459877 38.459877 0 0 0-38.35759-38.35759h-205.187534L757.488576 42.813412A38.613307 38.613307 0 0 0 723.171318 0.210916 38.562164 38.562164 0 0 0 680.773396 34.732747l-29.151769 280.879845H413.395422l28.486904-272.79918A38.562164 38.562164 0 0 0 407.769642 0.210916a38.562164 38.562164 0 0 0-42.142205 34.317257l-29.407486 281.084419H90.066511a38.459877 38.459877 0 0 0-38.35759 38.35759 38.51102 38.51102 0 0 0 38.35759 38.35759h238.175062l-24.958006 238.635352H90.066511a38.35759 38.35759 0 1 0 0 76.71518h205.187534L266.511424 980.477484a38.35759 38.35759 0 1 0 76.71518 8.080665l29.356342-280.879845h238.226206l-28.486904 272.79918a38.35759 38.35759 0 1 0 76.254889 8.080665l29.407486-280.879845h245.948866a38.35759 38.35759 0 0 0 0-76.71518h-238.175062l24.958006-238.635352z m-315.299389 238.635352H380.407895l24.958005-238.635352h238.226205z" fill="#00C080" />
-    </svg>
-  );
-}
-
 function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
   const effectiveToEpoch = toEpoch ?? Math.floor(Date.now() / 1000);
   const seconds = Math.max(0, effectiveToEpoch - fromEpoch);
@@ -81,6 +64,23 @@ function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t:
   if (hours > 0) return t("common.hours", { count: hours });
   const minutes = Math.max(1, Math.floor(seconds / 60));
   return t("common.minutes", { count: minutes });
+}
+
+function dueLabel(epoch: number | null, timezone?: string): string {
+  return epoch != null ? formatDateShort(epoch, timezone) : "--";
+}
+
+function completedLabel(epoch: number | null, timezone?: string): string {
+  return epoch != null ? formatDateShort(epoch, timezone) : "";
+}
+
+function rowStatus(todo: TodoItem): string {
+  if (todo.completed) {
+    if (todo.due_at != null && todo.completed_at != null && todo.completed_at > todo.due_at) return "late-done";
+    return "completed";
+  }
+  if (todo.due_at != null && todo.due_at < Math.floor(Date.now() / 1000)) return "overdue";
+  return "";
 }
 
 export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
@@ -102,8 +102,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editText, setEditText] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -206,8 +204,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       const plannedAt = startOfDateKeyEpoch(selectedDayKey);
       const result = await api.createTodo(title, plannedAt);
       setTodos((items) => [...items, { ...result.todo, attachment_count: 0 }]);
-      setEditingId(result.todo.id);
-      setEditText("");
       onConnectionError?.(null);
     } catch (error: unknown) {
       if (error instanceof TypeError) {
@@ -215,42 +211,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
       } else {
         onConnectionError?.("token", error instanceof Error ? error.message : t("todo.createFailed"));
       }
-    }
-  }
-
-  function startEdit(todo: TodoItem) {
-    setEditingId(todo.id);
-    setEditText(todo.title);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditText("");
-  }
-
-  async function saveEdit(id: number) {
-    const trimmed = editText.trim();
-    if (!trimmed || trimmed === todos.find((t) => t.id === id)?.title) {
-      cancelEdit();
-      return;
-    }
-    try {
-      await api.updateTodo(id, { title: trimmed });
-      setTodos((items) =>
-        items.map((item) => (item.id === id ? { ...item, title: trimmed } : item))
-      );
-    } catch {
-      // keep old title on failure
-    }
-    cancelEdit();
-  }
-
-  function handleEditKey(e: React.KeyboardEvent, id: number) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      saveEdit(id);
-    } else if (e.key === "Escape") {
-      cancelEdit();
     }
   }
 
@@ -365,200 +325,176 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           </button>
         </div>
         <div className="todo-list">
-        {(() => {
-          const completedTodos = todos.filter((t) => t.completed);
-          const lateCompleted = completedTodos.filter(
-            (t) => t.due_at !== null && t.completed_at !== null && t.completed_at > t.due_at
-          );
-          const onTimeCompleted = completedTodos.length - lateCompleted.length;
-          if (!hideCompleted || completedTodos.length === 0) return null;
-          const total = completedTodos.length;
-          const circumference = 2 * Math.PI * 20;
-          const onTimeRatio = onTimeCompleted / total;
-          const lateRatio = lateCompleted.length / total;
-          return (
-            <div className="todo-summary-bar">
-              <div className="ring-wrap">
-                <svg viewBox="0 0 52 52">
-                  <circle className="ring-bg" cx="26" cy="26" r="20" />
-                  {onTimeCompleted > 0 && (
-                    <circle
-                      className="ring-on-time"
-                      cx="26" cy="26" r="20"
-                      strokeDasharray={`${circumference * onTimeRatio} ${circumference}`}
-                      strokeDashoffset="0"
-                    />
-                  )}
-                  {lateCompleted.length > 0 && (
-                    <circle
-                      className="ring-late"
-                      cx="26" cy="26" r="20"
-                      strokeDasharray={`${circumference * lateRatio} ${circumference}`}
-                      strokeDashoffset={`${-circumference * onTimeRatio}`}
-                    />
-                  )}
-                </svg>
-                <div className="ring-center">
-                  {total}
+          {(() => {
+            const completedTodos = todos.filter((t) => t.completed);
+            const lateCompleted = completedTodos.filter(
+              (t) => t.due_at !== null && t.completed_at !== null && t.completed_at > t.due_at
+            );
+            const onTimeCompleted = completedTodos.length - lateCompleted.length;
+            if (!hideCompleted || completedTodos.length === 0) return null;
+            const total = completedTodos.length;
+            const circumference = 2 * Math.PI * 20;
+            const onTimeRatio = onTimeCompleted / total;
+            const lateRatio = lateCompleted.length / total;
+            return (
+              <div className="todo-summary-bar">
+                <div className="ring-wrap">
+                  <svg viewBox="0 0 52 52">
+                    <circle className="ring-bg" cx="26" cy="26" r="20" />
+                    {onTimeCompleted > 0 && (
+                      <circle
+                        className="ring-on-time"
+                        cx="26" cy="26" r="20"
+                        strokeDasharray={`${circumference * onTimeRatio} ${circumference}`}
+                        strokeDashoffset="0"
+                      />
+                    )}
+                    {lateCompleted.length > 0 && (
+                      <circle
+                        className="ring-late"
+                        cx="26" cy="26" r="20"
+                        strokeDasharray={`${circumference * lateRatio} ${circumference}`}
+                        strokeDashoffset={`${-circumference * onTimeRatio}`}
+                      />
+                    )}
+                  </svg>
+                  <div className="ring-center">
+                    {total}
+                  </div>
+                </div>
+                <div className="stats-col">
+                  <div className="stat-row">
+                    <div className="stat-dot green" />
+                    <span className="stat-label">{t("common.onTime")}</span>
+                    <span className="stat-value">{onTimeCompleted}</span>
+                  </div>
+                  <div className="stat-row">
+                    <div className="stat-dot amber" />
+                    <span className="stat-label">{t("common.overdueCompleted")}</span>
+                    <span className="stat-value">{lateCompleted.length}</span>
+                  </div>
                 </div>
               </div>
-              <div className="stats-col">
-                <div className="stat-row">
-                  <div className="stat-dot green" />
-                  <span className="stat-label">{t("common.onTime")}</span>
-                  <span className="stat-value">{onTimeCompleted}</span>
+            );
+          })()}
+          {isLoading ? showSkeleton ? (
+            <>
+              {Array.from({ length: 4 }, (_, i) => (
+                <div className="skel-row" key={i}>
+                  <div className="skel-circle" />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div className="skel-block" style={{ width: `${55 + i * 8}%`, height: 14 }} />
+                    <div className="skel-block" style={{ width: `${30 + i * 5}%`, height: 10 }} />
+                  </div>
+                  <div className="skel-block" style={{ width: 52, height: 20, borderRadius: "var(--radius-pill)" }} />
                 </div>
-                <div className="stat-row">
-                  <div className="stat-dot amber" />
-                  <span className="stat-label">{t("common.overdueCompleted")}</span>
-                  <span className="stat-value">{lateCompleted.length}</span>
+              ))}
+            </>
+          ) : null : todos.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-illustration">
+                <div className="paper">
+                  <div className="paper-line" />
+                  <div className="paper-line" />
+                  <div className="paper-line" />
+                </div>
+                <div className="check">
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 </div>
               </div>
+              <p className="empty-state-title">{t("todo.emptyTitle")}</p>
+              <p className="empty-state-subtitle">{t("todo.emptySubtitle")}</p>
             </div>
-          );
-        })()}
-        {isLoading ? showSkeleton ? (
-          <>
-            {Array.from({ length: 4 }, (_, i) => (
-              <div className="skel-row" key={i}>
-                <div className="skel-circle" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div className="skel-block" style={{ width: `${55 + i * 8}%`, height: 14 }} />
-                  <div className="skel-block" style={{ width: `${30 + i * 5}%`, height: 10 }} />
-                </div>
-                <div className="skel-block" style={{ width: 52, height: 20, borderRadius: "var(--radius-pill)" }} />
-              </div>
-            ))}
-          </>
-        ) : null : todos.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-illustration">
-              <div className="paper">
-                <div className="paper-line" />
-                <div className="paper-line" />
-                <div className="paper-line" />
-              </div>
-              <div className="check">
-                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
-            </div>
-            <p className="empty-state-title">{t("todo.emptyTitle")}</p>
-            <p className="empty-state-subtitle">{t("todo.emptySubtitle")}</p>
-          </div>
-        ) : null}
-        {(!connectionStatus || connectionStatus.status === "online" || connectionStatus.status === "idle" || connectionStatus.status === "checking" || connectionStatus.status === "reconnecting") && todos
-          .filter((t) => !hideCompleted || !t.completed)
-          .map((todo) => {
-          const isEditing = editingId === todo.id;
-          const overdue = isOverdueTodo(todo);
-          const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
-          const hasDue = todo.due_at !== null;
-          const statusLabel = overdue
-            ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, undefined, t)}`
-            : lateDone
-              ? `${t("common.overdue")} ${overdueDurationLabel(todo.due_at!, todo.completed_at!, t)}${t("common.completed")}`
-              : todo.completed
-                ? t("common.completed")
-                : t("common.inProgress");
-          const rowClass = [
-            "todo-row",
-            todo.completed ? "completed" : "",
-            overdue ? "overdue" : "",
-            lateDone ? "late-done" : ""
-          ]
-            .filter(Boolean).join(" ");
-          const isSwiped = swipedId === todo.id;
-          return (
-          <div className="todo-row-wrapper" key={todo.id}>
-            {isSwiped && (
-              <button
-                type="button"
-                className="todo-swipe-delete"
-                onClick={() => { setSwipedId(null); void askDeleteTodo(todo.id); }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            )}
-            <div
-              className={`${rowClass}${isSwiped ? " swiped" : ""}`}
-              onContextMenu={(e) => handleContextMenu(e, todo.id)}
-              onTouchStart={(e) => {
-                const touch = e.touches[0];
-                swipeTouchRef.current = { id: todo.id, startX: touch.clientX, startY: touch.clientY, moved: false, cancelled: false };
-              }}
-              onTouchMove={(e) => {
-                if (swipeTouchRef.current.cancelled || swipeTouchRef.current.id !== todo.id) return;
-                const touch = e.touches[0];
-                const dx = touch.clientX - swipeTouchRef.current.startX;
-                const dy = touch.clientY - swipeTouchRef.current.startY;
-                if (!swipeTouchRef.current.moved && Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > 10) {
-                  swipeTouchRef.current.cancelled = true;
-                  return;
-                }
-                if (Math.abs(dx) > 5) swipeTouchRef.current.moved = true;
-              }}
-              onTouchEnd={(e) => {
-                if (swipeTouchRef.current.id !== todo.id) return;
-                if (swipeTouchRef.current.cancelled || !swipeTouchRef.current.moved) {
-                  if (isSwiped) { setSwipedId(null); e.preventDefault(); }
-                  return;
-                }
-                const touch = e.changedTouches[0];
-                const dx = touch.clientX - swipeTouchRef.current.startX;
-                if (dx < -50) {
-                  setSwipedId(todo.id);
-                } else if (dx > 30 && isSwiped) {
-                  setSwipedId(null);
-                }
-              }}
-              onDoubleClick={() => setDetailId(todo.id)}
-            >
-              <button type="button" className="check-button" onClick={(e) => { e.stopPropagation(); void toggle(todo); }}>
-                {todo.completed ? "✓" : ""}
-              </button>
-              <div className="todo-main">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    className="todo-edit-input"
-                    size={Math.max(editText.length + 4, 8)}
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => handleEditKey(e, todo.id)}
-                    onBlur={() => saveEdit(todo.id)}
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    className="todo-title"
-                    onClick={() => startEdit(todo)}
+          ) : null}
+          {(!connectionStatus || connectionStatus.status === "online" || connectionStatus.status === "idle" || connectionStatus.status === "checking" || connectionStatus.status === "reconnecting") && todos
+            .filter((t) => !hideCompleted || !t.completed)
+            .map((todo) => {
+              const rs = rowStatus(todo);
+              const isSwiped = swipedId === todo.id;
+              return (
+                <div className="todo-row-wrapper" key={todo.id}>
+                  {isSwiped && (
+                    <button
+                      type="button"
+                      className="todo-swipe-delete"
+                      onClick={() => { setSwipedId(null); void askDeleteTodo(todo.id); }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  )}
+                  <div
+                    className={`todo-row m-compact${rs ? ` ${rs}` : ""}${isSwiped ? " swiped" : ""}`}
+                    onContextMenu={(e) => handleContextMenu(e, todo.id)}
+                    onTouchStart={(e) => {
+                      const touch = e.touches[0];
+                      swipeTouchRef.current = { id: todo.id, startX: touch.clientX, startY: touch.clientY, moved: false, cancelled: false };
+                    }}
+                    onTouchMove={(e) => {
+                      if (swipeTouchRef.current.cancelled || swipeTouchRef.current.id !== todo.id) return;
+                      const touch = e.touches[0];
+                      const dx = touch.clientX - swipeTouchRef.current.startX;
+                      const dy = touch.clientY - swipeTouchRef.current.startY;
+                      if (!swipeTouchRef.current.moved && Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > 10) {
+                        swipeTouchRef.current.cancelled = true;
+                        return;
+                      }
+                      if (Math.abs(dx) > 5) swipeTouchRef.current.moved = true;
+                    }}
+                    onTouchEnd={(e) => {
+                      if (swipeTouchRef.current.id !== todo.id) return;
+                      if (swipeTouchRef.current.cancelled || !swipeTouchRef.current.moved) {
+                        if (isSwiped) { setSwipedId(null); e.preventDefault(); }
+                        return;
+                      }
+                      const touch = e.changedTouches[0];
+                      const dx = touch.clientX - swipeTouchRef.current.startX;
+                      if (dx < -50) {
+                        setSwipedId(todo.id);
+                      } else if (dx > 30 && isSwiped) {
+                        setSwipedId(null);
+                      }
+                    }}
+                    onDoubleClick={() => setDetailId(todo.id)}
                   >
-                    {todo.title}
-                  </span>
-                )}
-                <div className="todo-meta">
-                  <span className="todo-status-badge">{statusLabel}</span>
-                  {hasDue ? <span className="due-time">{t("common.due")} {formatDueTime(todo.due_at!)}</span> : <span className="due-time">{t("common.noDueDate")}</span>}
-                  {todo.completed_at ? <span className="todo-completed-time">{t("common.finishedAt")} {formatDueTime(todo.completed_at)}</span> : null}
+                    <button type="button" className="check-button" onClick={(e) => { e.stopPropagation(); void toggle(todo); }}>
+                      {todo.completed ? (
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                          <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor" />
+                          <polyline points="8 12 11 15 16 9" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                          <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="todo-content">
+                      <span className="todo-label">{todo.title}</span>
+                      <div className="todo-row2">
+                        <span className="todo-meta-item">🆔 {todo.id}</span>
+                        <span className="todo-meta-sep">·</span>
+                        <span className="todo-meta-item">🔗 {todo.attachment_count ?? 0}</span>
+                        {todo.tag ? (
+                          <>
+                            <span className="todo-meta-sep">·</span>
+                            <span className="todo-meta-item todo-meta-tag">🏷 {todo.tag}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="todo-dates">
+                      <span className={`todo-due${todo.due_at != null && !todo.completed && todo.due_at < Math.floor(Date.now() / 1000) ? " overdue" : ""}`}>
+                        {dueLabel(todo.due_at)}
+                      </span>
+                      <span className="todo-completed-date">{completedLabel(todo.completed_at)}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="todo-right">
-                <span className="todo-id-badge" title={`id:${todo.id}`}>
-                  <IdIcon />
-                  <span>{todo.id}</span>
-                </span>
-                <span className="todo-attachment-count" title={`${t("common.attachments")} ${todo.attachment_count ?? 0}`}>
-                  <AttachmentCountIcon />
-                  <span>{todo.attachment_count ?? 0}</span>
-                </span>
-              </div>
-            </div>
-          </div>
-          );
-        })}
+              );
+            })}
         </div>
       </div>
       <div className="todo-bottom-bar">
@@ -573,8 +509,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           title={t("todo.refreshDay")}
         >
           <svg width="18" height="18" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor"/>
-            <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z" fill="currentColor"/>
+            <path d="M528.896 998.4c-262.656 0-476.672-214.016-476.672-476.672S266.24 45.056 528.896 45.056c163.84 0 314.368 82.432 402.432 221.184 14.336 22.528 7.68 53.248-14.848 67.584a49.3568 49.3568 0 0 1-67.584-14.848 377.2416 377.2416 0 0 0-320-175.616c-208.896 0-378.88 169.984-378.88 378.88s169.984 378.88 378.88 378.88a378.88 378.88 0 0 0 349.184-231.424c10.752-25.088 39.424-36.352 64-26.112 25.088 10.752 36.352 39.424 26.112 64a476.16 476.16 0 0 1-439.296 290.816z" fill="currentColor" />
+            <path d="M889.344 341.504h-217.6a49.152 49.152 0 0 1 0-98.304h168.96v-168.96a49.152 49.152 0 0 1 98.304 0v218.112c-1.024 27.136-22.528 49.152-49.664 49.152z" fill="currentColor" />
           </svg>
         </button>
         <button
@@ -638,7 +574,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             {
               label: `id:${contextMenu.id}`,
               icon: null,
-              action: () => {},
+              action: () => { },
               disabled: true
             },
             {
