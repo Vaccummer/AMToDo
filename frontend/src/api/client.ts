@@ -44,6 +44,7 @@ export type TodoItem = {
   completed_at: number | null;
   deleted_at?: number | null;
   attachment_count?: number;
+  extra_fields?: Record<string, string> | null;
 };
 
 export type TodoListResponse = {
@@ -176,6 +177,7 @@ export type ScheduleItem = {
   created_at: number;
   updated_at: number;
   deleted_at?: number | null;
+  extra_fields?: Record<string, string> | null;
 };
 
 export type ScheduleListResponse = {
@@ -302,6 +304,7 @@ export type NotificationItem = {
   updated_at: number | null;
   deleted_at?: number | null;
   mentions: NotificationMentionItem[];
+  extra_fields?: Record<string, string> | null;
 };
 
 export type NotificationResponse = {
@@ -322,6 +325,7 @@ export type TodoUpdateRequest = {
   due_at?: number | null;
   priority?: number;
   tag?: string | null;
+  extra_fields?: string | null;
 };
 
 export type ScheduleCreateParams = {
@@ -340,6 +344,7 @@ export type ScheduleUpdateRequest = {
   description?: string | null;
   location?: string | null;
   category?: string | null;
+  extra_fields?: string | null;
 };
 
 const DEFAULT_BASE_URL = SERVER_URL;
@@ -390,6 +395,18 @@ async function fetchWithNetworkStatus(
   }
 }
 
+/** Parse `extra_fields` from JSON string (server wire format) to object (frontend format). */
+function parseExtraFields<T extends { extra_fields?: unknown }>(item: T): T {
+  if (item && typeof item.extra_fields === "string") {
+    try {
+      item.extra_fields = JSON.parse(item.extra_fields) as Record<string, string>;
+    } catch {
+      item.extra_fields = {};
+    }
+  }
+  return item;
+}
+
 export class AMToDoApi {
   private readonly baseUrl: string;
   private readonly token: string | null;
@@ -415,6 +432,16 @@ export class AMToDoApi {
     return this.baseUrl;
   }
 
+  /** Ensure the WS client is connected. Attempts reconnect if the client exists but is disconnected. */
+  private async ensureConnected(): Promise<void> {
+    if (!this.wsClient) {
+      throw new Error("WebSocket client not available");
+    }
+    if (this.wsClient.connectionStatus === "disconnected") {
+      await this.wsClient.connect();
+    }
+  }
+
   async health(): Promise<HealthResponse> {
     const response = await fetchWithNetworkStatus(`${this.baseUrl}/api/v1/health`);
     const payload = await response.json();
@@ -428,13 +455,59 @@ export class AMToDoApi {
     return this.post("/api/v1/user", {});
   }
 
+  /** Verify token via HTTP (used by settings modal before WS is connected). */
+  async verifyTokenHttp(): Promise<UserResponse> {
+    const body: Record<string, unknown> = {};
+    if (this.token) {
+      body["access_token"] = this.token;
+    }
+
+    let bodyStr: string;
+    let aesKey: CryptoKey | null = null;
+
+    if (this.p256PublicKey) {
+      const { seal } = await import("../crypto/envelope");
+      const result = await seal(body, this.p256PublicKey, KEY_ID);
+      bodyStr = JSON.stringify(result.envelope);
+      aesKey = result.aesKey;
+    } else {
+      bodyStr = JSON.stringify(body);
+    }
+
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+
+    const response = await fetchWithNetworkStatus(`${this.baseUrl}/api/v1/user`, {
+      method: "POST",
+      body: bodyStr,
+      headers,
+    });
+
+    let responsePayload = await response.json();
+
+    if (aesKey) {
+      const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
+      if (isResponseEnvelope(responsePayload)) {
+        responsePayload = await openResponse(responsePayload as Record<string, unknown>, aesKey);
+      }
+    }
+
+    if (!response.ok || responsePayload.ok === false) {
+      throw new Error(responsePayload?.error?.message ?? response.statusText);
+    }
+
+    return responsePayload as UserResponse;
+  }
+
   async listTodos(startAt: number, endAt: number): Promise<TodoListResponse> {
-    return this.post("/api/v1/todos/list", {
+    const res = await this.post<TodoListResponse>("/api/v1/todos/list", {
       start_at: startAt,
       end_at: endAt,
       open_only: false,
       completed_only: false
     });
+    res.todos.forEach(parseExtraFields);
+    return res;
   }
 
   async searchTodos(
@@ -464,7 +537,7 @@ export class AMToDoApi {
       offset?: number;
     }
   ): Promise<TodoSearchResponse> {
-    return this.post("/api/v1/todos/search", {
+    const res = await this.post<TodoSearchResponse>("/api/v1/todos/search", {
       query,
       fields: ["title", "description", "tag"],
       use_regex: false,
@@ -490,6 +563,8 @@ export class AMToDoApi {
       offset: 0,
       ...params
     });
+    res.todos.forEach(parseExtraFields);
+    return res;
   }
 
   async todoStats(
@@ -514,19 +589,27 @@ export class AMToDoApi {
   }
 
   async getTodo(todoId: number): Promise<TodoResponse> {
-    return this.post("/api/v1/todos/get", { todo_id: todoId });
+    const res = await this.post<TodoResponse>("/api/v1/todos/get", { todo_id: todoId });
+    parseExtraFields(res.todo);
+    return res;
   }
 
   async updateTodo(todoId: number, fields: TodoUpdateRequest): Promise<TodoResponse> {
-    return this.post("/api/v1/todos/update", { todo_id: todoId, ...fields });
+    const res = await this.post<TodoResponse>("/api/v1/todos/update", { todo_id: todoId, ...fields });
+    parseExtraFields(res.todo);
+    return res;
   }
 
   async completeTodo(id: number): Promise<TargetsResponse> {
-    return this.post("/api/v1/todos/done", { targets: [id] });
+    const res = await this.post<TargetsResponse>("/api/v1/todos/done", { targets: [id] });
+    res.results.forEach(r => { if (r.todo) parseExtraFields(r.todo); if (r.schedule) parseExtraFields(r.schedule); });
+    return res;
   }
 
   async reopenTodo(id: number): Promise<TargetsResponse> {
-    return this.post("/api/v1/todos/reopen", { targets: [id] });
+    const res = await this.post<TargetsResponse>("/api/v1/todos/reopen", { targets: [id] });
+    res.results.forEach(r => { if (r.todo) parseExtraFields(r.todo); if (r.schedule) parseExtraFields(r.schedule); });
+    return res;
   }
 
   async deleteTodo(id: number): Promise<TargetsResponse> {
@@ -534,13 +617,15 @@ export class AMToDoApi {
   }
 
   async listTodoTrash(params?: TrashListParams): Promise<TodoTrashListResponse> {
-    return this.post("/api/v1/todos/trash/list", {
+    const res = await this.post<TodoTrashListResponse>("/api/v1/todos/trash/list", {
       query: params?.query ?? "",
       start_at: params?.start_at ?? null,
       end_at: params?.end_at ?? null,
       limit: params?.limit ?? 100,
       offset: params?.offset ?? 0
     });
+    res.todos.forEach(parseExtraFields);
+    return res;
   }
 
   async restoreTodos(targets: number[]): Promise<TargetsResponse> {
@@ -593,8 +678,8 @@ export class AMToDoApi {
     });
   }
 
-  async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void): Promise<AttachmentResponse> {
-    if (!this.wsClient) throw new Error("WebSocket client not available");
+  async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<AttachmentResponse> {
+    await this.ensureConnected();
     const keys = generateFileKeys();
 
     // Encrypt file with progress (reports encryption phase)
@@ -604,7 +689,7 @@ export class AMToDoApi {
     );
 
     // WS: init upload → get token
-    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_upload",
       {
         owner_type: "todo",
@@ -624,12 +709,13 @@ export class AMToDoApi {
       cipher,
       { "Content-Type": "application/octet-stream" },
       onProgress,
+      abortSignal,
     ) as unknown as Promise<AttachmentResponse>;
   }
 
-  async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void): Promise<ArrayBuffer> {
-    if (!this.wsClient) throw new Error("WebSocket client not available");
-    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+  async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
+    await this.ensureConnected();
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_download",
       { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
     );
@@ -637,6 +723,7 @@ export class AMToDoApi {
     return downloadWithProgress(
       `${this.baseUrl}/api/v1/todos/attachments/${attachmentId}/download?token=${token}`,
       onProgress,
+      abortSignal,
     );
   }
 
@@ -670,8 +757,8 @@ export class AMToDoApi {
     });
   }
 
-  async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void): Promise<ScheduleAttachmentResponse> {
-    if (!this.wsClient) throw new Error("WebSocket client not available");
+  async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<ScheduleAttachmentResponse> {
+    await this.ensureConnected();
     const keys = generateFileKeys();
 
     // Encrypt file with progress (reports encryption phase)
@@ -681,7 +768,7 @@ export class AMToDoApi {
     );
 
     // WS: init upload → get token
-    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_upload",
       {
         owner_type: "schedule",
@@ -701,12 +788,13 @@ export class AMToDoApi {
       cipher,
       { "Content-Type": "application/octet-stream" },
       onProgress,
+      abortSignal,
     ) as unknown as Promise<ScheduleAttachmentResponse>;
   }
 
-  async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void): Promise<ArrayBuffer> {
-    if (!this.wsClient) throw new Error("WebSocket client not available");
-    const { token } = await this.wsClient.send<{ ok: boolean; token: string }>(
+  async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
+    await this.ensureConnected();
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_download",
       { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
     );
@@ -714,6 +802,7 @@ export class AMToDoApi {
     return downloadWithProgress(
       `${this.baseUrl}/api/v1/schedules/attachments/${attachmentId}/download?token=${token}`,
       onProgress,
+      abortSignal,
     );
   }
 
@@ -722,10 +811,12 @@ export class AMToDoApi {
   }
 
   async listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
-    return this.post("/api/v1/schedules/list", {
+    const res = await this.post<ScheduleListResponse>("/api/v1/schedules/list", {
       start_at: startAt,
       end_at: endAt
     });
+    res.schedules.forEach(parseExtraFields);
+    return res;
   }
 
   async searchSchedules(
@@ -748,7 +839,7 @@ export class AMToDoApi {
       offset?: number;
     }
   ): Promise<ScheduleSearchResponse> {
-    return this.post("/api/v1/schedules/search", {
+    const res = await this.post<ScheduleSearchResponse>("/api/v1/schedules/search", {
       query,
       fields: ["title", "description", "location", "category"],
       use_regex: false,
@@ -767,6 +858,8 @@ export class AMToDoApi {
       offset: 0,
       ...params
     });
+    res.schedules.forEach(parseExtraFields);
+    return res;
   }
 
   async scheduleStats(
@@ -801,14 +894,18 @@ export class AMToDoApi {
   }
 
   async getSchedule(scheduleId: number): Promise<ScheduleResponse> {
-    return this.post("/api/v1/schedules/get", { schedule_id: scheduleId });
+    const res = await this.post<ScheduleResponse>("/api/v1/schedules/get", { schedule_id: scheduleId });
+    parseExtraFields(res.schedule);
+    return res;
   }
 
   async updateSchedule(
     scheduleId: number,
     fields: ScheduleUpdateRequest
   ): Promise<ScheduleResponse> {
-    return this.post("/api/v1/schedules/update", { schedule_id: scheduleId, ...fields });
+    const res = await this.post<ScheduleResponse>("/api/v1/schedules/update", { schedule_id: scheduleId, ...fields });
+    parseExtraFields(res.schedule);
+    return res;
   }
 
   async removeSchedules(targets: number[]): Promise<TargetsResponse> {
@@ -820,13 +917,15 @@ export class AMToDoApi {
   }
 
   async listScheduleTrash(params?: TrashListParams): Promise<ScheduleTrashListResponse> {
-    return this.post("/api/v1/schedules/trash/list", {
+    const res = await this.post<ScheduleTrashListResponse>("/api/v1/schedules/trash/list", {
       query: params?.query ?? "",
       start_at: params?.start_at ?? null,
       end_at: params?.end_at ?? null,
       limit: params?.limit ?? 100,
       offset: params?.offset ?? 0
     });
+    res.schedules.forEach(parseExtraFields);
+    return res;
   }
 
   async restoreSchedules(targets: number[]): Promise<TargetsResponse> {
@@ -862,17 +961,23 @@ export class AMToDoApi {
     trigger_at: number;
     description?: string | null;
     mentions?: { target_type: string; target_id: number }[];
+    extra_fields?: string | null;
   }): Promise<NotificationResponse> {
-    return this.post("/api/v1/notifications/create", {
+    const res = await this.post<NotificationResponse>("/api/v1/notifications/create", {
       title: params.title,
       trigger_at: params.trigger_at,
       description: params.description ?? null,
       mentions: params.mentions ?? [],
+      extra_fields: params.extra_fields ?? null,
     });
+    parseExtraFields(res.notification);
+    return res;
   }
 
   async getNotification(notificationId: number): Promise<NotificationResponse> {
-    return this.post("/api/v1/notifications/get", { notification_id: notificationId });
+    const res = await this.post<NotificationResponse>("/api/v1/notifications/get", { notification_id: notificationId });
+    parseExtraFields(res.notification);
+    return res;
   }
 
   async updateNotification(
@@ -882,12 +987,15 @@ export class AMToDoApi {
       description?: string | null;
       trigger_at?: number;
       mentions?: { target_type: string; target_id: number }[] | null;
+      extra_fields?: string | null;
     }
   ): Promise<NotificationResponse> {
-    return this.post("/api/v1/notifications/update", {
+    const res = await this.post<NotificationResponse>("/api/v1/notifications/update", {
       notification_id: notificationId,
       ...fields,
     });
+    parseExtraFields(res.notification);
+    return res;
   }
 
   async deleteNotification(notificationId: number): Promise<{ ok: boolean }> {
@@ -941,113 +1049,29 @@ export class AMToDoApi {
   // --- Private helpers ---
 
   private async downloadAttachment(path: string, body: Record<string, unknown>): Promise<ArrayBuffer> {
-    // Route through WebSocket when available
-    if (this.wsClient) {
-      const wsType = pathToWsType(path);
-      const { access_token: _, ...payload } = body;
-      const result = await this.wsClient.send<{ name: string; content_base64: string }>(wsType, payload);
-      const b64 = result.content_base64;
-      let b64Std = b64.replace(/-/g, "+").replace(/_/g, "/");
-      while (b64Std.length % 4 !== 0) b64Std += "=";
-      const binary = atob(b64Std);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return bytes.buffer;
+    if (!this.wsClient) {
+      throw new Error("WebSocket not connected");
     }
 
-    const headers = new Headers();
-    headers.set("Content-Type", "application/json");
-
-    if (this.token) {
-      body["access_token"] = this.token as unknown as string;
-    }
-
-    let bodyStr: string;
-    let aesKey: CryptoKey | null = null;
-
-    if (this.p256PublicKey) {
-      const { seal } = await import("../crypto/envelope");
-      const result = await seal(body, this.p256PublicKey, KEY_ID);
-      bodyStr = JSON.stringify(result.envelope);
-      aesKey = result.aesKey;
-    } else {
-      bodyStr = JSON.stringify(body);
-    }
-
-    const response = await fetchWithNetworkStatus(`${this.baseUrl}${path}`, {
-      method: "POST",
-      body: bodyStr,
-      headers
-    });
-
-    if (!response.ok) {
-      let errorPayload: unknown;
-      try {
-        errorPayload = await response.json();
-      } catch {
-        throw new Error(response.statusText);
-      }
-      if (aesKey) {
-        const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
-        if (isResponseEnvelope(errorPayload as Record<string, unknown>)) {
-          errorPayload = await openResponse(errorPayload as Record<string, unknown>, aesKey);
-        }
-      }
-      const err = errorPayload as { error?: { message?: string } };
-      throw new Error(err?.error?.message ?? response.statusText);
-    }
-
-    return response.arrayBuffer();
+    const wsType = pathToWsType(path);
+    const { access_token: _, ...payload } = body;
+    const result = await this.wsClient.send<{ name: string; content_base64: string }>(wsType, payload);
+    const b64 = result.content_base64;
+    let b64Std = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64Std.length % 4 !== 0) b64Std += "=";
+    const binary = atob(b64Std);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    // Route through WebSocket when available
-    if (this.wsClient) {
-      const wsType = pathToWsType(path);
-      // Strip access_token — WS connection is already authenticated
-      const { access_token: _, ...payload } = body;
-      return this.wsClient.send<T>(wsType, payload);
-    }
+    await this.ensureConnected();
 
-    const headers = new Headers();
-    headers.set("Content-Type", "application/json");
-
-    if (this.token) {
-      body = { ...body, access_token: this.token };
-    }
-
-    let bodyStr: string;
-    let aesKey: CryptoKey | null = null;
-
-    if (this.p256PublicKey) {
-      const { seal } = await import("../crypto/envelope");
-      const result = await seal(body, this.p256PublicKey, KEY_ID);
-      bodyStr = JSON.stringify(result.envelope);
-      aesKey = result.aesKey;
-    } else {
-      bodyStr = JSON.stringify(body);
-    }
-
-    const response = await fetchWithNetworkStatus(`${this.baseUrl}${path}`, {
-      method: "POST",
-      body: bodyStr,
-      headers
-    });
-
-    let responsePayload = await response.json();
-
-    if (aesKey) {
-      const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
-      if (isResponseEnvelope(responsePayload)) {
-        responsePayload = await openResponse(responsePayload as Record<string, unknown>, aesKey);
-      }
-    }
-
-    if (!response.ok || responsePayload.ok === false) {
-      throw new Error(responsePayload?.error?.message ?? response.statusText);
-    }
-
-    return responsePayload as T;
+    const wsType = pathToWsType(path);
+    // Strip access_token — WS connection is already authenticated
+    const { access_token: _, ...payload } = body;
+    return this.wsClient!.send<T>(wsType, payload);
   }
 }
 

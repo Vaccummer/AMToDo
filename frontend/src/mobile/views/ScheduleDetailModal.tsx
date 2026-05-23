@@ -9,6 +9,7 @@ import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { useI18n } from "../../i18n";
+import { MobileExtraFieldsEditor } from "./MobileExtraFieldsEditor";
 
 type Props = {
   schedule: ScheduleItem;
@@ -72,6 +73,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   );
   const [location, setLocation] = useState(initial.location ?? "");
   const [category, setCategory] = useState(initial.category ?? "");
+  const [extraFields, setExtraFields] = useState<Record<string, string>>(initial.extra_fields ?? {});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,18 +91,11 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // Fetch full schedule on mount (the list item may lack some fields)
+  // Only update the schedule reference — do NOT reset editable fields,
+  // because the user may have already started editing before the fetch completes.
   useEffect(() => {
     api.getSchedule(schedule.id).then((r) => {
-      const s = r.schedule;
-      setSchedule(s);
-      setTitle(s.title);
-      setDescription(s.description ?? "");
-      setStartDate(splitDatetime(datetimeLocalFromEpoch(s.start_at)).date);
-      setStartTime(splitDatetime(datetimeLocalFromEpoch(s.start_at)).time);
-      setEndDate(splitDatetime(datetimeLocalFromEpoch(s.end_at)).date);
-      setEndTime(splitDatetime(datetimeLocalFromEpoch(s.end_at)).time);
-      setLocation(s.location ?? "");
-      setCategory(s.category ?? "");
+      setSchedule(r.schedule);
     }).catch(() => { /* keep initial data */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -280,9 +275,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       (startKey ? epochFromDatetimeLocal(startKey) : null) !== schedule.start_at ||
       (endKey ? epochFromDatetimeLocal(endKey) : null) !== schedule.end_at ||
       location !== (schedule.location ?? "") ||
-      category !== (schedule.category ?? "")
+      category !== (schedule.category ?? "") ||
+      JSON.stringify(extraFields) !== JSON.stringify(schedule.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, startKey, endKey, location, category, schedule]);
+  }, [attachmentsChanged, title, description, startKey, endKey, location, category, schedule, extraFields]);
 
   // Timeline bar data
   const timeline = useMemo(() => {
@@ -338,6 +334,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       if (category !== (schedule.category ?? "")) {
         fields.category = category || null;
       }
+      const originalExtra = schedule.extra_fields ?? {};
+      if (JSON.stringify(extraFields) !== JSON.stringify(originalExtra)) {
+        fields.extra_fields = JSON.stringify(extraFields);
+      }
 
       if (Object.keys(fields).length === 0) {
         onClose();
@@ -361,6 +361,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         setEndTime(splitDatetime(datetimeLocalFromEpoch(s.end_at)).time);
         setLocation(s.location ?? "");
         setCategory(s.category ?? "");
+        setExtraFields(s.extra_fields ?? {});
         setAttachmentsChanged(false);
         onUpdate(fresh.schedule);
       } catch {
@@ -561,6 +562,12 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               />
             </div>
           </div>
+
+          {/* Divider */}
+          <div className="schedule-modal-divider" />
+
+          <div className="schedule-modal-section-label">{t("extraFields.title")}</div>
+          <MobileExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
 
           {/* Divider */}
           <div className="schedule-modal-divider" />

@@ -130,6 +130,10 @@ export async function decryptBuffer(
   const nonceBytes = new Uint8Array(16);
   nonceBytes.set(nonceRaw);
 
+  if (cipher.byteLength < 33) {
+    throw new Error(`Cipher too short: ${cipher.byteLength} bytes (minimum 33)`);
+  }
+
   const cipherBytes = cipher.slice(0, cipher.byteLength - 32);
   const receivedTag = cipher.slice(cipher.byteLength - 32);
 
