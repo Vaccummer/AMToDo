@@ -9,6 +9,7 @@ import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
+import { ExtraFieldsEditor } from "./ExtraFieldsEditor";
 
 type Props = {
   todo: TodoItem;
@@ -74,6 +75,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const dueAtKey = dueDate && dueTime ? `${dueDate}T${dueTime}` : "";
   const [priority, setPriority] = useState(String(initial.priority));
   const [tag, setTag] = useState(initial.tag ?? "");
+  const [extraFields, setExtraFields] = useState<Record<string, string>>(initial.extra_fields ?? {});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setDueTime(fullTodo.due_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.due_at)).time : "");
       setPriority(String(fullTodo.priority));
       setTag(fullTodo.tag ?? "");
+      setExtraFields(fullTodo.extra_fields ?? {});
     }).catch(() => { /* use initial data */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -174,9 +177,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       plannedAtKey !== (todo.planned_at ? datetimeLocalFromEpoch(todo.planned_at) : "") ||
       dueAtKey !== (todo.due_at ? datetimeLocalFromEpoch(todo.due_at) : "") ||
       Number(priority) !== todo.priority ||
-      tag !== (todo.tag ?? "")
+      tag !== (todo.tag ?? "") ||
+      JSON.stringify(extraFields) !== JSON.stringify(todo.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, todo]);
+  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo]);
 
   const datetimeValidation = useMemo(() => {
     let plannedDateError = !plannedDate;
@@ -259,6 +263,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       const newPriority = Number(priority);
       if (newPriority !== todo.priority) fields.priority = newPriority;
       if (tag !== (todo.tag ?? "")) fields.tag = tag || null;
+
+      const originalExtra = todo.extra_fields ?? {};
+      if (JSON.stringify(extraFields) !== JSON.stringify(originalExtra)) {
+        fields.extra_fields = Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null;
+      }
 
       if (Object.keys(fields).length === 0) {
         onClose();
@@ -527,6 +536,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           </div>
 
           {/* Divider */}
+          <div className="modal-divider" />
+
+          <div className="modal-section-label">{t("extraFields.title")}</div>
+          <ExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
+
           <div className="modal-divider" />
 
           <div className="modal-section-label">{t("common.attachments")}</div>

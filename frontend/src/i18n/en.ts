@@ -90,6 +90,13 @@ export const en: Record<string, string> = {
   "common.downloading": "Downloading...",
   "common.dropFilesHere": "Drop files here",
   "common.selectFile": "Select File",
+  "common.takePhoto": "Take Photo",
+  "common.cancelUpload": "Cancel Upload",
+  "common.cancelDownload": "Cancel Download",
+  "common.uploadingPercent": "Uploading {{percent}}%",
+  "common.downloadingPercent": "Downloading {{percent}}%",
+  "common.attachmentCount": "{{count}} attachments",
+  "common.photoCaptureFailed": "Failed to capture photo",
   "common.attachmentProcessing": "Processing attachments",
   "common.attachmentDataLoadFailed": "Failed to load attachment data",
   "common.attachmentLoadFailed": "Failed to load attachment",
@@ -398,6 +405,14 @@ export const en: Record<string, string> = {
   "tab.search": "Search",
   "tab.trash": "Trash",
   "tab.notify": "Notifications",
+
+  // Extra Fields
+  "extraFields.title": "Extra Fields",
+  "extraFields.count": "{{count}} custom fields",
+  "extraFields.addField": "Add Field",
+  "extraFields.editField": "Edit Field",
+  "extraFields.keyPlaceholder": "field name",
+  "extraFields.valuePlaceholder": "value",
 
   // Crypto
   "crypto.fingerprintMismatch": "Server public key fingerprint mismatch!\nExpected: {{expected}}\nActual: {{actual}}\nPossible man-in-the-middle attack, or the server has changed its key.",

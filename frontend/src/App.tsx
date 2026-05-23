@@ -294,12 +294,6 @@ export function App() {
   // Bootstrap: health check (HTTP) → WS connect → API ready
   useEffect(() => {
     if (!settingsLoaded) return;
-    if (!settings.ws_enabled) {
-      connectionManagerRef.current.reportIdle();
-      setApi(null);
-      setHealth(null);
-      return;
-    }
     let cancelled = false;
     let retryTimer: number | undefined;
     const MAX_STARTUP_ATTEMPTS = 3;
@@ -428,7 +422,7 @@ export function App() {
         wsClientRef.current = null;
       }
     };
-  }, [settingsLoaded, settings.server_url, settings.access_token, settings.ws_enabled]);
+  }, [settingsLoaded, settings.server_url, settings.access_token]);
 
   function showSystemNotification(notification: WsNotificationPayload) {
     const epoch = typeof notification.trigger_at === "number" ? notification.trigger_at : 0;
@@ -536,7 +530,6 @@ export function App() {
       notification_silent: String(s.notification_silent),
       notification_timeout: s.notification_timeout,
       ws_reconnect_interval_ms: String(s.ws_reconnect_interval_ms),
-      ws_enabled: String(s.ws_enabled),
       reconnect_max_attempts: String(s.reconnect_max_attempts),
       notify_on_disconnect: String(s.notify_on_disconnect),
     }).then(() => {
@@ -792,9 +785,6 @@ export function App() {
           }}
           focusTarget={settingsFocusTarget}
           connectionStatus={connStatus}
-          onConnectionToggle={(enabled) => {
-            setSettings((prev) => ({ ...prev, ws_enabled: enabled }));
-          }}
           onAcceptFingerprint={(fingerprint) => {
             setSettings((prev) => ({ ...prev, known_key_fingerprint: fingerprint }));
           }}

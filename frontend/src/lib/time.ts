@@ -212,3 +212,16 @@ export function weekOfMonth(dateKey: string, weekStart = 1): number {
   );
   return Math.floor(diffDays / 7) + 1;
 }
+
+/**
+ * Format epoch to short MM/DD date string.
+ */
+export function formatDateShort(epoch: number, timezone = DEFAULT_TIMEZONE): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(epoch * 1000));
+  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${lookup.month}/${lookup.day}`;
+}

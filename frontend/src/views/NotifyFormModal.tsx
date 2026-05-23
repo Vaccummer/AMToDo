@@ -6,6 +6,7 @@ import { Dropdown } from "./Dropdown";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
+import { ExtraFieldsEditor } from "./ExtraFieldsEditor";
 import { useI18n } from "../i18n";
 
 type MentionDraft = {
@@ -42,6 +43,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
   const [triggerDate, setTriggerDate] = useState("");
   const [triggerTime, setTriggerTime] = useState("");
   const [mentions, setMentions] = useState<MentionDraft[]>([]);
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(editId));
@@ -70,6 +72,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
             target_id: String(m.target_id),
           }))
         );
+        setExtraFields(n.extra_fields ?? {});
       })
       .catch(() => {
         /* use empty defaults */
@@ -120,12 +123,15 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           target_id: Number(m.target_id),
         }));
 
+      const extraFieldsStr = Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null;
+
       if (isEdit && editId !== null) {
         await api.updateNotification(editId, {
           title: title.trim(),
           description: description.trim() || null,
           trigger_at: triggerAt,
           mentions: mentionPayload,
+          extra_fields: extraFieldsStr,
         });
       } else {
         await api.createNotification({
@@ -133,6 +139,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           description: description.trim() || null,
           trigger_at: triggerAt,
           mentions: mentionPayload,
+          extra_fields: extraFieldsStr,
         });
       }
       onClose();
@@ -398,6 +405,10 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
               </button>
             </div>
           </div>
+
+          <div className="schedule-modal-divider" />
+          <div className="schedule-modal-section-label">{t("extraFields.title")}</div>
+          <ExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
 
           {isEdit && editId !== null && (
             <>
