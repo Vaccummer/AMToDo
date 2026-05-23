@@ -45,6 +45,7 @@ class ScheduleDraft:
     description: str | None = None
     location: str | None = None
     category: str | None = None
+    extra_fields: str = "{}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class ScheduleUpdate:
     description: str | None = None
     location: str | None = None
     category: str | None = None
+    extra_fields: str | None = None
     _fields_set: frozenset[str] = frozenset()
 
 
@@ -95,6 +97,7 @@ class ScheduleService:
             timezone=draft.timezone,
             location=draft.location,
             category=draft.category,
+            extra_fields=draft.extra_fields,
             created_at=now,
             updated_at=None,
         )
@@ -226,6 +229,9 @@ class ScheduleService:
             if "category" in explicit:
                 schedule.category = update.category
                 changed = True
+            if "extra_fields" in explicit:
+                schedule.extra_fields = update.extra_fields
+                changed = True
         else:
             if update.title is not None:
                 title = update.title.strip()
@@ -247,6 +253,9 @@ class ScheduleService:
                 changed = True
             if update.category is not None:
                 schedule.category = update.category
+                changed = True
+            if update.extra_fields is not None:
+                schedule.extra_fields = update.extra_fields
                 changed = True
 
         if changed:
