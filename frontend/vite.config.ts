@@ -39,7 +39,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "127.0.0.1",
       port: 5173,
-      strictPort: true
+      strictPort: true,
+      watch: {
+        ignored: ["**/dist/**", "**/dist-mobile/**"]
+      }
     },
     build: {
       outDir: isMobile ? "dist-mobile" : "dist",

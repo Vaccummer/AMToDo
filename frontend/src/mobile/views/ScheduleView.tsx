@@ -23,8 +23,6 @@ import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { NotifyFormModal } from "./NotifyFormModal";
 import { getEventColors, getNotifyEventColors } from "../../themes";
 import { useGlassTooltip, GlassTooltip } from "../../hooks/useGlassTooltip";
-import scheduleNormalIcon from "../../assets/schedule-normal.svg";
-import scheduleFullIcon from "../../assets/schedule-full.svg";
 import { useI18n } from "../../i18n";
 
 function ordinal(n: number): string {
@@ -161,7 +159,6 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const [showCalendar, setShowCalendar] = useState(false);
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [fullHours, setFullHours] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditingSchedule | null>(null);
   const [editStatus, setEditStatus] = useState<string>("");
@@ -286,8 +283,8 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
 
   const normalizedStartHour = Math.min(23, Math.max(0, Math.trunc(startHour)));
   const normalizedEndHour = Math.min(24, Math.max(normalizedStartHour + 1, Math.trunc(endHour)));
-  const visibleStartHour = fullHours ? 0 : normalizedStartHour;
-  const visibleEndHour = fullHours ? 24 : normalizedEndHour;
+  const visibleStartHour = normalizedStartHour;
+  const visibleEndHour = normalizedEndHour;
 
   const slots = useMemo(
     () => buildScheduleSlots(visibleStartHour, visibleEndHour, normalizedSlotMinutes),
@@ -1092,20 +1089,17 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           <span className="month-title">{monthLabel}</span>
           <div style={{ display: "flex", gap: 6 }}>
             <button
-              type="button"
-              className="month-btn"
-              onClick={() => setFullHours((v) => !v)}
-              title={t("schedule.toggleTimeRange")}
-            >
-              <img src={fullHours ? scheduleFullIcon : scheduleNormalIcon} alt="" style={{ width: 18, height: 18 }} />
-            </button>
-            <button
               ref={calendarBtnRef}
               type="button"
               className="month-btn"
               onClick={(e) => toggleCalendar(e.currentTarget.getBoundingClientRect())}
             >
-              📅
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
             </button>
           </div>
         </div>
@@ -1279,7 +1273,20 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
         )}
       </div>
 
-      {/* FAB */}
+      {/* FABs */}
+      {selectedDateKey !== todayKey && (
+        <button
+          type="button"
+          className="schedule-agenda-fab go-today-fab"
+          onClick={goToToday}
+          title={locale === "en" ? "Go to today" : "回到今天"}
+        >
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1001.235558 448.9728L860.179558 329.2672V166.4a64 64 0 0 0-128 0v54.272l-161.792-137.2672-20.48-17.2032A63.0272 63.0272 0 0 0 512.019558 51.2a63.0272 63.0272 0 0 0-37.9392 15.0016l-20.48 17.2032-430.7968 365.568a65.3824 65.3824 0 0 0-7.8848 91.1872 63.6928 63.6928 0 0 0 90.1632 7.9872L512.019558 202.8032l406.9376 345.344a63.6928 63.6928 0 0 0 90.1632-7.9872 65.3824 65.3824 0 0 0-7.8848-91.1872z" fill="#FFFFFF" />
+            <path d="M512.019558 332.8l-384 307.2v256a76.8 76.8 0 0 0 76.8 76.8h192v-281.6h230.4v281.6H819.219558a76.8 76.8 0 0 0 76.8-76.8v-256z" fill="#FFFFFF" />
+          </svg>
+        </button>
+      )}
       <button type="button" className="schedule-agenda-fab" onClick={handleFabClick}>+</button>
 
       {editStatus ? <div className="empty-state schedule-status">{editStatus}</div> : null}

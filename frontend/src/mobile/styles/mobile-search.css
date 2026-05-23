@@ -418,20 +418,20 @@
 .mobile-shell .ms-empty-initial svg {
   width: 48px;
   height: 48px;
-  color: rgba(138, 128, 120, 0.3);
+  color: rgba(255, 255, 255, 0.2);
   margin-bottom: 16px;
 }
 
 .mobile-shell .ms-empty-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--global-text-primary, #342f2a);
+  color: rgba(255, 255, 255, 0.85);
   margin-bottom: 6px;
 }
 
 .mobile-shell .ms-empty-desc {
   font-size: 13px;
-  color: #8a8078;
+  color: rgba(255, 255, 255, 0.45);
   line-height: 1.5;
   max-width: 260px;
 }
@@ -440,18 +440,18 @@
 
 .mobile-shell .ms-dimension-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
   width: 100%;
-  max-width: 300px;
+  max-width: 320px;
   margin-top: 20px;
 }
 
 .mobile-shell .ms-dimension-card {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 12px 8px;
+  border-radius: 14px;
+  padding: 16px 12px;
   text-align: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -490,20 +490,20 @@
 .mobile-shell .ms-empty-no-results svg {
   width: 48px;
   height: 48px;
-  color: rgba(138, 128, 120, 0.3);
+  color: rgba(255, 255, 255, 0.2);
   margin-bottom: 16px;
 }
 
 .mobile-shell .ms-empty-no-results .ms-empty-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--global-text-primary, #342f2a);
+  color: rgba(255, 255, 255, 0.85);
   margin-bottom: 6px;
 }
 
 .mobile-shell .ms-empty-no-results .ms-empty-desc {
   font-size: 13px;
-  color: #8a8078;
+  color: rgba(255, 255, 255, 0.45);
   line-height: 1.5;
   max-width: 260px;
 }
@@ -842,7 +842,7 @@
 .mobile-shell .ms-empty-icon {
   width: 48px;
   height: 48px;
-  color: rgba(138, 128, 120, 0.3);
+  color: rgba(255, 255, 255, 0.2);
   margin-bottom: 16px;
 }
 
@@ -859,8 +859,8 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: #8a8078;
-  background: rgba(138, 128, 120, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
   padding: 5px 12px;
   border-radius: 8px;
   margin-top: 16px;
@@ -870,7 +870,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #d1c7ba;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* ── Filter Sheet Inputs ── */

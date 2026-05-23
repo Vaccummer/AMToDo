@@ -1258,10 +1258,8 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
       </div>
 
       {/* Filter bottom sheet */}
-      {sheetOpen && (
-        <>
-          <div className="ms-sheet-overlay" onClick={() => setSheetOpen(false)} />
-          <div className="ms-bottom-sheet">
+          <div className={`ms-sheet-overlay${sheetOpen ? " open" : ""}`} onClick={() => setSheetOpen(false)} />
+          <div className={`ms-bottom-sheet${sheetOpen ? " open" : ""}`}>
             <div className="ms-sheet-handle" />
             <div className="ms-sheet-header">
               <h3>{t("search.match")}</h3>
@@ -1469,8 +1467,6 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               {t("common.search")}
             </button>
           </div>
-        </>
-      )}
 
       {/* Context menu */}
       {contextMenu && contextItem ? (

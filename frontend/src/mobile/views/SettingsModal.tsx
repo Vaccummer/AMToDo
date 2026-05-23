@@ -185,6 +185,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   // Connection
   const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
+  const userToggledWsRef = useRef(false);
   const [reconnectMaxAttempts, setReconnectMaxAttempts] = useState(String(initial.reconnect_max_attempts));
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(initial.notify_on_disconnect);
   const [lanAddress, setLanAddress] = useState(initial.lan_address || "");
@@ -199,9 +200,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // Token verify
   const [tokenVerifying, setTokenVerifying] = useState(false);
   const [tokenResult, setTokenResult] = useState<TokenResult | null>(null);
-
-  // Toggle guard
-  const userToggledWsRef = useRef(false);
 
   const { ask, dialog: confirmDialog } = useConfirm();
 
@@ -251,6 +249,20 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
 
+  // Auto-revert wsEnabled if connection fails after user toggle
+  useEffect(() => {
+    if (!userToggledWsRef.current) return;
+    if (!wsEnabled) return;
+    const s = connectionStatus?.status;
+    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
+      userToggledWsRef.current = false;
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+    } else if (s === "online") {
+      userToggledWsRef.current = false;
+    }
+  }, [connectionStatus?.status, wsEnabled, onConnectionToggle]);
+
   // Status bar + browser back handling
   useEffect(() => {
     // Push a history entry so Android back gesture/button closes the modal
@@ -273,20 +285,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       }).catch(() => {});
     };
   }, [onClose]);
-
-  // Auto-revert wsEnabled if connection fails after user toggle
-  useEffect(() => {
-    if (!userToggledWsRef.current) return;
-    if (!wsEnabled) return;
-    const s = connectionStatus?.status;
-    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
-      userToggledWsRef.current = false;
-      setWsEnabled(false);
-      onConnectionToggle?.(false);
-    } else if (s === "online") {
-      userToggledWsRef.current = false;
-    }
-  }, [connectionStatus?.status, wsEnabled, onConnectionToggle]);
 
   // ── Connection logic ──
 
@@ -378,7 +376,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       } else {
         api = new AMToDoApi(serverUrl, accessToken);
       }
-      const result = await api.user();
+      const result = await api.verifyTokenHttp();
       if (result.ok) {
         setTokenResult({ ok: true, userName: result.user.name });
         return true;
@@ -699,7 +697,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-modal-body">
 
           {/* Connection */}
-          <div className={`settings-group conn-group${wsEnabled ? " conn-locked" : ""}`}>
+          <div className={`settings-group conn-group${connLocked ? " conn-locked" : ""}`}>
             <div className="settings-row">
               <span className="settings-row-label">{MOB.tabConnection}</span>
               <button
@@ -775,7 +773,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onChange={handleTokenChange}
                     onBlur={() => onUpdateField?.({ access_token: accessToken })}
                     disabled={!tokenEditable}
-                    placeholder={!tokenEditable && !connLocked ? MOB.checkServerFirst : MOB.enterToken}
+                    placeholder={!tokenEditable ? MOB.checkServerFirst : MOB.enterToken}
                   />
                   <button
                     type="button"
@@ -817,7 +815,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 type="button"
                 className={`settings-sw${notifyOnDisconnect ? " on" : ""}`}
                 onClick={handleNotifyDisconnectToggle}
-                disabled={connLocked}
+                disabled={false}
                 role="switch"
                 aria-checked={notifyOnDisconnect}
               >
@@ -834,7 +832,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                   className="settings-inline-number"
                   value={reconnectMaxAttempts}
                   min={0}
-                  disabled={connLocked}
+                  disabled={false}
                   onChange={(e) => {
                     const v = e.target.value;
                     if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
