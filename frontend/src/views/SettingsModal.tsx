@@ -46,7 +46,6 @@ type Props = {
   onClose: () => void;
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
-  onConnectionToggle?: (enabled: boolean) => void;
   onAcceptFingerprint?: (fingerprint: string) => void;
 };
 
@@ -76,7 +75,7 @@ const WARN_ICON = (
 
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onAcceptFingerprint }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -91,7 +90,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("connection");
 
   // Connection
-  const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
   const [reconnectMaxAttempts, setReconnectMaxAttempts] = useState(String(initial.reconnect_max_attempts));
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(initial.notify_on_disconnect);
   const [lanAddress, setLanAddress] = useState(initial.lan_address || "");
@@ -106,9 +104,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // Token verify
   const [tokenVerifying, setTokenVerifying] = useState(false);
   const [tokenResult, setTokenResult] = useState<TokenResult | null>(null);
-
-  // Toggle guard
-  const userToggledWsRef = useRef(false);
 
   const { t, locale } = useI18n();
   const { ask, dialog: confirmDialog } = useConfirm();
@@ -160,20 +155,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
-
-  // Auto-revert wsEnabled if connection fails after user toggle
-  useEffect(() => {
-    if (!userToggledWsRef.current) return;
-    if (!wsEnabled) return;
-    const s = connectionStatus?.status;
-    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
-      userToggledWsRef.current = false;
-      setWsEnabled(false);
-      onConnectionToggle?.(false);
-    } else if (s === "online") {
-      userToggledWsRef.current = false;
-    }
-  }, [connectionStatus?.status, wsEnabled, onConnectionToggle]);
 
   // ── Connection logic ──
 
@@ -260,7 +241,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       } else {
         api = new AMToDoApi(serverUrl, accessToken);
       }
-      const result = await api.user();
+      const result = await api.verifyTokenHttp();
       if (result.ok) {
         setTokenResult({ ok: true, userName: result.user.name });
         return true;
@@ -338,36 +319,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     }
   }
 
-  // Connection toggle
-  async function handleWsToggle() {
-    if (wsEnabled) {
-      setWsEnabled(false);
-      onConnectionToggle?.(false);
-      return;
-    }
-
-    // ── Turning ON: validate URL and token first ──
-    // 1. URL check (skip if already passed)
-    let urlOk = urlCheckResult?.kind === "ok";
-    if (!urlOk) {
-      urlOk = await checkUrl();
-      if (!urlOk) return; // URL check failed — abort
-    }
-
-    // 2. Token verification (skip if already passed)
-    let tokenOk = tokenResult?.ok === true;
-    if (!tokenOk) {
-      tokenOk = await verifyToken({ skipUrlCheck: true });
-      if (!tokenOk) return; // Token check failed — abort
-    }
-
-    // Both checks passed — enable
-    setWsEnabled(true);
-    userToggledWsRef.current = true;
-    onSaveConnection?.({ ws_enabled: true });
-    onConnectionToggle?.(true);
-  }
-
   // Fingerprint accept/reject (from connectionStatus prop)
   function handleAcceptFingerprint() {
     if (urlCheckResult?.kind === "fingerprint") {
@@ -385,9 +336,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
   // Connection section state
-  const connLocked = wsEnabled;
   const urlCheckPassed = urlCheckResult?.kind === "ok";
-  const tokenEditable = urlCheckPassed && !connLocked;
+  const tokenEditable = urlCheckPassed;
 
   // Input classes
   const urlInputClass = [
@@ -663,20 +613,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           <div className="settings-conn-section">
             <div className="settings-conn-header">
               <span className="settings-conn-header-label">{t("settings.connectionToggle")}</span>
-              <button
-                type="button"
-                className={`toggle-switch${wsEnabled ? " on" : ""}`}
-                onClick={handleWsToggle}
-                disabled={false}
-                role="switch"
-                aria-checked={wsEnabled}
-                aria-label={t("settings.connectionToggle")}
-              >
-                <span className="toggle-thumb" />
-              </button>
             </div>
 
-            <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
+            <div className="settings-conn-body">
               {/* LAN Address */}
               <div className="settings-modal-field">
                 <label className="settings-modal-label" htmlFor="lan-addr">{t("settings.lanAddress")}</label>
@@ -689,13 +628,13 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     onChange={(e) => setLanAddress(e.target.value)}
                     onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
                     placeholder="http://192.168.x.x:8000"
-                    disabled={connLocked}
+                    disabled={false}
                   />
                   <button
                     type="button"
                     className="settings-conn-lan-btn"
                     onClick={handleLanFetch}
-                    disabled={connLocked || !lanAddress || lanLoading}
+                    disabled={!lanAddress || lanLoading}
                   >
                     {lanLoading ? t("settings.fetching") : t("settings.fetch")}
                   </button>
@@ -713,14 +652,14 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     value={serverUrl}
                     onChange={handleUrlChange}
                     onBlur={() => onUpdateField?.({ server_url: serverUrl })}
-                    disabled={connLocked}
+                    disabled={false}
                     placeholder="http://127.0.0.1:8000"
                   />
                   <button
                     type="button"
                     className="settings-conn-lan-btn"
                     onClick={() => checkUrl()}
-                    disabled={connLocked || !serverUrl || urlChecking}
+                    disabled={!serverUrl || urlChecking}
                   >
                     {urlChecking ? t("settings.checking") : t("settings.check")}
                   </button>
@@ -732,7 +671,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               <div className={`settings-modal-field${!tokenEditable ? " settings-conn-field-disabled" : ""}`}>
                 <label className="settings-modal-label" htmlFor="srv-token">
                   {t("settings.accessToken")}
-                  {!tokenEditable && !connLocked && (
+                  {!tokenEditable && (
                     <span className="settings-conn-field-hint">{t("settings.checkServerFirst")}</span>
                   )}
                 </label>
@@ -746,7 +685,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                       onChange={handleTokenChange}
                       onBlur={() => onUpdateField?.({ access_token: accessToken })}
                       disabled={!tokenEditable}
-                      placeholder={!tokenEditable && !connLocked ? t("settings.completeServerCheckFirst") : t("settings.enterAccessToken")}
+                      placeholder={!tokenEditable ? t("settings.completeServerCheckFirst") : t("settings.enterAccessToken")}
                     />
                     <button
                       type="button"
@@ -796,7 +735,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     className="settings-conn-sub-input"
                     value={reconnectMaxAttempts}
                     min={0}
-                    disabled={connLocked}
+                    disabled={false}
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
@@ -820,7 +759,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                     type="button"
                     className={`toggle-switch${notifyOnDisconnect ? " on" : ""}`}
                     onClick={handleNotifyDisconnectToggle}
-                    disabled={connLocked}
+                    disabled={false}
                     role="switch"
                     aria-checked={notifyOnDisconnect}
                     aria-label={t("settings.disconnectNotify")}

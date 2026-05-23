@@ -90,6 +90,13 @@ export const zhCN: Record<string, string> = {
   "common.downloading": "下载中...",
   "common.dropFilesHere": "拖拽文件到这里",
   "common.selectFile": "选择文件",
+  "common.takePhoto": "拍照",
+  "common.cancelUpload": "取消上传",
+  "common.cancelDownload": "取消下载",
+  "common.uploadingPercent": "上传中 {{percent}}%",
+  "common.downloadingPercent": "下载中 {{percent}}%",
+  "common.attachmentCount": "{{count}} 个附件",
+  "common.photoCaptureFailed": "拍照失败",
   "common.attachmentProcessing": "附件处理中",
   "common.attachmentDataLoadFailed": "附件数据加载失败",
   "common.attachmentLoadFailed": "附件加载失败",
@@ -399,6 +406,14 @@ export const zhCN: Record<string, string> = {
   "tab.search": "搜索",
   "tab.trash": "回收站",
   "tab.notify": "通知",
+
+  // Extra Fields
+  "extraFields.title": "额外字段",
+  "extraFields.count": "{{count}} 个自定义字段",
+  "extraFields.addField": "添加字段",
+  "extraFields.editField": "编辑字段",
+  "extraFields.keyPlaceholder": "字段名",
+  "extraFields.valuePlaceholder": "值",
 
   // Crypto
   "crypto.fingerprintMismatch": "服务器公钥指纹不匹配！\n期望: {{expected}}\n实际: {{actual}}\n可能存在中间人攻击，或服务器已更换密钥。",
