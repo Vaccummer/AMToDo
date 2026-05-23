@@ -15,10 +15,11 @@ const STORE_NAME = "attachments";
 const DB_VERSION = 1;
 
 export async function getAttachmentBlob(
-  downloadFn: (onProgress?: (progress: DownloadProgress) => void) => Promise<ArrayBuffer>,
+  downloadFn: (onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal) => Promise<ArrayBuffer>,
   metadata: CacheableMeta,
   cacheKey: string,
   onProgress?: (progress: DownloadProgress) => void,
+  abortSignal?: AbortSignal,
 ): Promise<{ blob: Blob; cacheHit: boolean }> {
   const db = await openDb();
   const cached = await getRecord(db, cacheKey);
@@ -30,8 +31,20 @@ export async function getAttachmentBlob(
     };
   }
 
-  const cipher = await downloadFn(onProgress);
-  const plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
+  let cipher: ArrayBuffer;
+  let plain: ArrayBuffer;
+  try {
+    cipher = await downloadFn(onProgress, abortSignal);
+    plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
+  } catch (err) {
+    // Retry once on truncation or HMAC errors (likely transient mobile network issue)
+    if (err instanceof Error && (err.message.includes("incomplete") || err.message.includes("HMAC"))) {
+      cipher = await downloadFn(onProgress, abortSignal);
+      plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
+    } else {
+      throw err;
+    }
+  }
   await putRecord(db, { key: cacheKey, metadata, plain });
   return {
     blob: new Blob([plain], { type: metadata.mime_type }),

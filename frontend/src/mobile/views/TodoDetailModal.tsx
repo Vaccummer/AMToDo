@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../../api/client";
 import type { UploadProgress } from "../../lib/chunked-upload";
@@ -9,6 +9,7 @@ import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
+import { MobileExtraFieldsEditor } from "./MobileExtraFieldsEditor";
 
 type Props = {
   todo: TodoItem;
@@ -74,6 +75,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const dueAtKey = dueDate && dueTime ? `${dueDate}T${dueTime}` : "";
   const [priority, setPriority] = useState(String(initial.priority));
   const [tag, setTag] = useState(initial.tag ?? "");
+  const [extraFields, setExtraFields] = useState<Record<string, string>>(initial.extra_fields ?? {});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +87,18 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
-  const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const downloadAbortRef = useRef<AbortController | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t } = useI18n();
 
-  // fetch full todo on mount (the list item may omit fields)
+  // fetch full todo on mount (the list item may omit fields like attachment_count)
+  // Only update the todo reference object — do NOT reset editable fields,
+  // because the user may have already started editing before the fetch completes.
   useEffect(() => {
     api.getTodo(todo.id).then((r) => {
       const fullTodo = {
@@ -99,15 +106,24 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         attachment_count: r.todo.attachment_count ?? initial.attachment_count
       };
       setTodo(fullTodo);
-      setTitle(fullTodo.title);
-      setDescription(fullTodo.description ?? "");
-      setPlannedDate(fullTodo.planned_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.planned_at)).date : "");
-      setPlannedTime(fullTodo.planned_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.planned_at)).time : "");
-      setDueDate(fullTodo.due_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.due_at)).date : "");
-      setDueTime(fullTodo.due_at ? splitDatetime(datetimeLocalFromEpoch(fullTodo.due_at)).time : "");
-      setPriority(String(fullTodo.priority));
-      setTag(fullTodo.tag ?? "");
     }).catch(() => { /* use initial data */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // System gesture navigation: push history entry so Android back gesture closes the modal
+  const closedViaPopRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    history.pushState({ modal: "todo-detail" }, "");
+    const onPopState = () => {
+      closedViaPopRef.current = true;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      if (!closedViaPopRef.current) history.back();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAttachments = useCallback(async () => {
@@ -174,9 +190,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       plannedAtKey !== (todo.planned_at ? datetimeLocalFromEpoch(todo.planned_at) : "") ||
       dueAtKey !== (todo.due_at ? datetimeLocalFromEpoch(todo.due_at) : "") ||
       Number(priority) !== todo.priority ||
-      tag !== (todo.tag ?? "")
+      tag !== (todo.tag ?? "") ||
+      JSON.stringify(extraFields) !== JSON.stringify(todo.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, todo]);
+  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo]);
 
   const datetimeValidation = useMemo(() => {
     let plannedDateError = !plannedDate;
@@ -260,6 +277,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       if (newPriority !== todo.priority) fields.priority = newPriority;
       if (tag !== (todo.tag ?? "")) fields.tag = tag || null;
 
+      const originalExtra = todo.extra_fields ?? {};
+      if (JSON.stringify(extraFields) !== JSON.stringify(originalExtra)) {
+        fields.extra_fields = JSON.stringify(extraFields);
+      }
+
       if (Object.keys(fields).length === 0) {
         onClose();
         return;
@@ -314,7 +336,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     const selected = Array.from(files);
     if (selected.length === 0) return;
 
-    // Check per-file size limit
     for (const file of selected) {
       if (file.size > api.maxAttachmentSize) {
         setError(t("common.fileTooLarge", { name: file.name, size: formatSize(file.size), max: formatSize(api.maxAttachmentSize) }));
@@ -322,6 +343,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       }
     }
 
+    const ac = new AbortController();
+    uploadAbortRef.current = ac;
     setAttachmentBusy(true);
     setError(null);
     try {
@@ -330,7 +353,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         try {
           await api.uploadTodoAttachment(todo.id, file, (progress) => {
             setUploadProgress((prev) => ({ ...prev, [key]: progress }));
-          });
+          }, ac.signal);
         } finally {
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
         }
@@ -341,24 +364,48 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setTodo(updatedTodo);
       onUpdate(updatedTodo);
     } catch (err: unknown) {
+      if (ac.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
     } finally {
+      uploadAbortRef.current = null;
       setAttachmentBusy(false);
-      setDragActive(false);
     }
+  }
+
+  function cancelUpload() {
+    uploadAbortRef.current?.abort();
+  }
+
+  function cancelDownload() {
+    downloadAbortRef.current?.abort();
+  }
+
+  async function handleCameraCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.currentTarget.value = "";
+    const ext = file.name.split(".").pop() || "jpg";
+    const defaultName = `photo_${Date.now()}.${ext}`;
+    const name = prompt(t("common.enterFileName"), defaultName);
+    if (name === null) return;
+    const renamed = new File([file], name || defaultName, { type: file.type });
+    await uploadFiles([renamed]);
   }
 
   async function openAttachment(attachment: AttachmentMetadata) {
     if (attachment.is_orphaned) return;
+    const ac = new AbortController();
+    downloadAbortRef.current = ac;
     setDownloadingId(attachment.id);
     setDownloadProgress(null);
     setError(null);
     try {
       const { blob } = await getAttachmentBlob(
-        (onProgress) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress),
+        (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
         attachment,
         `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
         (progress) => setDownloadProgress(progress),
+        ac.signal,
       );
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -372,10 +419,12 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         return next;
       });
     } catch (err: unknown) {
+      if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setError(message);
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
+      downloadAbortRef.current = null;
       setDownloadingId(null);
       setDownloadProgress(null);
     }
@@ -434,8 +483,30 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
         </div>
 
         <div className="modal-body">
+          {error ? <div className="modal-error">{error}</div> : null}
           {/* Editable fields */}
           <div className="modal-section-label">{t("common.editableFields")}</div>
+
+          <div className="modal-field">
+            <label className="modal-field-label">{t("common.completedStatus")}</label>
+            <button
+              type="button"
+              className={`modal-completion-toggle ${todo.completed ? "completed" : "pending"}`}
+              onClick={toggleCompleted}
+              aria-label={todo.completed ? t("common.completed") : t("common.notCompleted")}
+            >
+              {todo.completed ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor" />
+                  <polyline points="8 12 11 15 16 9" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           <div className="modal-field">
             <label className="modal-field-label" htmlFor="md-title">{t("common.title")}</label>
@@ -526,58 +597,75 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             </div>
           </div>
 
+          <div className="modal-divider" />
+          <div className="modal-section-label">{t("extraFields.title")}</div>
+          <MobileExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
+
           {/* Divider */}
           <div className="modal-divider" />
 
           <div className="modal-section-label">{t("common.attachments")}</div>
-          <div
-            className={`attachment-dropzone${dragActive ? " active" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragActive(true);
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              uploadFiles(e.dataTransfer.files);
-            }}
-          >
-            <span>{attachmentBusy ? t("common.processing") : t("common.dropFilesHere")}</span>
-            <label className="attachment-upload-button" htmlFor="todo-attachment-input">
-              {t("common.selectFile")}
-            </label>
-            <input
-              id="todo-attachment-input"
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files) uploadFiles(e.target.files);
-                e.currentTarget.value = "";
-              }}
-            />
-          </div>
-          {attachmentBusy && Object.keys(uploadProgress).length > 0
-            ? Object.entries(uploadProgress).map(([key, progress]) => progress && (
-                <div key={key} className="attachment-progress-bar attachment-progress-bar--pct" aria-label={`${progress.percent}%`}>
-                  <div className="attachment-progress-fill" style={{ width: `${progress.percent}%` }} />
-                </div>
-              ))
-            : attachmentBusy ? <div className="attachment-progress-bar" aria-label={t("common.attachmentProcessing")} /> : null}
 
+          {/* Action bar: camera + file picker */}
+          <div className="attach-action-bar">
+            <button type="button" className="attach-icon-btn" onClick={() => cameraInputRef.current?.click()} aria-label={t("common.takePhoto")}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </button>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleCameraCapture} />
+            <div className="attach-divider-v" />
+            <button type="button" className="attach-icon-btn" onClick={() => fileInputRef.current?.click()} aria-label={t("common.selectFile")}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            <input ref={fileInputRef} type="file" multiple hidden onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.currentTarget.value = ""; }} />
+            <span className="attach-count">{t("common.attachmentCount", { count: attachments.length })}</span>
+          </div>
+
+          {/* Upload progress rows */}
+          {Object.entries(uploadProgress).map(([key, progress]) => progress && (
+            <div key={key} className="attach-row uploading">
+              <div className="ring-progress">
+                <svg viewBox="0 0 36 36">
+                  <circle className="ring-bg" cx="18" cy="18" r="15.9" />
+                  <circle className="ring-fill upload" cx="18" cy="18" r="15.9"
+                    strokeDasharray={`${progress.percent} ${100 - progress.percent}`}
+                    strokeDashoffset="25" />
+                </svg>
+                <button type="button" className="ring-cancel" onClick={cancelUpload} aria-label={t("common.cancelUpload")}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="attach-row-info">
+                <span className="attach-row-name">{key.split("-")[0]}</span>
+                <span className="attach-row-size uploading">{t("common.uploadingPercent", { percent: progress.percent })}</span>
+              </div>
+            </div>
+          ))}
+
+          {/* Attachment list */}
           <div className="attachment-list">
             {attachments.map((attachment) => {
               const url = attachmentUrls[attachment.id];
               const orphaned = attachment.is_orphaned;
               const loadError = attachmentErrors[attachment.id];
+              const isDownloading = downloadingId === attachment.id;
+              const ext = attachment.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE";
+
               return (
                 <div
-                  className={`attachment-row${orphaned ? " orphaned" : ""}${loadError ? " failed" : ""}`}
+                  className={`attach-row${orphaned ? " orphaned" : ""}${loadError ? " failed" : ""}${isDownloading ? " downloading" : ""}`}
                   key={attachment.id}
                 >
+                  {/* Thumbnail */}
                   <button
                     type="button"
-                    className="attachment-thumb"
+                    className="attach-row-thumb"
                     disabled={orphaned}
                     onClick={() => {
                       if (attachment.preview_kind === "none" || !url) {
@@ -597,37 +685,59 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                     ) : attachmentLoading[attachment.id] ? (
                       <span className="attachment-spinner" />
                     ) : (
-                      <span>{attachment.filename.split(".").pop()?.slice(0, 4) || "FILE"}</span>
+                      <span className="attach-row-ext">{ext}</span>
                     )}
                   </button>
+
+                  {/* Info */}
                   <button
                     type="button"
-                    className="attachment-name"
+                    className="attach-row-info"
                     onClick={() => openAttachment(attachment)}
-                    disabled={orphaned || downloadingId === attachment.id}
+                    disabled={orphaned || isDownloading}
                   >
-                    <span className="attachment-filename">{attachment.filename}</span>
-                    <span className="attachment-size">
+                    <span className="attach-row-name">{attachment.filename}</span>
+                    <span className={`attach-row-size${isDownloading ? " downloading" : ""}`}>
                       {orphaned
                         ? t("common.fileMissing")
-                        : downloadingId === attachment.id
-                          ? (downloadProgress ? `${downloadProgress.percent}%` : t("common.downloading"))
+                        : isDownloading
+                          ? (downloadProgress ? t("common.downloadingPercent", { percent: downloadProgress.percent }) : t("common.downloading"))
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="attachment-remove"
-                    disabled={attachmentBusy || downloadingId !== null}
-                    onClick={() => removeAttachment(attachment)}
-                    aria-label={`${t("common.delete")} ${attachment.filename}`}
-                  >
-                    <svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor">
-                      <path d="M909.5 242.1H147.6c-13.3 0-24.1-10.9-24.1-24.1v-8.4c0-13.3 10.9-24.1 24.1-24.1h761.9c13.3 0 24.1 10.9 24.1 24.1v8.4c0 13.2-10.8 24.1-24.1 24.1z" />
-                      <path d="M701.8 870H351.9c-71 0-128.8-57.8-128.8-128.8V213.7h51.5v527.5c0 42.6 34.7 77.3 77.3 77.3h349.9c42.6 0 77.3-34.7 77.3-77.3V213.7h51.5v527.5c0 71-57.8 128.8-128.8 128.8zM647.7 186h-51.5c0-28.4-29.9-51.6-66.7-51.6-36.7 0-66.6 23.1-66.6 51.6h-51.5c0-56.9 53-103.1 118.1-103.1S647.7 129.1 647.7 186z" />
-                      <path d="M384.2 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM531 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-10.9 24.3-24.3 24.3zM677.8 708.5h-2.9c-13.4 0-24.3-10.9-24.3-24.3V373.8c0-13.4 10.9-24.3 24.3-24.3h2.9c13.4 0 24.3 10.9 24.3 24.3v310.4c0 13.3-11 24.3-24.3 24.3z" />
+
+                  {/* Download ring progress or delete button */}
+                  {isDownloading ? (
+                    <div className="ring-progress">
+                      <svg viewBox="0 0 36 36">
+                        <circle className="ring-bg" cx="18" cy="18" r="15.9" />
+                        <circle className="ring-fill download" cx="18" cy="18" r="15.9"
+                          strokeDasharray={`${downloadProgress?.percent ?? 0} ${100 - (downloadProgress?.percent ?? 0)}`}
+                          strokeDashoffset="25" />
+                      </svg>
+                      <button type="button" className="ring-cancel" onClick={cancelDownload} aria-label={t("common.cancelDownload")}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="attach-del-btn"
+                      disabled={attachmentBusy}
+                      onClick={() => removeAttachment(attachment)}
+                      aria-label={`${t("common.delete")} ${attachment.filename}`}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" /><path d="M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                       </svg>
                     </button>
+                  )}
+
                   {loadError ? <div className="attachment-error-text">{loadError}</div> : null}
                 </div>
               );
@@ -649,20 +759,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             <span className="modal-field-value">{fmtDatetime(todo.updated_at)}</span>
           </div>
 
-          <div className="modal-field">
-            <span className="modal-field-label">{t("common.completedStatus")}</span>
-            <button
-              type="button"
-              className={`modal-toggle ${todo.completed ? "on" : ""}`}
-              onClick={toggleCompleted}
-            >
-              <span className="modal-toggle-knob" />
-              <span className="modal-toggle-label">
-                {todo.completed ? t("common.completed") : t("common.notCompleted")}
-              </span>
-            </button>
-          </div>
-
           {todo.completed_at ? (
             <div className="modal-field">
               <span className="modal-field-label">{t("common.completedAt")}</span>
@@ -675,8 +771,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           <div className="modal-section-label">{t("common.history")}</div>
           <ChangelogPanel api={api} entityId={todo.id} kind="todo" />
         </div>
-
-        {error ? <div className="modal-error">{error}</div> : null}
 
         <div className="modal-actions">
           <button

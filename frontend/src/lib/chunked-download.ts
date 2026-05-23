@@ -29,6 +29,11 @@ export async function downloadWithProgress(
     });
   }
 
+  // Validate that the received bytes match the expected Content-Length
+  if (contentLength > 0 && loaded !== contentLength) {
+    throw new Error(`Download incomplete: received ${loaded} of ${contentLength} bytes`);
+  }
+
   const result = new Uint8Array(loaded);
   let offset = 0;
   for (const chunk of chunks) {
