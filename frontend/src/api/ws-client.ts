@@ -224,6 +224,30 @@ export class UiWsClient {
     return this._connect();
   }
 
+  /** Wait for the connection to reach "connected" status. Returns true if connected, false on timeout or disconnect. */
+  waitForConnected(timeoutMs: number): Promise<boolean> {
+    if (this.status === "connected") return Promise.resolve(true);
+    if (this.status === "disconnected") return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          const idx = this.statusListeners.indexOf(listener);
+          if (idx !== -1) this.statusListeners.splice(idx, 1);
+        }
+      };
+      const timer = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
+      const listener = (status: WsConnectionStatus) => {
+        if (settled) return;
+        if (status === "connected") { cleanup(); resolve(true); }
+        else if (status === "disconnected") { cleanup(); resolve(false); }
+      };
+      this.statusListeners.push(listener);
+    });
+  }
+
   /** Gracefully close the WebSocket. */
   disconnect(): void {
     this.intentionalClose = true;
