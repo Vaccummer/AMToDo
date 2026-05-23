@@ -213,16 +213,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Calendar popup: constrain on mobile ── */
-
-.mobile-shell .calendar-popup {
-  max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - 120px);
-  overflow-y: auto;
-  left: 50vw !important;
-  transform: translateX(-50%) !important;
-}
-
 /* ── Mobile overrides for existing views ── */
 
 .mobile-shell .todo-view,

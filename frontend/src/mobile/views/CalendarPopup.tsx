@@ -125,7 +125,7 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
     <div
       className="calendar-popup"
       ref={popupRef}
-      style={{ position: "fixed", top: anchorRect.bottom, left: anchorRect.left + anchorRect.width / 2 }}
+      style={{ position: "fixed", top: anchorRect.bottom, left: "50vw", transform: "translateX(-50%)" }}
     >
       <div className="calendar-popup-inner date-picker-panel theme-green">
         <div className="dp-panel-header">
