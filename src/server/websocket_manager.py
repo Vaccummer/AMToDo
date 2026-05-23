@@ -156,13 +156,13 @@ class WebSocketManager:
     """Registry of active WebSocket connections, keyed by user_id and conn_id.
 
     A single user may hold **multiple** concurrent connections (multiple
-    devices or windows).  ``push_to_user`` broadcasts to every active
-    connection for that user.
+    devices or windows).  Each connection stores its own session key so that
+    multiple devices can coexist without key conflicts.
     """
 
     def __init__(self) -> None:
-        # user_id → {conn_id: WebSocket}
-        self._connections: dict[int, dict[str, WebSocket]] = {}
+        # user_id → {conn_id: (WebSocket, session_key | None)}
+        self._connections: dict[int, dict[str, tuple[WebSocket, bytes | None]]] = {}
         self._counter = 0
 
     def _next_id(self) -> str:
@@ -171,8 +171,10 @@ class WebSocketManager:
 
     # -- public API --------------------------------------------------------
 
-    async def connect(self, websocket: WebSocket, user_id: int) -> str:
-        """Register an already-accepted *websocket*.
+    async def connect(
+        self, websocket: WebSocket, user_id: int, session_key: bytes | None = None,
+    ) -> str:
+        """Register an already-accepted *websocket* with an optional *session_key*.
 
         The caller is responsible for calling ``await websocket.accept()``
         before calling this method.
@@ -181,9 +183,24 @@ class WebSocketManager:
         conn_id = self._next_id()
         if user_id not in self._connections:
             self._connections[user_id] = {}
-        self._connections[user_id][conn_id] = websocket
+        self._connections[user_id][conn_id] = (websocket, session_key)
         logger.info("WebSocket connected: user_id=%d conn_id=%s", user_id, conn_id)
         return conn_id
+
+    def get_key(self, user_id: int, conn_id: str) -> bytes | None:
+        """Return the session key for a specific connection, or ``None``."""
+        user_conns = self._connections.get(user_id)
+        if user_conns is None:
+            return None
+        entry = user_conns.get(conn_id)
+        if entry is None:
+            return None
+        return entry[1]
+
+    def get_connection_entries(self, user_id: int) -> list[tuple[str, WebSocket, bytes | None]]:
+        """Return ``(conn_id, websocket, session_key)`` triples for *user_id*."""
+        user_conns = self._connections.get(user_id, {})
+        return [(cid, ws, key) for cid, (ws, key) in user_conns.items()]
 
     def disconnect(self, user_id: int, conn_id: str) -> None:
         """Remove a single connection.  Cleans the user slot when empty."""
@@ -198,7 +215,7 @@ class WebSocketManager:
     async def disconnect_all(self, user_id: int) -> None:
         """Close every connection for *user_id* (e.g. session expiry)."""
         user_conns = self._connections.pop(user_id, {})
-        for conn_id, ws in user_conns.items():
+        for conn_id, (ws, _key) in user_conns.items():
             try:
                 await ws.close(code=4001, reason="session expired")
             except Exception:
@@ -223,7 +240,7 @@ class WebSocketManager:
         dead: list[str] = []
         pushed = 0
 
-        for conn_id, ws in user_conns.items():
+        for conn_id, (ws, _key) in user_conns.items():
             try:
                 await ws.send_text(payload)
                 pushed += 1

@@ -176,7 +176,7 @@ async def ui_ws_endpoint(websocket: WebSocket):
     key_mgr.store(user_id, session_key)
 
     # --- Step 6: Register connection + send auth_ok ---
-    conn_id = await ws_mgr.connect(websocket, user_id)
+    conn_id = await ws_mgr.connect(websocket, user_id, session_key=session_key)
     await _send_json(websocket, {"type": "auth_ok"})
 
     # --- Step 7: Message loop ---
@@ -220,7 +220,7 @@ async def ui_ws_endpoint(websocket: WebSocket):
             payload = msg.get("payload")
             if payload and isinstance(payload, str):
                 try:
-                    key = key_mgr.get(user_id)
+                    key = ws_mgr.get_key(user_id, conn_id)
                     if key is None:
                         await _safe_close(websocket, 4001, "session expired")
                         break
@@ -261,7 +261,7 @@ async def ui_ws_endpoint(websocket: WebSocket):
             # Encrypt response data
             if response_data is not None:
                 try:
-                    key = key_mgr.get(user_id)
+                    key = ws_mgr.get_key(user_id, conn_id)
                     if key is not None:
                         resp["data"] = _aes_encrypt(
                             key, json.dumps(response_data).encode("utf-8")

@@ -18,6 +18,7 @@ import asyncio
 import base64
 import json as _json
 import logging
+import os
 import time
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
@@ -144,8 +145,11 @@ async def websocket_notifications(websocket: WebSocket):
         await _safe_close(websocket, 4005, "invalid key_hash")
         return
 
+    # Retrieve the session key so we can store it per-connection
+    session_key = key_mgr.get(user_id)
+
     # --- register connection ----------------------------------------------
-    conn_id = await ws_mgr.connect(websocket, user_id)
+    conn_id = await ws_mgr.connect(websocket, user_id, session_key=session_key)
 
     await websocket.send_text(_json.dumps({"type": "auth_ok"}))
 
@@ -197,6 +201,8 @@ async def _notification_watcher(
 
     *config* is the ``[notification]`` section from ``server.toml``.
     """
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     from server.websocket_manager import NotificationResultCache
 
     interval = int(config.get("watcher_interval", 10))
@@ -218,13 +224,6 @@ async def _notification_watcher(
             _last_watermark_gc = time.monotonic()
 
         for user_id in active_users:
-            # --- key validity check --------------------------------------
-            if key_mgr.get(user_id) is None:
-                await ws_mgr.disconnect_all(user_id)
-                _cache.evict(user_id)
-                _watermarks.pop(user_id, None)
-                continue
-
             # --- query triggered notifications (with cache) --------------
             last_check = _watermarks.get(user_id, now_ts - 60)
             notifications = _cache.get(user_id)
@@ -242,21 +241,34 @@ async def _notification_watcher(
                     continue
                 _cache.set(user_id, notifications)
 
-            # --- push encrypted messages ---------------------------------
-            for n in notifications:
-                try:
-                    notif_dict = notification_to_dict(n)
-                    plain = _json.dumps(notif_dict).encode("utf-8")
-                    encrypted = key_mgr.encrypt(user_id, plain)
-                    await ws_mgr.push_to_user(user_id, {
-                        "type": "notification",
-                        "data": _b64url_encode(encrypted),
-                    })
-                except Exception as exc:
-                    logger.error(
-                        "notification_watcher: push failed for user %d: %s",
-                        user_id, exc,
-                    )
+            if not notifications:
+                _watermarks[user_id] = now_ts
+                continue
+
+            # --- push encrypted messages per-connection ------------------
+            entries = ws_mgr.get_connection_entries(user_id)
+            dead: list[str] = []
+
+            for conn_id, ws, conn_key in entries:
+                if conn_key is None:
+                    dead.append(conn_id)
+                    continue
+                for n in notifications:
+                    try:
+                        notif_dict = notification_to_dict(n)
+                        plain = _json.dumps(notif_dict).encode("utf-8")
+                        nonce = os.urandom(12)
+                        encrypted = nonce + AESGCM(conn_key).encrypt(nonce, plain, None)
+                        await ws.send_text(_json.dumps({
+                            "type": "notification",
+                            "data": _b64url_encode(encrypted),
+                        }))
+                    except Exception:
+                        dead.append(conn_id)
+                        break
+
+            for conn_id in dead:
+                ws_mgr.disconnect(user_id, conn_id)
 
             _watermarks[user_id] = now_ts
 
