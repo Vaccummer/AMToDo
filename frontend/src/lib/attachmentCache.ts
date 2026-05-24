@@ -31,15 +31,14 @@ export async function getAttachmentBlob(
     };
   }
 
-  let cipher: ArrayBuffer;
   let plain: ArrayBuffer;
   try {
-    cipher = await downloadFn(onProgress, abortSignal);
+    const cipher = await downloadFn(onProgress, abortSignal);
     plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
   } catch (err) {
     // Retry once on truncation or HMAC errors (likely transient mobile network issue)
     if (err instanceof Error && (err.message.includes("incomplete") || err.message.includes("HMAC"))) {
-      cipher = await downloadFn(onProgress, abortSignal);
+      const cipher = await downloadFn(onProgress, abortSignal);
       plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
     } else {
       throw err;

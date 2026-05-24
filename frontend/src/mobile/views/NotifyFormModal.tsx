@@ -3,7 +3,7 @@ import type { AMToDoApi } from "../../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
 import { Dropdown } from "./Dropdown";
-import { TimeInput } from "./TimeInput";
+import { TimeWheelPicker } from "./TimeWheelPicker";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { useI18n } from "../../i18n";
@@ -311,8 +311,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
                 hasError={triggerDate !== "" && !triggerValid}
                 theme="gold"
               />
-              <TimeInput
-                className={`schedule-modal-input schedule-modal-datetime-time${triggerDate !== "" && !triggerValid ? " invalid" : ""}`}
+              <TimeWheelPicker
                 value={triggerTime}
                 onChange={setTriggerTime}
               />

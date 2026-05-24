@@ -170,6 +170,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
     y: number;
   } | null>(null);
   const [createDraft, setCreateDraft] = useState<{ startAt: number; endAt: number } | null>(null);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const dateBarRef = useRef<HTMLDivElement>(null);
   const calendarBtnRef = useRef<HTMLButtonElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
@@ -1287,7 +1288,45 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           </svg>
         </button>
       )}
-      <button type="button" className="schedule-agenda-fab" onClick={handleFabClick}>+</button>
+      <button type="button" className="schedule-agenda-fab" onClick={() => setFabMenuOpen(true)}>+</button>
+
+      {/* ── FAB Action Sheet ── */}
+      <div className={`fab-sheet-overlay${fabMenuOpen ? " open" : ""}`} onClick={() => setFabMenuOpen(false)} />
+      <div className={`fab-sheet${fabMenuOpen ? " open" : ""}`}>
+        <div className="fab-sheet-handle" />
+        <div className="fab-sheet-title">{t("schedule.addNew")}</div>
+        <button
+          type="button"
+          className="fab-sheet-option"
+          onClick={() => { setFabMenuOpen(false); handleFabClick(); }}
+        >
+          <span className="fab-sheet-option-icon fab-sheet-option-icon--schedule">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </span>
+          {t("schedule.createSchedule")}
+        </button>
+        <button
+          type="button"
+          className="fab-sheet-option"
+          onClick={() => { setFabMenuOpen(false); setNotifyFormOpen(true); }}
+        >
+          <span className="fab-sheet-option-icon fab-sheet-option-icon--notify">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </span>
+          {t("notify.createNotification")}
+        </button>
+        <button type="button" className="fab-sheet-cancel" onClick={() => setFabMenuOpen(false)}>
+          {t("common.cancel")}
+        </button>
+      </div>
 
       {editStatus ? <div className="empty-state schedule-status">{editStatus}</div> : null}
 

@@ -335,6 +335,7 @@ export type ScheduleCreateParams = {
   description?: string | null;
   location?: string | null;
   category?: string | null;
+  extra_fields?: Record<string, string> | null;
 };
 
 export type ScheduleUpdateRequest = {
@@ -583,14 +584,15 @@ export class AMToDoApi {
     });
   }
 
-  async createTodo(title: string, plannedAt: number): Promise<TodoResponse> {
+  async createTodo(title: string, plannedAt: number, opts?: { due_at?: number | null; description?: string | null; priority?: number; tag?: string | null; extra_fields?: string | null }): Promise<TodoResponse> {
     return this.post("/api/v1/todos/create", {
       title,
       planned_at: plannedAt,
-      due_at: null,
-      description: null,
-      priority: 0,
-      tag: null
+      due_at: opts?.due_at ?? null,
+      description: opts?.description ?? null,
+      priority: opts?.priority ?? 0,
+      tag: opts?.tag ?? null,
+      ...(opts?.extra_fields != null ? { extra_fields: opts.extra_fields } : {}),
     });
   }
 
@@ -733,6 +735,15 @@ export class AMToDoApi {
     );
   }
 
+  async getTodoAttachmentDownloadUrl(todoId: number, attachmentId: number): Promise<string> {
+    await this.ensureConnected();
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
+      "attachment.init_download",
+      { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
+    );
+    return `${this.baseUrl}/api/v1/todos/attachments/${attachmentId}/download?token=${token}`;
+  }
+
   async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
     return this.post("/api/v1/todos/attachments/remove-orphaned", { todo_id: todoId });
   }
@@ -810,6 +821,15 @@ export class AMToDoApi {
       onProgress,
       abortSignal,
     );
+  }
+
+  async getScheduleAttachmentDownloadUrl(scheduleId: number, attachmentId: number): Promise<string> {
+    await this.ensureConnected();
+    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
+      "attachment.init_download",
+      { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
+    );
+    return `${this.baseUrl}/api/v1/schedules/attachments/${attachmentId}/download?token=${token}`;
   }
 
   async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
@@ -895,7 +915,8 @@ export class AMToDoApi {
       ...params,
       description: params.description ?? null,
       location: params.location ?? null,
-      category: params.category ?? null
+      category: params.category ?? null,
+      extra_fields: params.extra_fields ?? null
     });
   }
 

@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import type { AMToDoApi, ScheduleItem, ScheduleCreateParams } from "../../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
-import { TimeInput } from "./TimeInput";
+import { TimeWheelPicker } from "./TimeWheelPicker";
 import { useConfirm } from "./ConfirmDialog";
 import { useI18n } from "../../i18n";
+import { MobileExtraFieldsEditor } from "./MobileExtraFieldsEditor";
 
 type Props = {
   api: AMToDoApi;
@@ -34,6 +35,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
   const [endTime, setEndTime] = useState(initialEnd.time);
   const [location, setLocation] = useState("");
   const [category, setCategory] = useState("");
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
@@ -105,6 +107,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
         description: description.trim() || null,
         location: location.trim() || null,
         category: category.trim() || null,
+        extra_fields: Object.keys(extraFields).length ? extraFields : null,
       };
       const result = await api.createSchedule(fields);
       onCreate(result.schedule);
@@ -176,8 +179,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 hasError={!startValid && startDate !== ""}
                 theme="gold"
               />
-              <TimeInput
-                className={`schedule-modal-input schedule-modal-datetime-time${!startValid && startDate !== "" ? " invalid" : ""}`}
+              <TimeWheelPicker
                 value={startTime}
                 onChange={setStartTime}
               />
@@ -193,8 +195,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 hasError={!endValid && endDate !== ""}
                 theme="gold"
               />
-              <TimeInput
-                className={`schedule-modal-input schedule-modal-datetime-time${!endValid && endDate !== "" ? " invalid" : ""}`}
+              <TimeWheelPicker
                 value={endTime}
                 onChange={setEndTime}
               />
@@ -227,6 +228,8 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 onChange={(e) => setLocation(e.target.value)}
               />
             </div>
+          </div>
+          <div className="schedule-modal-field-row">
             <div className="schedule-modal-field">
               <label className="schedule-modal-label" htmlFor="scm-category">{t("common.category")}</label>
               <input
@@ -238,6 +241,8 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
               />
             </div>
           </div>
+
+          <MobileExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
         </div>
 
         {error ? <div className="schedule-modal-error">{error}</div> : null}

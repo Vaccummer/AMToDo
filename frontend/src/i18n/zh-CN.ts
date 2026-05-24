@@ -91,6 +91,9 @@ export const zhCN: Record<string, string> = {
   "common.dropFilesHere": "拖拽文件到这里",
   "common.selectFile": "选择文件",
   "common.takePhoto": "拍照",
+  "common.photoNamePrompt": "输入照片名称（不含扩展名）",
+  "common.previous": "上一个",
+  "common.next": "下一个",
   "common.cancelUpload": "取消上传",
   "common.cancelDownload": "取消下载",
   "common.uploadingPercent": "上传中 {{percent}}%",
@@ -102,6 +105,9 @@ export const zhCN: Record<string, string> = {
   "common.attachmentLoadFailed": "附件加载失败",
   "common.attachmentUploadFailed": "附件上传失败",
   "common.attachmentOpenFailed": "附件打开失败",
+  "common.openWithApp": "用应用打开",
+  "common.openCacheFolder": "打开缓存文件夹",
+  "common.openCacheFolderConfirm": "是否在文件管理器中打开缓存文件夹？你可以在其中找到此文件。",
   "common.attachmentDeleteFailed": "附件删除失败",
   "common.deleteAttachment": "删除附件",
   "common.deleteAttachmentConfirm": "确定删除附件「{{name}}」吗？",
@@ -265,6 +271,7 @@ export const zhCN: Record<string, string> = {
   "todo.dueDateAfterPlanned": "截止日期必须晚于计划日期",
 
   // Schedule
+  "schedule.addNew": "添加",
   "schedule.newSchedule": "新建日程",
   "schedule.newNotification": "新建通知",
   "schedule.deleteSchedule": "删除日程",

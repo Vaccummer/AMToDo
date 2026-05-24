@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.amtodo.app',
+  appId: 'com.vaccummer.amtodo',
   appName: 'AMToDo',
   webDir: 'dist-mobile',
   server: {

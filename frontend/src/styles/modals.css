@@ -732,6 +732,55 @@
   font-size: 20px;
 }
 
+/* Preview gallery navigation */
+.preview-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 2;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.preview-nav:active { background: rgba(255, 255, 255, 1); }
+.preview-nav-prev { left: -48px; }
+.preview-nav-next { right: -48px; }
+
+.preview-counter {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.preview-audio-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 24px;
+  min-width: min(320px, 80vw);
+  color: rgba(255, 255, 255, 0.9);
+}
+.preview-audio-wrapper svg { opacity: 0.6; margin-bottom: 8px; }
+.preview-audio-name {
+  margin-top: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  word-break: break-all;
+  max-width: 100%;
+}
+
 /* Toggle switch */
 
 .modal-toggle {
@@ -2793,8 +2842,43 @@
 }
 
 .settings-conn-body.locked {
-  opacity: 0.6;
+  opacity: 0.45;
   pointer-events: none;
+}
+
+/* ── Toggle switch ── */
+.settings-sw {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--global-surface-muted, #5a6a60);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.settings-sw.on {
+  background: var(--accent, #4a6fa5);
+}
+
+.settings-sw-knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.settings-sw.on .settings-sw-knob {
+  transform: translateX(20px);
 }
 
 /* ── Disabled field hint (e.g. token locked until URL checked) ── */

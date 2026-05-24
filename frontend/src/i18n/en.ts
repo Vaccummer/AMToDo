@@ -91,6 +91,9 @@ export const en: Record<string, string> = {
   "common.dropFilesHere": "Drop files here",
   "common.selectFile": "Select File",
   "common.takePhoto": "Take Photo",
+  "common.photoNamePrompt": "Enter photo name (without extension)",
+  "common.previous": "Previous",
+  "common.next": "Next",
   "common.cancelUpload": "Cancel Upload",
   "common.cancelDownload": "Cancel Download",
   "common.uploadingPercent": "Uploading {{percent}}%",
@@ -102,6 +105,9 @@ export const en: Record<string, string> = {
   "common.attachmentLoadFailed": "Failed to load attachment",
   "common.attachmentUploadFailed": "Failed to upload attachment",
   "common.attachmentOpenFailed": "Failed to open attachment",
+  "common.openWithApp": "Open with app",
+  "common.openCacheFolder": "Open cache folder",
+  "common.openCacheFolderConfirm": "Open the cache folder in file manager? You can find this file there.",
   "common.attachmentDeleteFailed": "Failed to delete attachment",
   "common.deleteAttachment": "Delete Attachment",
   "common.deleteAttachmentConfirm": "Delete attachment \"{{name}}\"?",
@@ -265,6 +271,7 @@ export const en: Record<string, string> = {
   "todo.dueDateAfterPlanned": "Due date must be later than planned date",
 
   // Schedule
+  "schedule.addNew": "Add New",
   "schedule.newSchedule": "New Schedule",
   "schedule.newNotification": "New Notification",
   "schedule.deleteSchedule": "Delete Schedule",
