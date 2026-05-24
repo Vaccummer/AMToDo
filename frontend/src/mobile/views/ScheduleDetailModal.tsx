@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AMToDoApi, ScheduleAttachmentMetadata, ScheduleItem, ScheduleUpdateRequest } from "../../api/client";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
+import { getCachedAttachmentUri, getAttachmentUri, getNativeFilePath, getCacheFolderPath, isNative as isNativePlatform } from "../../lib/attachmentDiskCache";
+import { FileOpener } from "@capacitor-community/file-opener";
+import { getMimeType } from "../../lib/mime-types";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
@@ -10,6 +13,14 @@ import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { useI18n } from "../../i18n";
 import { MobileExtraFieldsEditor } from "./MobileExtraFieldsEditor";
+
+const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]);
+
+function isPreviewable(a: ScheduleAttachmentMetadata): boolean {
+  if (a.preview_kind === "image" || a.preview_kind === "video") return true;
+  const ext = a.filename.split(".").pop()?.toLowerCase() || "";
+  return AUDIO_EXTS.has(ext);
+}
 
 type Props = {
   schedule: ScheduleItem;
@@ -82,11 +93,23 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [attachmentLoading, setAttachmentLoading] = useState<Record<number, boolean>>({});
   const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [downloadProgressMap, setDownloadProgressMap] = useState<Record<number, DownloadProgress>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<ScheduleAttachmentMetadata | null>(null);
+  const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 });
+  const zoomRef = useRef({
+    scale: 1, x: 0, y: 0,
+    pinchStartDist: 0, pinchStartScale: 1,
+    panStartX: 0, panStartY: 0, panStartTX: 0, panStartTY: 0,
+    pointers: new Map<number, { x: number; y: number }>(),
+    isPinching: false,
+  });
+  const downloadedRef = useRef<Set<number>>(new Set());
+  const downloadingIds = useRef<Set<number>>(new Set());
+  const downloadAbortMapRef = useRef<Map<number, AbortController>>(new Map());
+  const batchAbortRef = useRef<AbortController | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
 
@@ -100,46 +123,34 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAttachments = useCallback(async () => {
+    // Abort any previous batch load
+    batchAbortRef.current?.abort();
+    const controller = new AbortController();
+    batchAbortRef.current = controller;
+
     const result = await api.listScheduleAttachments(schedule.id);
+    if (controller.signal.aborted) return;
     setAttachments(result.attachments);
     setAttachmentErrors({});
+
+    // Only load already-cached thumbnails; don't auto-download uncached files
+    const newUrls: Record<number, string> = {};
     await Promise.all(
       result.attachments.map(async (attachment) => {
         if (attachment.preview_kind === "none") return;
         if (attachment.is_orphaned) return;
-        setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
         try {
-          const { blob } = await getAttachmentBlob(
-            (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
-            attachment,
-            `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
-          );
-          const url = URL.createObjectURL(blob);
-          setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
-          setAttachmentErrors((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
-        } catch (err: unknown) {
-          setAttachmentUrls((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
-          setAttachmentErrors((prev) => ({
-            ...prev,
-            [attachment.id]: err instanceof Error ? err.message : t("common.attachmentDataLoadFailed"),
-          }));
-        } finally {
-          setAttachmentLoading((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
+          const cachedUri = await getCachedAttachmentUri(attachment);
+          if (cachedUri) {
+            newUrls[attachment.id] = cachedUri;
+          }
+        } catch {
+          // cache lookup failed — leave as uncached
         }
       })
     );
+    if (controller.signal.aborted) return;
+    setAttachmentUrls(newUrls);
   }, [api, schedule.id]);
 
   useEffect(() => {
@@ -150,7 +161,17 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   useEffect(() => {
     return () => {
-      Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+      // Cancel batch thumbnail loads
+      batchAbortRef.current?.abort();
+      // Cancel all per-download controllers
+      downloadAbortMapRef.current.forEach((ctrl) => ctrl.abort());
+      downloadAbortMapRef.current.clear();
+      // Cancel active upload
+      uploadAbortRef.current?.abort();
+      // Revoke object URLs on web
+      if (!isNativePlatform()) {
+        Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+      }
     };
   }, [attachmentUrls]);
 
@@ -203,34 +224,171 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   async function openAttachment(attachment: ScheduleAttachmentMetadata) {
     if (attachment.is_orphaned) return;
-    setDownloadingId(attachment.id);
-    setDownloadProgress(null);
+    // Prevent duplicate downloads
+    if (downloadingIds.current.has(attachment.id)) return;
+
+    const useDisk = isNativePlatform();
+
+    // Already downloaded — open without re-downloading
+    if (downloadedRef.current.has(attachment.id)) {
+      const existingUrl = attachmentUrls[attachment.id];
+      if (existingUrl) {
+        if (useDisk) {
+          try {
+            await openWithApp(attachment);
+          } catch (err: unknown) {
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+              console.error("open failed", err);
+            }
+          }
+        }
+        return;
+      }
+    }
+
+    // Create per-download AbortController
+    const controller = new AbortController();
+    downloadingIds.current.add(attachment.id);
+    downloadAbortMapRef.current.set(attachment.id, controller);
+    setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: undefined as unknown as DownloadProgress }));
     setError(null);
     try {
-      const { blob } = await getAttachmentBlob(
-        (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
-        attachment,
-        `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
-        (progress) => setDownloadProgress(progress),
-      );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = attachment.filename;
-      link.click();
-      URL.revokeObjectURL(url);
+      let url: string;
+      if (useDisk) {
+        const dlUrl = await api.getScheduleAttachmentDownloadUrl(schedule.id, attachment.id);
+        const { uri } = await getAttachmentUri(
+          (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
+          attachment,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          controller.signal,
+          dlUrl,
+        );
+        url = uri;
+      } else {
+        const { blob } = await getAttachmentBlob(
+          (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
+          attachment,
+          `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          controller.signal,
+        );
+        url = URL.createObjectURL(blob);
+      }
+      downloadedRef.current.add(attachment.id);
+      setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+
+      if (useDisk) {
+        try {
+          await openWithApp(attachment);
+        } catch (err: unknown) {
+          if (!(err instanceof DOMException && err.name === "AbortError")) {
+            console.error("open failed", err);
+          }
+        }
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = attachment.filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
       setAttachmentErrors((prev) => {
         const next = { ...prev };
         delete next[attachment.id];
         return next;
       });
     } catch (err: unknown) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
+        setError(message);
+        setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+      }
+    } finally {
+      downloadingIds.current.delete(attachment.id);
+      downloadAbortMapRef.current.delete(attachment.id);
+      setDownloadProgressMap((prev) => {
+        const next = { ...prev };
+        delete next[attachment.id];
+        return next;
+      });
+    }
+  }
+
+  // Left icon click: always try in-app preview; fall back to system open for non-previewable
+  async function openAttachmentPreview(attachment: ScheduleAttachmentMetadata) {
+    if (attachment.is_orphaned) return;
+    if (downloadingIds.current.has(attachment.id)) return;
+
+    // Already downloaded — open directly
+    if (downloadedRef.current.has(attachment.id)) {
+      const existingUrl = attachmentUrls[attachment.id];
+      if (existingUrl) {
+        if (isPreviewable(attachment)) {
+          setPreview(attachment);
+        } else {
+          // System open via FileOpener
+          try {
+            await openWithApp(attachment);
+          } catch (err: unknown) {
+            if (!(err instanceof DOMException && err.name === "AbortError")) console.error("open failed", err);
+          }
+        }
+        return;
+      }
+    }
+
+    // Download then open
+    const controller = new AbortController();
+    downloadingIds.current.add(attachment.id);
+    downloadAbortMapRef.current.set(attachment.id, controller);
+    setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: undefined as unknown as DownloadProgress }));
+    setError(null);
+    try {
+      let url: string;
+      if (isNativePlatform()) {
+        const dlUrl = await api.getScheduleAttachmentDownloadUrl(schedule.id, attachment.id);
+        const { uri } = await getAttachmentUri(
+          (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
+          attachment,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          controller.signal,
+          dlUrl,
+        );
+        url = uri;
+      } else {
+        const { blob } = await getAttachmentBlob(
+          (onProgress) => api.downloadScheduleAttachment(schedule.id, attachment.id, onProgress),
+          attachment,
+          `${attachment.user_id}:schedule:${attachment.schedule_id}:${attachment.id}`,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          controller.signal,
+        );
+        url = URL.createObjectURL(blob);
+      }
+      downloadedRef.current.add(attachment.id);
+      setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+
+      if (isPreviewable(attachment)) {
+        setPreview(attachment);
+      } else {
+        try {
+          await openWithApp(attachment);
+        } catch (err: unknown) {
+          if (!(err instanceof DOMException && err.name === "AbortError")) console.error("open failed", err);
+        }
+      }
+
+      setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
+    } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setError(message);
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
-      setDownloadingId(null);
-      setDownloadProgress(null);
+      downloadingIds.current.delete(attachment.id);
+      downloadAbortMapRef.current.delete(attachment.id);
+      setDownloadProgressMap((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
     }
   }
 
@@ -252,6 +410,16 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       setError(err instanceof Error ? err.message : t("common.attachmentDeleteFailed"));
     } finally {
       setAttachmentBusy(false);
+    }
+  }
+
+  async function openWithApp(attachment: ScheduleAttachmentMetadata) {
+    const nativePath = await getNativeFilePath(attachment);
+    if (nativePath) {
+      await FileOpener.open({
+        filePath: nativePath,
+        contentType: getMimeType(attachment.filename),
+      });
     }
   }
 
@@ -394,6 +562,70 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       setDeleting(false);
     }
   }
+
+  // ── Zoom handlers for lightbox ──
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (z.pointers.size === 2) {
+      const pts = [...z.pointers.values()];
+      z.pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      z.pinchStartScale = z.scale;
+      z.isPinching = true;
+    } else if (z.pointers.size === 1 && z.scale > 1) {
+      z.panStartX = e.clientX;
+      z.panStartY = e.clientY;
+      z.panStartTX = z.x;
+      z.panStartTY = z.y;
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (z.isPinching && z.pointers.size === 2) {
+      const pts = [...z.pointers.values()];
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const newScale = Math.max(1, Math.min(5, z.pinchStartScale * (dist / z.pinchStartDist)));
+      z.scale = newScale;
+      setZoom({ scale: newScale, x: z.x, y: z.y });
+    } else if (z.pointers.size === 1 && z.scale > 1 && !z.isPinching) {
+      const dx = e.clientX - z.panStartX;
+      const dy = e.clientY - z.panStartY;
+      z.x = z.panStartTX + dx;
+      z.y = z.panStartTY + dy;
+      setZoom({ scale: z.scale, x: z.x, y: z.y });
+    }
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.delete(e.pointerId);
+    if (z.pointers.size < 2) z.isPinching = false;
+    if (z.pointers.size === 0 && z.scale < 1.05) {
+      z.scale = 1; z.x = 0; z.y = 0;
+      setZoom({ scale: 1, x: 0, y: 0 });
+    }
+  }, []);
+
+  const handleDoubleClick = useCallback(() => {
+    const z = zoomRef.current;
+    if (z.scale > 1) {
+      z.scale = 1; z.x = 0; z.y = 0;
+      setZoom({ scale: 1, x: 0, y: 0 });
+    } else {
+      z.scale = 2; z.x = 0; z.y = 0;
+      setZoom({ scale: 2, x: 0, y: 0 });
+    }
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    zoomRef.current.scale = 1;
+    zoomRef.current.x = 0;
+    zoomRef.current.y = 0;
+    setZoom({ scale: 1, x: 0, y: 0 });
+  }, []);
 
   // ── Render ──
 
@@ -621,14 +853,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                   <button
                     type="button"
                     className="attachment-thumb"
-                    disabled={orphaned}
-                    onClick={() => {
-                      if (attachment.preview_kind === "none" || !url) {
-                        openAttachment(attachment);
-                      } else {
-                        setPreview(attachment);
-                      }
-                    }}
+                    disabled={orphaned || downloadingIds.current.has(attachment.id)}
+                    onClick={() => openAttachmentPreview(attachment)}
                     aria-label={t("common.openFile", { name: attachment.filename })}
                   >
                     {orphaned || loadError ? (
@@ -646,22 +872,36 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                   <button
                     type="button"
                     className="attachment-name"
-                    onClick={() => openAttachment(attachment)}
-                    disabled={orphaned || downloadingId === attachment.id}
+                    onClick={async () => {
+                      const ok = await ask({
+                        title: t("common.openCacheFolder"),
+                        message: t("common.openCacheFolderConfirm"),
+                        confirmLabel: t("common.openCacheFolder"),
+                      });
+                      if (!ok) return;
+                      try {
+                        const dirPath = await getCacheFolderPath();
+                        await FileOpener.open({ filePath: dirPath, contentType: "resource/folder" });
+                      } catch (err) {
+                        // Fallback: open the specific file if folder open fails
+                        try { await openAttachment(attachment); } catch { /* */ }
+                      }
+                    }}
+                    disabled={orphaned || downloadingIds.current.has(attachment.id)}
                   >
                     <span className="attachment-filename">{attachment.filename}</span>
                     <span className="attachment-size">
                       {orphaned
                         ? t("common.fileMissing")
-                        : downloadingId === attachment.id
-                          ? (downloadProgress ? `${downloadProgress.percent}%` : t("common.downloading"))
+                        : downloadingIds.current.has(attachment.id)
+                          ? (downloadProgressMap[attachment.id] ? `${downloadProgressMap[attachment.id].percent}%` : t("common.downloading"))
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
                   <button
                     type="button"
                     className="attachment-remove"
-                    disabled={attachmentBusy || downloadingId !== null}
+                    disabled={attachmentBusy || downloadingIds.current.size > 0}
                     onClick={() => removeAttachment(attachment)}
                     aria-label={t("common.deleteFile", { name: attachment.filename })}
                   >
@@ -740,20 +980,45 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         {saving ? <div className="modal-save-progress" aria-label={t("common.saving")} /> : null}
       </div>
       {preview ? (
-        <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
-          <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="attachment-preview-backdrop" onClick={() => { setPreview(null); resetZoom(); }}>
+          <div
+            className="attachment-preview-panel"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onDoubleClick={handleDoubleClick}
+          >
             <button
               type="button"
               className="schedule-modal-close attachment-preview-close"
-              onClick={() => setPreview(null)}
+              onClick={() => { setPreview(null); resetZoom(); }}
               aria-label={t("common.close")}
             >
               ×
             </button>
             {preview.preview_kind === "image" ? (
-              <img src={attachmentUrls[preview.id]} alt={preview.filename} />
+              <img
+                src={attachmentUrls[preview.id]}
+                alt={preview.filename}
+                style={{
+                  transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
+                  transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
+                  touchAction: 'none',
+                }}
+              />
             ) : (
-              <video src={attachmentUrls[preview.id]} controls autoPlay />
+              <video
+                src={attachmentUrls[preview.id]}
+                controls
+                autoPlay
+                style={{
+                  transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
+                  transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
+                  touchAction: 'none',
+                }}
+              />
             )}
           </div>
         </div>

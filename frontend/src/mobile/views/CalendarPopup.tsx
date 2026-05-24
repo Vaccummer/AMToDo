@@ -123,7 +123,7 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
 
   return createPortal(
     <div
-      className="calendar-popup"
+      className="calendar-popup calendar-popup-mobile"
       ref={popupRef}
       style={{ position: "fixed", top: anchorRect.bottom, left: "50vw", transform: "translateX(-50%)" }}
     >

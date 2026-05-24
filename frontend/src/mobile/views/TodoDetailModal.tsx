@@ -4,6 +4,9 @@ import type { AMToDoApi, AttachmentMetadata, TodoItem } from "../../api/client";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
+import { getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, getCacheFolderPath } from "../../lib/attachmentDiskCache";
+import { FileOpener } from "@capacitor-community/file-opener";
+import { getMimeType } from "../../lib/mime-types";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
 import { TimeInput } from "./TimeInput";
@@ -17,6 +20,8 @@ type Props = {
   onClose: () => void;
   onDelete: (id: number) => void;
   onUpdate: (todo: TodoItem) => void;
+  createMode?: boolean;
+  onCreate?: (todo: TodoItem) => void;
 };
 
 function fmtDatetime(epoch: number): string {
@@ -54,7 +59,7 @@ function AttachmentMissingIcon() {
   );
 }
 
-export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate }: Props) {
+export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate, createMode, onCreate }: Props) {
   const [todo, setTodo] = useState<TodoItem>(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
@@ -81,25 +86,53 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
-  const [attachmentLoading, setAttachmentLoading] = useState<Record<number, boolean>>({});
   const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [downloadProgressMap, setDownloadProgressMap] = useState<Record<number, DownloadProgress>>({});
+  const downloadingIds = useRef<Set<number>>(new Set());
+  const downloadAbortMapRef = useRef<Map<number, AbortController>>(new Map());
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
+  const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 });
+  const zoomRef = useRef({
+    scale: 1, x: 0, y: 0,
+    pinchStartDist: 0, pinchStartScale: 1,
+    panStartX: 0, panStartY: 0, panStartTX: 0, panStartTY: 0,
+    pointers: new Map<number, { x: number; y: number }>(),
+    isPinching: false,
+  });
+  const downloadedRef = useRef<Set<number>>(new Set());
   const uploadAbortRef = useRef<AbortController | null>(null);
-  const downloadAbortRef = useRef<AbortController | null>(null);
+  const batchAbortRef = useRef<AbortController | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t } = useI18n();
 
+  const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "webm", "m4b"]);
+  function isPreviewable(a: AttachmentMetadata): boolean {
+    if (a.preview_kind === "image" || a.preview_kind === "video") return true;
+    const ext = a.filename.split(".").pop()?.toLowerCase() || "";
+    return AUDIO_EXTS.has(ext);
+  }
+  function effectivePreviewKind(a: AttachmentMetadata): string {
+    if (a.preview_kind !== "none") return a.preview_kind;
+    const ext = a.filename.split(".").pop()?.toLowerCase() || "";
+    return AUDIO_EXTS.has(ext) ? "audio" : "none";
+  }
+
+  const previewItems = useMemo(
+    () => attachments.filter((a) => !a.is_orphaned && isPreviewable(a)),
+    [attachments],
+  );
+
   // fetch full todo on mount (the list item may omit fields like attachment_count)
   // Only update the todo reference object — do NOT reset editable fields,
   // because the user may have already started editing before the fetch completes.
+  // Skip in create mode — there is no existing todo to fetch.
   useEffect(() => {
+    if (createMode) return;
     api.getTodo(todo.id).then((r) => {
       const fullTodo = {
         ...r.todo,
@@ -127,43 +160,27 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAttachments = useCallback(async () => {
+    batchAbortRef.current?.abort();
+    const ac = new AbortController();
+    batchAbortRef.current = ac;
     const result = await api.listTodoAttachments(todo.id);
+    if (ac.signal.aborted) return result.attachments;
     setAttachments(result.attachments);
     setAttachmentErrors({});
+    // Only serve already-cached files; do not download uncached ones
     await Promise.all(
       result.attachments.map(async (attachment) => {
+        if (ac.signal.aborted) return;
         if (attachment.preview_kind === "none") return;
         if (attachment.is_orphaned) return;
-        setAttachmentLoading((prev) => ({ ...prev, [attachment.id]: true }));
         try {
-          const { blob } = await getAttachmentBlob(
-            (onProgress) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress),
-            attachment,
-            `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
-          );
-          const url = URL.createObjectURL(blob);
-          setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
-          setAttachmentErrors((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
-        } catch (err: unknown) {
-          setAttachmentUrls((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
-          setAttachmentErrors((prev) => ({
-            ...prev,
-            [attachment.id]: err instanceof Error ? err.message : t("common.attachmentDataLoadFailed"),
-          }));
-        } finally {
-          setAttachmentLoading((prev) => {
-            const next = { ...prev };
-            delete next[attachment.id];
-            return next;
-          });
+          const cachedUri = await getCachedAttachmentUri(attachment);
+          if (ac.signal.aborted) return;
+          if (cachedUri) {
+            setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: cachedUri }));
+          }
+        } catch {
+          // Cache lookup failed — leave url undefined, user can click to download
         }
       })
     );
@@ -171,6 +188,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   }, [api, todo.id]);
 
   useEffect(() => {
+    if (createMode) return;
     loadAttachments().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : t("common.attachmentLoadFailed"));
     });
@@ -178,11 +196,24 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   useEffect(() => {
     return () => {
-      Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+      // On native, file URIs are persistent disk paths — no revocation needed
+      if (!isNativePlatform()) {
+        Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+      }
     };
   }, [attachmentUrls]);
 
+  // Cancel all in-progress operations on unmount
+  useEffect(() => {
+    return () => {
+      batchAbortRef.current?.abort();
+      downloadAbortMapRef.current.forEach((ac) => ac.abort());
+      uploadAbortRef.current?.abort();
+    };
+  }, []);
+
   const dirty = useMemo(() => {
+    if (createMode) return true;
     return (
       attachmentsChanged ||
       title !== todo.title ||
@@ -193,7 +224,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       tag !== (todo.tag ?? "") ||
       JSON.stringify(extraFields) !== JSON.stringify(todo.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo]);
+  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo, createMode]);
 
   const datetimeValidation = useMemo(() => {
     let plannedDateError = !plannedDate;
@@ -266,6 +297,20 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     setSaving(true);
     setError(null);
     try {
+      if (createMode) {
+        const plannedAt = plannedAtKey ? epochFromDatetimeLocal(plannedAtKey) : Math.floor(Date.now() / 1000);
+        const result = await api.createTodo(title || t("todo.newTodo"), plannedAt, {
+          due_at: dueAtKey ? epochFromDatetimeLocal(dueAtKey) : null,
+          description: description || null,
+          priority: Number(priority),
+          tag: tag || null,
+          extra_fields: Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null,
+        });
+        onCreate?.(result.todo);
+        onClose();
+        return;
+      }
+
       const fields: Record<string, unknown> = {};
       if (title !== todo.title) fields.title = title;
       if (description !== (todo.description ?? "")) fields.description = description || null;
@@ -376,8 +421,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     uploadAbortRef.current?.abort();
   }
 
-  function cancelDownload() {
-    downloadAbortRef.current?.abort();
+  function cancelDownload(attachmentId: number) {
+    downloadAbortMapRef.current.get(attachmentId)?.abort();
   }
 
   async function handleCameraCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -385,34 +430,82 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     if (!file) return;
     e.currentTarget.value = "";
     const ext = file.name.split(".").pop() || "jpg";
-    const defaultName = `photo_${Date.now()}.${ext}`;
-    const name = prompt(t("common.enterFileName"), defaultName);
+    const defaultBase = `photo_${Date.now()}`;
+    const name = prompt(t("common.photoNamePrompt"), defaultBase);
     if (name === null) return;
-    const renamed = new File([file], name || defaultName, { type: file.type });
+    const base = name.trim() || defaultBase;
+    const finalName = `${base}.${ext}`;
+    const renamed = new File([file], finalName, { type: file.type });
     await uploadFiles([renamed]);
+  }
+
+  /** Open a file with the system app chooser (Android intent) */
+  async function openWithApp(attachment: AttachmentMetadata) {
+    const nativePath = await getNativeFilePath(attachment);
+    if (nativePath) {
+      await FileOpener.open({
+        filePath: nativePath,
+        contentType: getMimeType(attachment.filename),
+      });
+    }
   }
 
   async function openAttachment(attachment: AttachmentMetadata) {
     if (attachment.is_orphaned) return;
+    // Prevent duplicate downloads
+    if (downloadingIds.current.has(attachment.id)) return;
+
+    const useDisk = isNativePlatform();
+
+    // Already downloaded — preview or share without re-downloading
+    if (downloadedRef.current.has(attachment.id)) {
+      const existingUrl = attachmentUrls[attachment.id];
+      if (existingUrl) {
+        if (isPreviewable(attachment)) {
+          setPreview(attachment);
+        } else {
+          try { await openWithApp(attachment); } catch { /* user cancelled */ }
+        }
+        return;
+      }
+    }
+
+    // Download
     const ac = new AbortController();
-    downloadAbortRef.current = ac;
-    setDownloadingId(attachment.id);
-    setDownloadProgress(null);
+    downloadingIds.current.add(attachment.id);
+    downloadAbortMapRef.current.set(attachment.id, ac);
     setError(null);
     try {
-      const { blob } = await getAttachmentBlob(
-        (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
-        attachment,
-        `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
-        (progress) => setDownloadProgress(progress),
-        ac.signal,
-      );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = attachment.filename;
-      link.click();
-      URL.revokeObjectURL(url);
+      let url: string;
+      if (useDisk) {
+        const dlUrl = await api.getTodoAttachmentDownloadUrl(todo.id, attachment.id);
+        const { uri } = await getAttachmentUri(
+          (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
+          attachment,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+          dlUrl,
+        );
+        url = uri;
+      } else {
+        const { blob } = await getAttachmentBlob(
+          (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
+          attachment,
+          `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+        );
+        url = URL.createObjectURL(blob);
+      }
+      downloadedRef.current.add(attachment.id);
+      setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+
+      if (isPreviewable(attachment)) {
+        setPreview(attachment);
+      } else {
+        await openWithApp(attachment);
+      }
+
       setAttachmentErrors((prev) => {
         const next = { ...prev };
         delete next[attachment.id];
@@ -424,9 +517,78 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       setError(message);
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
-      downloadAbortRef.current = null;
-      setDownloadingId(null);
-      setDownloadProgress(null);
+      downloadingIds.current.delete(attachment.id);
+      downloadAbortMapRef.current.delete(attachment.id);
+      setDownloadProgressMap((prev) => {
+        const next = { ...prev };
+        delete next[attachment.id];
+        return next;
+      });
+    }
+  }
+
+  // Left icon click: always try in-app preview; fall back to system open for non-previewable
+  async function openAttachmentPreview(attachment: AttachmentMetadata) {
+    if (attachment.is_orphaned) return;
+    if (downloadingIds.current.has(attachment.id)) return;
+
+    // Already downloaded — open directly
+    if (downloadedRef.current.has(attachment.id)) {
+      const existingUrl = attachmentUrls[attachment.id];
+      if (existingUrl) {
+        if (isPreviewable(attachment)) {
+          setPreview(attachment);
+        } else {
+          try { await openWithApp(attachment); } catch { /* */ }
+        }
+        return;
+      }
+    }
+
+    // Download then open
+    const ac = new AbortController();
+    downloadingIds.current.add(attachment.id);
+    downloadAbortMapRef.current.set(attachment.id, ac);
+    setError(null);
+    try {
+      let url: string;
+      if (isNativePlatform()) {
+        const dlUrl = await api.getTodoAttachmentDownloadUrl(todo.id, attachment.id);
+        const { uri } = await getAttachmentUri(
+          (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
+          attachment,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+          dlUrl,
+        );
+        url = uri;
+      } else {
+        const { blob } = await getAttachmentBlob(
+          (onProgress, abortSignal) => api.downloadTodoAttachment(todo.id, attachment.id, onProgress, abortSignal),
+          attachment,
+          `${attachment.user_id}:todo:${attachment.todo_id}:${attachment.id}`,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+        );
+        url = URL.createObjectURL(blob);
+      }
+      downloadedRef.current.add(attachment.id);
+      setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
+      if (isPreviewable(attachment)) {
+        setPreview(attachment);
+      } else {
+        await openWithApp(attachment);
+      }
+      setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
+    } catch (err: unknown) {
+      if (ac.signal.aborted) return;
+      const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
+      setError(message);
+      setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+    } finally {
+      downloadingIds.current.delete(attachment.id);
+      downloadAbortMapRef.current.delete(attachment.id);
+      setDownloadProgressMap((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
     }
   }
 
@@ -468,6 +630,68 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       onClose();
     }
   }
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (z.pointers.size === 2) {
+      const pts = [...z.pointers.values()];
+      z.pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      z.pinchStartScale = z.scale;
+      z.isPinching = true;
+    } else if (z.pointers.size === 1 && z.scale > 1) {
+      z.panStartX = e.clientX;
+      z.panStartY = e.clientY;
+      z.panStartTX = z.x;
+      z.panStartTY = z.y;
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (z.isPinching && z.pointers.size === 2) {
+      const pts = [...z.pointers.values()];
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const newScale = Math.max(1, Math.min(5, z.pinchStartScale * (dist / z.pinchStartDist)));
+      z.scale = newScale;
+      setZoom({ scale: newScale, x: z.x, y: z.y });
+    } else if (z.pointers.size === 1 && z.scale > 1 && !z.isPinching) {
+      const dx = e.clientX - z.panStartX;
+      const dy = e.clientY - z.panStartY;
+      z.x = z.panStartTX + dx;
+      z.y = z.panStartTY + dy;
+      setZoom({ scale: z.scale, x: z.x, y: z.y });
+    }
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const z = zoomRef.current;
+    z.pointers.delete(e.pointerId);
+    if (z.pointers.size < 2) z.isPinching = false;
+    if (z.pointers.size === 0 && z.scale < 1.05) {
+      z.scale = 1; z.x = 0; z.y = 0;
+      setZoom({ scale: 1, x: 0, y: 0 });
+    }
+  }, []);
+
+  const handleDoubleClick = useCallback(() => {
+    const z = zoomRef.current;
+    if (z.scale > 1) {
+      z.scale = 1; z.x = 0; z.y = 0;
+      setZoom({ scale: 1, x: 0, y: 0 });
+    } else {
+      z.scale = 2; z.x = 0; z.y = 0;
+      setZoom({ scale: 2, x: 0, y: 0 });
+    }
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    zoomRef.current.scale = 1;
+    zoomRef.current.x = 0;
+    zoomRef.current.y = 0;
+    setZoom({ scale: 1, x: 0, y: 0 });
+  }, []);
 
   return (
     <div className="modal-backdrop" onClick={handleBackdrop} onKeyDown={handleKeyDown}>
@@ -601,6 +825,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           <div className="modal-section-label">{t("extraFields.title")}</div>
           <MobileExtraFieldsEditor fields={extraFields} onChange={setExtraFields} />
 
+          {!createMode && (<>
           {/* Divider */}
           <div className="modal-divider" />
 
@@ -654,7 +879,8 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               const url = attachmentUrls[attachment.id];
               const orphaned = attachment.is_orphaned;
               const loadError = attachmentErrors[attachment.id];
-              const isDownloading = downloadingId === attachment.id;
+              const isDownloading = downloadingIds.current.has(attachment.id);
+              const dlProgress = downloadProgressMap[attachment.id];
               const ext = attachment.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE";
 
               return (
@@ -662,18 +888,12 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                   className={`attach-row${orphaned ? " orphaned" : ""}${loadError ? " failed" : ""}${isDownloading ? " downloading" : ""}`}
                   key={attachment.id}
                 >
-                  {/* Thumbnail */}
+                  {/* Thumbnail — left icon: always try in-app preview */}
                   <button
                     type="button"
                     className="attach-row-thumb"
-                    disabled={orphaned}
-                    onClick={() => {
-                      if (attachment.preview_kind === "none" || !url) {
-                        openAttachment(attachment);
-                      } else {
-                        setPreview(attachment);
-                      }
-                    }}
+                    disabled={orphaned || isDownloading}
+                    onClick={() => openAttachmentPreview(attachment)}
                     aria-label={attachment.filename}
                   >
                     {orphaned || loadError ? (
@@ -682,18 +902,34 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       <img src={url} alt="" />
                     ) : attachment.preview_kind === "video" && url ? (
                       <video src={url} muted />
-                    ) : attachmentLoading[attachment.id] ? (
-                      <span className="attachment-spinner" />
+                    ) : effectivePreviewKind(attachment) === "audio" ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                      </svg>
                     ) : (
                       <span className="attach-row-ext">{ext}</span>
                     )}
                   </button>
 
-                  {/* Info */}
+                  {/* Info — right side: open cache folder on click */}
                   <button
                     type="button"
                     className="attach-row-info"
-                    onClick={() => openAttachment(attachment)}
+                    onClick={async () => {
+                      const ok = await ask({
+                        title: t("common.openCacheFolder"),
+                        message: t("common.openCacheFolderConfirm"),
+                        confirmLabel: t("common.openCacheFolder"),
+                      });
+                      if (!ok) return;
+                      try {
+                        const dirPath = await getCacheFolderPath();
+                        await FileOpener.open({ filePath: dirPath, contentType: "resource/folder" });
+                      } catch {
+                        // Fallback: open the specific file if folder open fails
+                        try { await openAttachment(attachment); } catch { /* */ }
+                      }
+                    }}
                     disabled={orphaned || isDownloading}
                   >
                     <span className="attach-row-name">{attachment.filename}</span>
@@ -701,7 +937,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       {orphaned
                         ? t("common.fileMissing")
                         : isDownloading
-                          ? (downloadProgress ? t("common.downloadingPercent", { percent: downloadProgress.percent }) : t("common.downloading"))
+                          ? (dlProgress ? t("common.downloadingPercent", { percent: dlProgress.percent }) : t("common.downloading"))
                           : formatSize(attachment.plain_size_bytes)}
                     </span>
                   </button>
@@ -712,10 +948,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                       <svg viewBox="0 0 36 36">
                         <circle className="ring-bg" cx="18" cy="18" r="15.9" />
                         <circle className="ring-fill download" cx="18" cy="18" r="15.9"
-                          strokeDasharray={`${downloadProgress?.percent ?? 0} ${100 - (downloadProgress?.percent ?? 0)}`}
+                          strokeDasharray={`${dlProgress?.percent ?? 0} ${100 - (dlProgress?.percent ?? 0)}`}
                           strokeDashoffset="25" />
                       </svg>
-                      <button type="button" className="ring-cancel" onClick={cancelDownload} aria-label={t("common.cancelDownload")}>
+                      <button type="button" className="ring-cancel" onClick={() => cancelDownload(attachment.id)} aria-label={t("common.cancelDownload")}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
                           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
@@ -770,6 +1006,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
           <div className="modal-section-label">{t("common.history")}</div>
           <ChangelogPanel api={api} entityId={todo.id} kind="todo" />
+          </>)}
         </div>
 
         <div className="modal-actions">
@@ -779,8 +1016,9 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             disabled={!dirty || saving || datetimeValidation.hasError}
             onClick={handleSave}
           >
-            {saving ? t("common.saving") : t("common.save")}
+            {saving ? t("common.saving") : createMode ? t("common.create") : t("common.save")}
           </button>
+          {!createMode && (
           <button
             type="button"
             className="modal-btn modal-btn-delete"
@@ -796,28 +1034,73 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             </svg>
             {deleting ? t("common.deleting") : t("common.delete")}
           </button>
+          )}
         </div>
         {saving ? <div className="modal-save-progress" aria-label={t("common.saving")} /> : null}
       </div>
-      {preview ? (
-        <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
-          <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="modal-close attachment-preview-close"
-              onClick={() => setPreview(null)}
-              aria-label={t("common.close")}
-            >
-              ×
-            </button>
-            {preview.preview_kind === "image" ? (
-              <img src={attachmentUrls[preview.id]} alt={preview.filename} />
-            ) : (
-              <video src={attachmentUrls[preview.id]} controls autoPlay />
-            )}
+      {preview ? (() => {
+        const currentIdx = previewItems.findIndex((a) => a.id === preview.id);
+        const kind = effectivePreviewKind(preview);
+        const goPrev = currentIdx > 0 ? () => { resetZoom(); setPreview(previewItems[currentIdx - 1]); } : null;
+        const goNext = currentIdx < previewItems.length - 1 ? () => { resetZoom(); setPreview(previewItems[currentIdx + 1]); } : null;
+        return (
+          <div className="attachment-preview-backdrop" onClick={() => setPreview(null)}>
+            <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onDoubleClick={handleDoubleClick}>
+              <button
+                type="button"
+                className="modal-close attachment-preview-close"
+                onClick={() => setPreview(null)}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+              {goPrev && (
+                <button type="button" className="preview-nav preview-nav-prev" onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label={t("common.previous")}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                </button>
+              )}
+              {kind === "image" ? (
+                <img
+                  src={attachmentUrls[preview.id]}
+                  alt={preview.filename}
+                  style={{
+                    transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
+                    transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
+                    touchAction: 'none',
+                  }}
+                />
+              ) : kind === "video" ? (
+                <video
+                  src={attachmentUrls[preview.id]}
+                  controls
+                  autoPlay
+                  style={{
+                    transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
+                    transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
+                    touchAction: 'none',
+                  }}
+                />
+              ) : kind === "audio" ? (
+                <div className="preview-audio-wrapper">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                  </svg>
+                  <audio src={attachmentUrls[preview.id]} controls autoPlay style={{ width: "100%", marginTop: 16 }} />
+                  <div className="preview-audio-name">{preview.filename}</div>
+                </div>
+              ) : null}
+              {goNext && (
+                <button type="button" className="preview-nav preview-nav-next" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label={t("common.next")}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                </button>
+              )}
+              {previewItems.length > 1 && (
+                <div className="preview-counter">{currentIdx + 1} / {previewItems.length}</div>
+              )}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
       {confirmDialog}
     </div>
   );

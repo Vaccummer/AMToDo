@@ -46,6 +46,7 @@ type Props = {
   onClose: () => void;
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
+  onConnectionToggle?: (enabled: boolean) => void;
   onAcceptFingerprint?: (fingerprint: string) => void;
 };
 
@@ -75,7 +76,7 @@ const WARN_ICON = (
 
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onAcceptFingerprint }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -90,6 +91,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [activeSettingsTab, setActiveSettingsTab] = useState<"general" | "connection" | "notification">("connection");
 
   // Connection
+  const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
+  const userToggledWsRef = useRef(false);
   const [reconnectMaxAttempts, setReconnectMaxAttempts] = useState(String(initial.reconnect_max_attempts));
   const [notifyOnDisconnect, setNotifyOnDisconnect] = useState(initial.notify_on_disconnect);
   const [lanAddress, setLanAddress] = useState(initial.lan_address || "");
@@ -155,6 +158,20 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
+
+  // Auto-revert wsEnabled if connection fails after user toggle
+  useEffect(() => {
+    if (!userToggledWsRef.current) return;
+    if (!wsEnabled) return;
+    const s = connectionStatus?.status;
+    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
+      userToggledWsRef.current = false;
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+    } else if (s === "online") {
+      userToggledWsRef.current = false;
+    }
+  }, [connectionStatus?.status, wsEnabled, onConnectionToggle]);
 
   // ── Connection logic ──
 
@@ -274,6 +291,31 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     });
   }
 
+  async function handleWsToggle() {
+    if (wsEnabled) {
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+      return;
+    }
+
+    let urlOk = urlCheckResult?.kind === "ok";
+    if (!urlOk) {
+      urlOk = await checkUrl();
+      if (!urlOk) return;
+    }
+
+    let tokenOk = tokenResult?.ok === true;
+    if (!tokenOk) {
+      tokenOk = await verifyToken({ skipUrlCheck: true });
+      if (!tokenOk) return;
+    }
+
+    setWsEnabled(true);
+    userToggledWsRef.current = true;
+    onSaveConnection?.({ ws_enabled: true });
+    onConnectionToggle?.(true);
+  }
+
   function handleTokenChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setAccessToken(value);
@@ -336,8 +378,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
   // Connection section state
+  const connLocked = wsEnabled;
   const urlCheckPassed = urlCheckResult?.kind === "ok";
-  const tokenEditable = urlCheckPassed;
+  const tokenEditable = urlCheckPassed && !connLocked;
 
   // Input classes
   const urlInputClass = [
@@ -610,12 +653,21 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {activeSettingsTab === "connection" && (<>
           <div className="settings-modal-section-label">{t("settings.connectionSettings")}</div>
 
-          <div className="settings-conn-section">
+          <div className={`settings-conn-section${connLocked ? " conn-locked" : ""}`}>
             <div className="settings-conn-header">
               <span className="settings-conn-header-label">{t("settings.connectionToggle")}</span>
+              <button
+                type="button"
+                className={`settings-sw${wsEnabled ? " on" : ""}`}
+                onClick={handleWsToggle}
+                role="switch"
+                aria-checked={wsEnabled}
+              >
+                <span className="settings-sw-knob" />
+              </button>
             </div>
 
-            <div className="settings-conn-body">
+            <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
               {/* LAN Address */}
               <div className="settings-modal-field">
                 <label className="settings-modal-label" htmlFor="lan-addr">{t("settings.lanAddress")}</label>

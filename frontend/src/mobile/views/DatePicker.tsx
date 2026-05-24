@@ -21,7 +21,7 @@ type Props = {
 };
 
 export function DatePicker({ value, onChange, placeholder, hasError, theme = "green", panelAlign = "left", id }: Props) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
 
   const WEEKDAY_LABELS = [t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat"), t("common.weekdaySun")];
 
@@ -29,10 +29,8 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
     if (!dateKey) return "";
     const [y, m, d] = dateKey.split("-").map(Number);
     const weekday = formatDateKeyWeekday(dateKey);
-    if (locale === "en") {
-      return `${m}/${d}/${y} ${weekday}`;
-    }
-    return `${y}年${m}月${d}日 ${weekday}`;
+    const yy = String(y).slice(-2);
+    return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${yy} ${weekday}`;
   }
 
   const [open, setOpen] = useState(false);

@@ -23,9 +23,12 @@ export interface FileKeyInfo {
 
 export function bufferToBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+  const CHUNK = 8192;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.length))));
+  }
+  return btoa(parts.join(""));
 }
 
 export function base64ToBuffer(b64: string): ArrayBuffer {
@@ -44,6 +47,24 @@ export function concat(parts: Uint8Array[]): ArrayBuffer {
     offset += p.length;
   }
   return out.buffer;
+}
+
+// ── Key decoding (shared by decryptBuffer and streamingDecrypt) ──
+
+export function decodeKeys(fileKey: string, nonce: string) {
+  const keyBytes = new Uint8Array(base64ToBuffer(fileKey));
+  return {
+    encKeyBytes: keyBytes.slice(0, 16),
+    hmacKeyBytes: keyBytes.slice(16, 32),
+    nonceBytes: new Uint8Array(base64ToBuffer(nonce)),
+  };
+}
+
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
 // ── Key generation ──
@@ -134,8 +155,9 @@ export async function decryptBuffer(
     throw new Error(`Cipher too short: ${cipher.byteLength} bytes (minimum 33)`);
   }
 
-  const cipherBytes = cipher.slice(0, cipher.byteLength - 32);
-  const receivedTag = cipher.slice(cipher.byteLength - 32);
+  // Use views (zero-copy) instead of .slice() to avoid doubling memory for large files
+  const cipherBytes = new Uint8Array(cipher, 0, cipher.byteLength - 32);
+  const receivedTag = new Uint8Array(cipher, cipher.byteLength - 32, 32);
 
   const hmacKey = await crypto.subtle.importKey(
     "raw", hmacKeyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["verify"],

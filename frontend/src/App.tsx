@@ -779,6 +779,9 @@ export function App() {
             shell.writeSettings(entries).catch(() => {});
             setSettings((prev) => ({ ...prev, ...fields }));
           }}
+          onConnectionToggle={(enabled) => {
+            setSettings((prev) => ({ ...prev, ws_enabled: enabled }));
+          }}
           onClose={() => {
             flushSettings(settings);
             setShowSettings(false);

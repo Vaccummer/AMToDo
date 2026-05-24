@@ -43,6 +43,7 @@ export function uploadWithProgress<T = unknown>(
     };
 
     xhr.onerror = () => reject(new Error("Upload network error"));
+    xhr.ontimeout = () => reject(new Error("Upload timed out"));
     xhr.onabort = () => reject(new Error("Upload aborted"));
 
     if (abortSignal) {
@@ -50,6 +51,7 @@ export function uploadWithProgress<T = unknown>(
     }
 
     xhr.responseType = "text";
+    xhr.timeout = 600_000; // 10 min — large files on slow mobile networks
     xhr.send(cipher);
   });
 }

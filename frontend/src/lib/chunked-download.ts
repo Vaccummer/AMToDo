@@ -37,9 +37,10 @@ export async function downloadWithProgress(
 
   const result = new Uint8Array(loaded);
   let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
+  for (let i = 0; i < chunks.length; i++) {
+    result.set(chunks[i], offset);
+    offset += chunks[i].length;
+    chunks[i] = null!;
   }
   return result.buffer;
 }

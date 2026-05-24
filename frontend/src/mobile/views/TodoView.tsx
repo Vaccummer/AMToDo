@@ -105,6 +105,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const [showCalendar, setShowCalendar] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [todoRefreshKey, setTodoRefreshKey] = useState(0);
@@ -198,20 +199,8 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     );
   }
 
-  async function addTodo() {
-    const title = t("todo.newTodo");
-    try {
-      const plannedAt = startOfDateKeyEpoch(selectedDayKey);
-      const result = await api.createTodo(title, plannedAt);
-      setTodos((items) => [...items, { ...result.todo, attachment_count: 0 }]);
-      onConnectionError?.(null);
-    } catch (error: unknown) {
-      if (error instanceof TypeError) {
-        onConnectionError?.("network", t("connection.cannotConnectDesc"));
-      } else {
-        onConnectionError?.("token", error instanceof Error ? error.message : t("todo.createFailed"));
-      }
-    }
+  function addTodo() {
+    setCreating(true);
   }
 
   function prevWeek() {
@@ -472,24 +461,26 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                       )}
                     </button>
                     <div className="todo-content">
-                      <span className="todo-label">{todo.title}</span>
-                      <div className="todo-row2">
-                        <span className="todo-meta-item">🆔 {todo.id}</span>
-                        <span className="todo-meta-sep">·</span>
-                        <span className="todo-meta-item">🔗 {todo.attachment_count ?? 0}</span>
-                        {todo.tag ? (
-                          <>
-                            <span className="todo-meta-sep">·</span>
-                            <span className="todo-meta-item todo-meta-tag">🏷 {todo.tag}</span>
-                          </>
-                        ) : null}
+                      <div className="todo-line1">
+                        <span className="todo-label">{todo.title}</span>
+                        <span className={`todo-due${todo.due_at != null && !todo.completed && todo.due_at < Math.floor(Date.now() / 1000) ? " overdue" : ""}`}>
+                          {dueLabel(todo.due_at)}
+                        </span>
                       </div>
-                    </div>
-                    <div className="todo-dates">
-                      <span className={`todo-due${todo.due_at != null && !todo.completed && todo.due_at < Math.floor(Date.now() / 1000) ? " overdue" : ""}`}>
-                        {dueLabel(todo.due_at)}
-                      </span>
-                      <span className="todo-completed-date">{completedLabel(todo.completed_at)}</span>
+                      <div className="todo-line2">
+                        <div className="todo-row2">
+                          <span className="todo-meta-item">🆔 {todo.id}</span>
+                          <span className="todo-meta-sep">·</span>
+                          <span className="todo-meta-item">🔗 {todo.attachment_count ?? 0}</span>
+                          {todo.tag ? (
+                            <>
+                              <span className="todo-meta-sep">·</span>
+                              <span className="todo-meta-item todo-meta-tag">🏷 {todo.tag}</span>
+                            </>
+                          ) : null}
+                        </div>
+                        <span className="todo-completed-date">{completedLabel(todo.completed_at)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -562,6 +553,28 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                   : item
               ))
             );
+          }}
+        />
+      ) : null}
+
+      {creating ? (
+        <TodoDetailModal
+          todo={{
+            id: 0, title: "", description: null,
+            planned_at: startOfDateKeyEpoch(selectedDayKey),
+            due_at: null, completed: false, priority: 0, tag: null,
+            created_at: 0, updated_at: 0, completed_at: null,
+            attachment_count: 0, extra_fields: null,
+          }}
+          api={api}
+          createMode
+          onClose={() => setCreating(false)}
+          onDelete={() => {}}
+          onUpdate={() => {}}
+          onCreate={(todo) => {
+            setTodos((items) => [...items, { ...todo, attachment_count: todo.attachment_count ?? 0 }]);
+            onConnectionError?.(null);
+            setCreating(false);
           }}
         />
       ) : null}
