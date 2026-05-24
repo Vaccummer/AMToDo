@@ -30,7 +30,7 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
     const [y, m, d] = dateKey.split("-").map(Number);
     const weekday = formatDateKeyWeekday(dateKey);
     const yy = String(y).slice(-2);
-    return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${yy} ${weekday}`;
+    return `${yy}/${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")} ${weekday}`;
   }
 
   const [open, setOpen] = useState(false);

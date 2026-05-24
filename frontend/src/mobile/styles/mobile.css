@@ -1591,9 +1591,36 @@
   height: 42px;
 }
 
+.mobile-shell .attachment-list-scroll {
+  max-height: 35vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .mobile-shell .attach-row {
   border-radius: 12px;
   padding: 10px 12px;
+  position: relative;
+  overflow: hidden;
+  min-height: 48px;
+}
+
+.mobile-shell .attach-row.uploading .attach-row-name {
+  font-size: 14px;
+}
+
+.mobile-shell .attach-row.uploading .attach-row-size {
+  font-size: 12px;
+}
+
+.mobile-shell .attach-row.uploading .ring-progress {
+  width: 36px;
+  height: 36px;
+}
+
+.mobile-shell .attach-row.uploading .ring-progress svg {
+  width: 36px;
+  height: 36px;
 }
 
 .mobile-shell .attach-del-btn {
@@ -1602,6 +1629,217 @@
 
 .mobile-shell .ring-cancel {
   -webkit-tap-highlight-color: transparent;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Attachment filename input ── */
+
+.attach-filename-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--font-md);
+  font-weight: 500;
+  color: var(--global-text-primary);
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+
+.attach-filename-input:focus {
+  border-bottom-color: var(--status-primary-base);
+}
+
+.attach-filename-input::placeholder {
+  color: var(--global-surface-muted);
+}
+
+.attach-row-name-btn {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-md);
+  font-weight: 500;
+  color: var(--global-text-primary);
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-row-name-btn:disabled {
+  color: var(--global-surface-muted);
+  cursor: not-allowed;
+}
+
+/* ── Attachment action button (download/cancel/save) ── */
+
+.attach-action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-action-btn:active {
+  transform: scale(0.9);
+}
+
+.attach-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.attach-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.attach-action-btn.download {
+  background: color-mix(in srgb, #4a6fa5 10%, transparent);
+  color: #4a6fa5;
+}
+
+.attach-action-btn.cancel {
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  color: var(--status-danger-base);
+}
+
+.attach-action-btn.save {
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+  color: var(--status-primary-base);
+}
+
+.attach-action-btn.saved {
+  background: color-mix(in srgb, var(--status-primary-base) 10%, transparent);
+  color: var(--status-primary-base);
+  opacity: 0.5;
+}
+
+/* ── Attachment swipe to reveal delete ── */
+
+.attach-swipe-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.attach-swipe-action {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 112px;
+  display: flex;
+  align-items: stretch;
+  border-radius: 0 12px 12px 0;
+  overflow: hidden;
+}
+
+.attach-swipe-clear-cache {
+  flex: 1;
+  height: 100%;
+  border: none;
+  background: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-swipe-clear-cache:active {
+  background: color-mix(in srgb, #d97706 80%, black);
+}
+
+.attach-swipe-clear-cache svg {
+  width: 18px;
+  height: 18px;
+}
+
+.attach-swipe-delete {
+  flex: 1;
+  height: 100%;
+  border: none;
+  background: var(--status-danger-base, #ef4444);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attach-swipe-delete:active {
+  background: color-mix(in srgb, var(--status-danger-base, #ef4444) 80%, black);
+}
+
+.attach-swipe-delete svg {
+  width: 18px;
+  height: 18px;
+}
+
+.attach-swipe-wrapper.swiped > .attach-row {
+  transform: translateX(-112px);
+  transition: transform 0.2s ease;
+}
+
+/* ── Text preview ── */
+
+.preview-text {
+  width: 100%;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 16px;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--global-text-primary);
+  background: var(--components-input-bg, #fff);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: left;
+}
+
+.preview-text-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 90%;
+  max-width: 600px;
+}
+
+.preview-text-name {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--global-text-primary);
+  margin-bottom: 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 /* ── Mobile Completion Toggle ── */
@@ -1617,13 +1855,61 @@
 }
 
 .mobile-shell .modal-completion-toggle {
-  padding: 8px 14px;
-  gap: 8px;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.3s;
+  flex-shrink: 0;
 }
 
-.mobile-shell .modal-completion-icon {
-  width: 20px;
-  height: 20px;
+/* Track colors */
+.mobile-shell .modal-completion-toggle.pending {
+  background: #d4d0ca;
+}
+
+.mobile-shell .modal-completion-toggle.overdue {
+  background: #ef4444;
+}
+
+.mobile-shell .modal-completion-toggle.done {
+  background: #22c55e;
+}
+
+.mobile-shell .modal-completion-toggle.late-done {
+  background: #f59e0b;
+}
+
+/* Track (inner container) */
+.mobile-shell .modal-completion-track {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Knob */
+.mobile-shell .modal-completion-knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+/* Knob position: right when completed */
+.mobile-shell .modal-completion-toggle.done .modal-completion-knob,
+.mobile-shell .modal-completion-toggle.late-done .modal-completion-knob {
+  transform: translateX(20px);
 }
 
 /* ── Mobile Extra Fields Editor (mef-) ── */
@@ -1955,14 +2241,16 @@
   line-height: 1;
 }
 
-/* ── Schedule modal datetime layout (mobile override) ── */
+/* ── Modal datetime: stack date + time on two rows ── */
 
+.mobile-shell .modal-datetime-row,
 .mobile-shell .schedule-modal-datetime-row {
   flex-direction: column;
   gap: 8px;
   align-items: stretch;
 }
 
+.mobile-shell .modal-datetime-time,
 .mobile-shell .schedule-modal-datetime-time {
   width: 100%;
   flex-shrink: 1;
@@ -1970,12 +2258,85 @@
 
 /* ── TimeWheelPicker ── */
 
-.twp {
+.twp-picker {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.twp-picker-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  min-height: 40px;
+  border: 1px solid var(--modals-schedule-border, #e4ddd3);
+  border-radius: 10px;
+  background: var(--components-calendar-gold-bg, #faf6ef);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s;
+  text-align: left;
+}
+
+.twp-picker-field:focus {
+  outline: none;
+  border-color: var(--status-primary-base, #1a7f72);
+}
+
+.twp-picker-field.open {
+  border-color: var(--status-primary-base, #1a7f72);
+}
+
+.twp-picker-field.invalid {
+  border-color: #dc3545;
+}
+
+.twp-picker-icon {
+  flex-shrink: 0;
+  color: #8a8078;
+}
+
+.twp-picker-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--global-text-primary, #342f2a);
+}
+
+.twp-picker-chevron {
+  flex-shrink: 0;
+  color: #8a8078;
+  transition: transform 0.2s;
+}
+
+.twp-picker-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Popup panel */
+
+.twp-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--modals-schedule-border, #e4ddd3);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  padding: 12px 0 0;
+  overflow: hidden;
+}
+
+.twp-popup-inner {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  height: 120px;
+  height: 100px;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
@@ -1984,9 +2345,9 @@
 .twp-highlight {
   position: absolute;
   top: 50%;
-  left: 0;
-  right: 0;
-  height: 40px;
+  left: 12px;
+  right: 12px;
+  height: 34px;
   transform: translateY(-50%);
   border-top: 2px solid rgba(26, 127, 114, 0.3);
   border-bottom: 2px solid rgba(26, 127, 114, 0.3);
@@ -1997,8 +2358,8 @@
 }
 
 .twp-column {
-  width: 56px;
-  height: 120px;
+  width: 48px;
+  height: 100px;
   overflow-y: scroll;
   scroll-snap-type: y mandatory;
   -webkit-overflow-scrolling: touch;
@@ -2011,11 +2372,11 @@
 }
 
 .twp-item {
-  height: 40px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--global-text-primary, #342f2a);
@@ -2033,12 +2394,48 @@
 }
 
 .twp-sep {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: #8a8078;
   line-height: 1;
   flex-shrink: 0;
   z-index: 2;
+}
+
+/* Popup action buttons */
+
+.twp-popup-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(229, 223, 215, 0.4);
+}
+
+.twp-btn {
+  flex: 1;
+  padding: 8px 12px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+.twp-btn:active {
+  transform: scale(0.96);
+}
+
+.twp-btn-now {
+  background: rgba(0, 0, 0, 0.04);
+  color: #5c5650;
+}
+
+.twp-btn-confirm {
+  background: var(--status-primary-base, #1a7f72);
+  color: #fff;
 }
 
 /* ── FAB Action Sheet ── */
@@ -2161,4 +2558,53 @@
 
 .fab-sheet-cancel:active {
   background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Attachment Preview (mobile) ── */
+
+.mobile-shell .attachment-preview-backdrop {
+  padding: 0;
+}
+
+.mobile-shell .attachment-preview-panel {
+  max-width: 100vw;
+  max-height: 100dvh;
+  width: 100%;
+  height: 100%;
+  padding: 48px 8px 40px;
+  box-sizing: border-box;
+}
+
+.mobile-shell .attachment-preview-panel img,
+.mobile-shell .attachment-preview-panel video {
+  max-height: calc(100dvh - 88px);
+  border-radius: 8px;
+}
+
+.mobile-shell .attachment-preview-close {
+  top: 4px;
+  right: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--global-text-primary);
+  font-size: 20px;
+}
+
+.mobile-shell .preview-nav {
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.mobile-shell .preview-nav-prev {
+  left: 8px;
+}
+
+.mobile-shell .preview-nav-next {
+  right: 8px;
+}
+
+.mobile-shell .preview-counter {
+  bottom: 12px;
 }

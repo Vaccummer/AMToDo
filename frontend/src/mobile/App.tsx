@@ -23,6 +23,9 @@ import trashIcon from "../assets/trash.svg";
 type Tab = "todo" | "schedule" | "search" | "trash" | "settings";
 type ConnectionStatus = "checking" | "online" | "offline";
 
+// Main tabs that persist without unmounting
+const MAIN_TABS: Tab[] = ["todo", "schedule", "search"];
+
 const tabIcons: Record<Tab, string> = {
   todo: todoIcon,
   schedule: scheduleIcon,
@@ -37,6 +40,8 @@ export function App() {
   applyTheme(getTheme(DEFAULT_THEME));
 
   const [activeTab, setActiveTab] = useState<Tab>("todo");
+  const [previousTab, setPreviousTab] = useState<Tab | null>(null);
+  const [trashKey, setTrashKey] = useState(0);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
@@ -71,6 +76,14 @@ export function App() {
   }, []);
 
   function navigateTab(tab: Tab) {
+    if (tab === "settings") {
+      setPreviousTab(activeTab);
+      setActiveTab("settings");
+      return;
+    }
+    if (tab === "trash" && activeTab !== "trash") {
+      setTrashKey((k) => k + 1);
+    }
     setActiveTab(tab);
   }
 
@@ -121,6 +134,25 @@ export function App() {
       }).catch(() => {});
     }).catch(() => {});
   }
+
+  // Lock shell height to prevent viewport resize when keyboard opens
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>(".mobile-shell");
+    if (!el) return;
+    const h = window.innerHeight;
+    el.style.height = `${h}px`;
+    el.style.maxHeight = `${h}px`;
+
+    // Counteract viewport resize (e.g. keyboard opening)
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function onResize() {
+      el.style.height = `${h}px`;
+      el.style.maxHeight = `${h}px`;
+    }
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
 
   // Configure status bar
   useEffect(() => {
@@ -369,7 +401,8 @@ export function App() {
     <I18nProvider locale={settings.language}>
     <div className="mobile-shell">
       <main className="mobile-content">
-        {activeTab === "todo" && (
+        {/* Main tabs: always mounted, hidden when inactive */}
+        <div style={{ display: activeTab === "todo" ? "contents" : "none" }}>
           <TodoView
             api={api}
             calendarDays={settings.calendar_days}
@@ -379,8 +412,8 @@ export function App() {
             pendingAction={pendingAction?.type === "todo" ? pendingAction : null}
             onPendingActionConsumed={() => setPendingAction(null)}
           />
-        )}
-        {activeTab === "schedule" && (
+        </div>
+        <div style={{ display: activeTab === "schedule" ? "contents" : "none" }}>
           <ScheduleView
             api={api}
             settings={settings}
@@ -394,14 +427,15 @@ export function App() {
             pendingAction={pendingAction?.type === "schedule" || pendingAction?.type === "notify" ? pendingAction : null}
             onPendingActionConsumed={() => setPendingAction(null)}
           />
-        )}
-        {activeTab === "search" && (
+        </div>
+        <div style={{ display: activeTab === "search" ? "contents" : "none" }}>
           <SearchView api={api} onNavigate={(target, dateKey) => {
             if (dateKey) navigateTab(target as Tab);
           }} />
-        )}
+        </div>
+        {/* Trash: remount on entry via key */}
         {activeTab === "trash" && (
-          <TrashView api={api} />
+          <TrashView key={trashKey} api={api} />
         )}
       </main>
 
@@ -419,6 +453,7 @@ export function App() {
         ))}
       </nav>
 
+      {/* Settings: overlay on top of content */}
       {activeTab === "settings" && (
         <SettingsModal
           settings={settings}
@@ -444,7 +479,8 @@ export function App() {
           }}
           onClose={() => {
             flushSettings(settings);
-            navigateTab("todo");
+            setActiveTab(previousTab ?? "todo");
+            setPreviousTab(null);
           }}
         />
       )}

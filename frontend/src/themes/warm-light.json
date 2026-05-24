@@ -102,7 +102,7 @@
       "cell-bg": "#faf7f2",
       "time-label": "#ebe5dc",
       "event-selected": "#254f5c",
-      "event-colors": ["#f0c66d", "#bde8dc", "#94c7dc", "#e8a2aa", "#d4cff0"]
+      "event-colors": ["#5a9fd4", "#7ab8e0", "#4a8cc0", "#88c4e8", "#6db0d8"]
     },
     "search": {
       "_comment": "Search view",
