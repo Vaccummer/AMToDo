@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
   value: string;
@@ -7,9 +7,11 @@ type Props = {
   id?: string;
 };
 
-const ITEM_H = 40;
-const VISIBLE = 3; // items visible above + below center
-const PAD = VISIBLE; // blank padding items at each end
+const ITEM_H = 34;
+const VIEWPORT_H = 100;
+const VISIBLE = 3;
+const PAD = VISIBLE;
+const CENTER_OFFSET = (VIEWPORT_H - ITEM_H) / 2;
 
 function parseValue(v: string): [number, number, number] {
   const parts = v.split(":").map(Number);
@@ -29,7 +31,7 @@ function pad2(n: number): string {
 }
 
 function scrollToIndex(el: HTMLElement, idx: number, smooth: boolean) {
-  const top = idx * ITEM_H;
+  const top = idx * ITEM_H - CENTER_OFFSET;
   if (smooth) {
     el.scrollTo({ top, behavior: "smooth" });
   } else {
@@ -38,26 +40,36 @@ function scrollToIndex(el: HTMLElement, idx: number, smooth: boolean) {
 }
 
 function readIndex(el: HTMLElement): number {
-  return Math.round(el.scrollTop / ITEM_H);
+  return Math.round((el.scrollTop + CENTER_OFFSET) / ITEM_H);
 }
+
+/* ── Scroll Column ── */
 
 type ColumnProps = {
   count: number;
   value: number;
   onChange: (v: number) => void;
+  opened: boolean;
 };
 
-function Column({ count, value, onChange }: ColumnProps) {
+function Column({ count, value, onChange, opened }: ColumnProps) {
   const ref = useRef<HTMLDivElement>(null);
   const scrolling = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync from parent
+  // Scroll to initial position when popup opens
   useEffect(() => {
     const el = ref.current;
-    if (!el || scrolling.current) return;
+    if (!el || !opened) return;
     scrollToIndex(el, PAD + value, false);
-  }, [value]);
+  }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll when value changes externally (e.g. from "Now" button)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !opened || scrolling.current) return;
+    scrollToIndex(el, PAD + value, true);
+  }, [value, opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScroll = useCallback(() => {
     const el = ref.current;
@@ -81,7 +93,6 @@ function Column({ count, value, onChange }: ColumnProps) {
 
   return (
     <div className="twp-column" ref={ref} onScroll={handleScroll}>
-      {/* top padding */}
       {Array.from({ length: PAD }, (_, i) => (
         <div key={`p-${i}`} className="twp-item twp-item--pad" />
       ))}
@@ -90,7 +101,6 @@ function Column({ count, value, onChange }: ColumnProps) {
           {pad2(i)}
         </div>
       ))}
-      {/* bottom padding */}
       {Array.from({ length: PAD }, (_, i) => (
         <div key={`b-${i}`} className="twp-item twp-item--pad" />
       ))}
@@ -98,26 +108,136 @@ function Column({ count, value, onChange }: ColumnProps) {
   );
 }
 
-export function TimeWheelPicker({ value, onChange, className, id }: Props) {
-  const [h, m, s] = parseValue(value);
+/* ── Main Picker ── */
 
-  const handleChange = useCallback(
+export function TimeWheelPicker({ value, onChange, className, id }: Props) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<[number, number, number]>(() => parseValue(value));
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync draft when value changes externally
+  useEffect(() => {
+    if (!open) {
+      setDraft(parseValue(value));
+    }
+  }, [value, open]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    const timer = setTimeout(() => {
+      window.addEventListener("click", handleClick);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("click", handleClick);
+    };
+  }, [open]);
+
+  function handleOpen() {
+    setDraft(parseValue(value));
+    setOpen(true);
+  }
+
+  function handleConfirm() {
+    onChange(toValue(draft[0], draft[1], draft[2]));
+    setOpen(false);
+  }
+
+  function handleNow() {
+    const now = new Date();
+    setDraft([now.getHours(), now.getMinutes(), now.getSeconds()]);
+  }
+
+  const handleColumnChange = useCallback(
     (which: "h" | "m" | "s", v: number) => {
-      const [ch, cm, cs] = parseValue(value);
-      const next = which === "h" ? [v, cm, cs] : which === "m" ? [ch, v, cs] : [ch, cm, v];
-      onChange(toValue(next[0], next[1], next[2]));
+      setDraft((prev) => {
+        const next: [number, number, number] = [...prev];
+        if (which === "h") next[0] = v;
+        else if (which === "m") next[1] = v;
+        else next[2] = v;
+        return next;
+      });
     },
-    [value, onChange]
+    []
   );
 
+  const display = value || "00:00:00";
+
   return (
-    <div className={`twp${className ? ` ${className}` : ""}`} id={id}>
-      <div className="twp-highlight" />
-      <Column count={24} value={h} onChange={(v) => handleChange("h", v)} />
-      <span className="twp-sep">:</span>
-      <Column count={60} value={m} onChange={(v) => handleChange("m", v)} />
-      <span className="twp-sep">:</span>
-      <Column count={60} value={s} onChange={(v) => handleChange("s", v)} />
+    <div className={`twp-picker${className ? ` ${className}` : ""}`} id={id} ref={containerRef}>
+      <div
+        className={`twp-picker-field${open ? " open" : ""}`}
+        onClick={handleOpen}
+        tabIndex={0}
+        role="combobox"
+        aria-expanded={open}
+      >
+        <svg
+          className="twp-picker-icon"
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span className="twp-picker-text">{display}</span>
+        <svg
+          className={`twp-picker-chevron${open ? " open" : ""}`}
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+
+      {open ? (
+        <div className="twp-popup">
+          <div className="twp-popup-inner">
+            <div className="twp-highlight" />
+            <Column count={24} value={draft[0]} onChange={(v) => handleColumnChange("h", v)} opened={open} />
+            <span className="twp-sep">:</span>
+            <Column count={60} value={draft[1]} onChange={(v) => handleColumnChange("m", v)} opened={open} />
+            <span className="twp-sep">:</span>
+            <Column count={60} value={draft[2]} onChange={(v) => handleColumnChange("s", v)} opened={open} />
+          </div>
+          <div className="twp-popup-actions">
+            <button type="button" className="twp-btn twp-btn-now" onClick={handleNow}>
+              Now
+            </button>
+            <button type="button" className="twp-btn twp-btn-confirm" onClick={handleConfirm}>
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

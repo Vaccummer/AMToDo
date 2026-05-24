@@ -992,7 +992,22 @@
 }
 
 .schedule-agenda-card-meta-icon {
-  font-size: 11px;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.schedule-agenda-card-right-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-self: center;
+  opacity: 0.7;
+}
+
+.notify-bell-icon {
+  width: 24px;
+  height: 24px;
 }
 
 .schedule-agenda-card-tag {
@@ -1028,9 +1043,44 @@
   color: #624c10;
 }
 
+/* Notify card — single-line compact layout */
+.notify-card {
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.notify-card .schedule-agenda-card-color {
+  align-self: center;
+  height: 18px;
+}
+
+.notify-card-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: #b08830;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.notify-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5c5650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notify-card .notify-bell-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .schedule-agenda-card-notify-icon {
-  font-size: 11px;
-  opacity: 0.8;
+  display: none;
 }
 
 .schedule-agenda-empty {
