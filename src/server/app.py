@@ -347,6 +347,16 @@ def create_app(settings: AppSettings) -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
+
+    # Allow cross-origin requests from the Capacitor WebView on mobile
+    from starlette.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.state.settings = settings
     app.state.replay_protector = _build_replay_protector(settings)
 
