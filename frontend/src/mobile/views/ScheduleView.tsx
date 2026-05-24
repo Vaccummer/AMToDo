@@ -1231,19 +1231,20 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                               <div className="schedule-agenda-card-meta">
                                 {item.location ? (
                                   <>
-                                    <span className="schedule-agenda-card-meta-icon">📍</span>
+                                    <svg className="schedule-agenda-card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
                                     {item.location}
                                   </>
                                 ) : null}
                               </div>
                             </div>
+                            <svg className="schedule-agenda-card-right-icon" viewBox="0 0 1024 1024" fill="none"><path d="M896 938.667H128c-23.467 0-42.667-19.2-42.667-42.667V213.333c0-23.466 19.2-42.666 42.667-42.666h768c23.467 0 42.667 19.2 42.667 42.666v682.667c0 23.467-19.2 42.667-42.667 42.667z" fill="#BAE7FF"/><path d="M938.667 341.333H85.333v-128c0-23.466 19.2-42.666 42.667-42.666h768c23.467 0 42.667 19.2 42.667 42.666v128z" fill="#185ABD"/><path d="M266.667 256c-23.467 0-42.667-19.2-42.667-42.667V128c0-23.466 19.2-42.666 42.667-42.666s42.667 19.2 42.666 42.666v85.333c0 23.467-19.2 42.667-42.666 42.667zm480 0c-23.467 0-42.667-19.2-42.667-42.667V128c0-23.466 19.2-42.666 42.667-42.666s42.667 19.2 42.666 42.666v85.333c0 23.467-19.2 42.667-42.666 42.667z" fill="#50D9FF"/><path d="M213.333 597.333h85.334v85.334h-85.334zm0 149.334h85.334v85.333h-85.334zm170.667-149.334h85.333v85.334h-85.333zm0 149.334h85.333v85.333h-85.333zm170.667-149.334h85.333v85.334h-85.333zm0 149.334h85.333v85.333h-85.333zm170.666-149.334h85.334v85.334h-85.334zm-341.333-149.333h85.333v85.333h-85.333zm170.667 0h85.333v85.333h-85.333zm170.666 0h85.334v85.333h-85.334z" fill="#2B7CD3"/></svg>
                           </div>
                         );
                       }
                       const n = entry.item as NotificationItem;
                       return (
                         <div
-                          className="schedule-agenda-card"
+                          className="schedule-agenda-card notify-card"
                           key={`n-${n.id}`}
                           onClick={() => handleNotifyClick(n)}
                           onDoubleClick={() => setNotifyEditId(n.id)}
@@ -1253,16 +1254,9 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                           }}
                         >
                           <div className="schedule-agenda-card-color" style={{ background: entry.color }} />
-                          <div className="schedule-agenda-card-body">
-                            <div className="schedule-agenda-card-title">
-                              <span className="schedule-agenda-card-notify-icon">🔔</span>{" "}
-                              {n.title}
-                            </div>
-                            <div className="schedule-agenda-card-meta">
-                              <span className="schedule-agenda-card-meta-icon">🕐</span>
-                              {formatTimeShort(n.trigger_at)}
-                            </div>
-                          </div>
+                          <span className="notify-card-time">{formatTimeShort(n.trigger_at)}</span>
+                          <div className="notify-card-title">{n.title}</div>
+                          <svg className="schedule-agenda-card-right-icon notify-bell-icon" viewBox="0 0 1024 1024" fill="none"><path d="M512 170C382 170 288 264 288 392v168c0 60-22 117-62 162l-40 46c-10 12-14 27-8 40s19 22 34 22h596c15 0 28-9 34-22s2-28-8-40l-40-46c-40-45-62-102-62-162V392c0-128-94-222-224-222z" fill="#FFC670"/><path d="M512 170c-110 0-192 82-192 196v154c0 60-20 115-56 156l-24 28h498l-24-28c-36-41-56-96-56-156V366c0-114-64-196-146-196z" fill="#FFE88A"/><path d="M736 392v168c0 60 22 117 62 162l40 46c10 12 14 27 8 40s-19 22-34 22H662c60-30 98-93 98-162 0-36-11-71-32-100l-54-74c-20-28-30-61-30-96 0-85-50-164-132-202 113 0 224 86 224 196z" fill="#FF9A42"/><circle cx="512" cy="742" r="78" fill="#FFC670"/><path d="M448 150c0-35 28-62 64-62s64 27 64 62v34H448v-34z" fill="#FFC670"/><path d="M512 170C382 170 288 264 288 392v168c0 60-22 117-62 162l-40 46c-10 12-14 27-8 40s19 22 34 22h596c15 0 28-9 34-22s2-28-8-40l-40-46c-40-45-62-102-62-162V392c0-128-94-222-224-222z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round"/><path d="M448 150c0-35 28-62 64-62s64 27 64 62v34H448v-34z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round"/><path d="M320 830c0 106 86 138 192 138s192-32 192-138" stroke="#3D3D63" strokeWidth="34" strokeLinecap="round"/><circle cx="512" cy="742" r="78" stroke="#3D3D63" strokeWidth="34" fill="none"/></svg>
                         </div>
                       );
                     })
@@ -1677,7 +1671,6 @@ const NotifyEventBlock = forwardRef<HTMLButtonElement, {
         onMouseLeave={tooltip.hide}
         aria-pressed={selected}
       >
-        <span className="notify-icon">🔔</span>
         <span className="notify-title">{item.title}</span>
         <span className="notify-time">{timeText}</span>
       </button>
