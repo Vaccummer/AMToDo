@@ -700,6 +700,31 @@ def todo_attachment_remove(
         _exit_with_error(exc)
 
 
+@todo_attachment_app.command("rename")
+def todo_attachment_rename(
+    todo_id: int = typer.Argument(..., help="ToDo id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    filename: str = typer.Argument(..., help="New display filename."),
+) -> None:
+    """Rename an attachment's display filename."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_rename(todo_id, attachment_id, filename), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _attachment_service(uow, context.clock)
+            attachment = service.rename(todo_id, attachment_id, filename)
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
 @todo_attachment_app.command("remove-orphaned")
 def todo_attachment_remove_orphaned(
     todo_id: int = typer.Argument(..., help="ToDo id."),
@@ -1231,6 +1256,22 @@ def schedule_attachment_remove(
         if not hasattr(AMTodoClient, "schedule_attachment_remove"):
             _exit_with_error(ValidationError("该操作不被当前服务器支持"))
         _run_http(lambda client: client.schedule_attachment_remove(schedule_id, attachment_id), settings)
+        return
+
+    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+
+
+@schedule_attachment_app.command("rename")
+def schedule_attachment_rename(
+    schedule_id: int = typer.Argument(..., help="Schedule id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    filename: str = typer.Argument(..., help="New display filename."),
+) -> None:
+    """Rename a schedule attachment's display filename."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.schedule_attachment_rename(schedule_id, attachment_id, filename), settings)
         return
 
     _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))

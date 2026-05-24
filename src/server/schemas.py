@@ -235,6 +235,12 @@ class TodoAttachmentRemoveOrphanedRequest(UserAuthMixin):
     todo_id: int
 
 
+class TodoAttachmentRenameRequest(UserAuthMixin):
+    todo_id: int
+    attachment_id: int
+    filename: str
+
+
 # ── Schedule Attachments ──
 
 class ScheduleAttachmentListRequest(UserAuthMixin):
@@ -253,6 +259,12 @@ class ScheduleAttachmentRemoveRequest(UserAuthMixin):
 
 class ScheduleAttachmentRemoveOrphanedRequest(UserAuthMixin):
     schedule_id: int
+
+
+class ScheduleAttachmentRenameRequest(UserAuthMixin):
+    schedule_id: int
+    attachment_id: int
+    filename: str
 
 
 # ── Schedule ──

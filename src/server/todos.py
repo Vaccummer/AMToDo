@@ -30,6 +30,7 @@ from server.schemas import (
     TodoAttachmentListRequest,
     TodoAttachmentRemoveOrphanedRequest,
     TodoAttachmentRemoveRequest,
+    TodoAttachmentRenameRequest,
     TodoBatchCreateRequest,
     TodoBatchUpdateRequest,
     TodoChangelogQueryRequest,
@@ -261,6 +262,20 @@ def remove_attachment(
 
     service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
     attachment = service.remove(body.todo_id, body.attachment_id)
+    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
+
+
+@router.post("/attachments/rename")
+def rename_attachment(
+    body: TodoAttachmentRenameRequest,
+    request: Request,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Rename an attachment's display filename."""
+
+    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
+    attachment = service.rename(body.todo_id, body.attachment_id, body.filename)
     return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
 
 

@@ -30,6 +30,7 @@ from server.schemas import (
     ScheduleAttachmentListRequest,
     ScheduleAttachmentRemoveOrphanedRequest,
     ScheduleAttachmentRemoveRequest,
+    ScheduleAttachmentRenameRequest,
     ScheduleBatchCreateRequest,
     ScheduleBatchUpdateItem,
     ScheduleBatchUpdateRequest,
@@ -470,6 +471,20 @@ def remove_attachment(
 
     service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
     attachment = service.remove(body.schedule_id, body.attachment_id)
+    return {"ok": True, "attachment": schedule_attachment_to_dict(attachment, uow.user_id)}
+
+
+@router.post("/attachments/rename")
+def rename_attachment(
+    body: ScheduleAttachmentRenameRequest,
+    request: Request,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Rename a schedule attachment's display filename."""
+
+    service = make_attachment_service(uow, clock, request, "schedule", changelog_service=uow.schedule_changelog_service)
+    attachment = service.rename(body.schedule_id, body.attachment_id, body.filename)
     return {"ok": True, "attachment": schedule_attachment_to_dict(attachment, uow.user_id)}
 
 
