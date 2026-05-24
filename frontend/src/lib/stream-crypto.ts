@@ -11,6 +11,10 @@
  *   - Last 4 bytes: big-endian block counter (length: 32)
  */
 
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { unsafe } from "@noble/ciphers/aes.js";
+
 const CHUNK_SIZE = 1024 * 1024; // 1MB
 
 export interface FileKeyInfo {
@@ -133,6 +137,95 @@ export async function encryptFile(
   result.set(new Uint8Array(tag), cipherBytes.byteLength);
 
   return { cipher: result.buffer, plainSize: totalSize };
+}
+
+/**
+ * Create a ReadableStream that yields cipher chunks + 32-byte HMAC tag.
+ * Reads the file in 1MB slices, encrypts incrementally with AES-CTR,
+ * and signs incrementally with HMAC-SHA256. Constant memory ≈ 1 chunk.
+ */
+export function createEncryptStream(
+  file: File,
+  fileKey: string,
+  nonce: string,
+  onProgress?: (loaded: number, total: number) => void,
+  abortSignal?: AbortSignal,
+): ReadableStream<Uint8Array> {
+  const { encKeyBytes, hmacKeyBytes, nonceBytes } = decodeKeys(fileKey, nonce);
+  const totalSize = file.size;
+  let offset = 0;
+  let done = false;
+
+  // Mutable crypto state captured in pull closure
+  const xk = unsafe.expandKeyLE(encKeyBytes);
+  const counter = new Uint8Array(16);
+  counter.set(nonceBytes, 0);
+  const h = hmac.create(sha256, hmacKeyBytes);
+
+  // Buffer plaintext bytes to ensure only 16-byte-aligned blocks go to ctr32.
+  // ctr32 only advances its internal counter for full 16-byte blocks; partial
+  // blocks would corrupt the keystream position for all subsequent data.
+  let remainder = new Uint8Array(0);
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (done) return;
+      if (abortSignal?.aborted) {
+        controller.close();
+        done = true;
+        return;
+      }
+
+      if (offset >= totalSize) {
+        // File fully read — encrypt any remaining partial block
+        if (remainder.length > 0) {
+          // Pad to 16 bytes, encrypt as a full block (advances counter), truncate output.
+          // XOR with zero-padded tail is identity, so truncated output is correct.
+          const padded = new Uint8Array(16);
+          padded.set(remainder);
+          const enc = unsafe.ctr32(xk, false, counter, padded);
+          const cipherPart = enc.subarray(0, remainder.length);
+          h.update(cipherPart);
+          controller.enqueue(cipherPart);
+          remainder = new Uint8Array(0);
+        }
+        controller.enqueue(h.digest());
+        controller.close();
+        done = true;
+        return;
+      }
+
+      const end = Math.min(offset + CHUNK_SIZE, totalSize);
+      const slice = file.slice(offset, end);
+      const plain = new Uint8Array(await slice.arrayBuffer());
+      offset = end;
+
+      // Prepend any leftover bytes from previous iteration
+      let buf: Uint8Array;
+      if (remainder.length > 0) {
+        buf = new Uint8Array(remainder.length + plain.length);
+        buf.set(remainder);
+        buf.set(plain, remainder.length);
+        remainder = new Uint8Array(0);
+      } else {
+        buf = plain;
+      }
+
+      const fullBlocks = (buf.length >> 4) << 4; // floor to 16-byte boundary
+      if (fullBlocks > 0) {
+        const aligned = buf.subarray(0, fullBlocks);
+        const cipherPart = unsafe.ctr32(xk, false, counter, aligned);
+        h.update(cipherPart);
+        controller.enqueue(cipherPart);
+      }
+
+      if (fullBlocks < buf.length) {
+        remainder = new Uint8Array(buf.slice(fullBlocks));
+      }
+
+      onProgress?.(offset, totalSize);
+    },
+  });
 }
 
 // ── Decryption ──
