@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AMToDoApi, NotificationItem, ScheduleItem, TodoItem } from "../../api/client";
 import type { ConnectionStatusSnapshot } from "../../api/connection-status";
-import { addDaysToDateKey, dateKeyFromEpoch, formatDueTime, formatTime, isOverdueTodo, startOfDateKeyEpoch } from "../../lib/time";
+import { addDaysToDateKey, dateKeyFromEpoch, formatTime, isOverdueTodo, startOfDateKeyEpoch } from "../../lib/time";
 import { ContextMenu, TrashIcon } from "./ContextMenu";
 import { NotifyFormModal } from "./NotifyFormModal";
 import { DatePicker } from "./DatePicker";
@@ -121,6 +121,7 @@ function getTodoSortOptions(t: (key: string) => string) {
     { value: "planned_at", label: t("common.plannedTime") },
     { value: "due_at", label: t("common.dueTime") },
     { value: "priority", label: t("common.priority") },
+    { value: "status", label: t("common.status") },
     { value: "title", label: t("common.title") }
   ];
 }
@@ -238,38 +239,11 @@ function CalendarIcon() {
   );
 }
 
-function ClockIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
-
 function TagIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
       <line x1="7" y1="7" x2="7.01" y2="7" />
-    </svg>
-  );
-}
-
-function LocationIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-
-function NotifyIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   );
 }
@@ -324,11 +298,12 @@ function formatEpoch(epoch: number | null): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  const hm = formatTime(epoch);
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
   if (year === nowYear) {
-    return `${month}-${day} ${hm}`;
+    return `${month}/${day} ${hours}:${minutes}`;
   }
-  return `${year}-${month}-${day} ${hm}`;
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
 
 function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
@@ -384,6 +359,7 @@ function getSortValue(result: ResultItem, sortBy: string): number | string {
       case "planned_at": return item.planned_at ?? 0;
       case "due_at": return item.due_at ?? 0;
       case "priority": return item.priority ?? 0;
+      case "status": return getTodoStatusOrder(item);
       case "title": return item.title ?? "";
       default: return 0;
     }
@@ -408,6 +384,15 @@ function getSortValue(result: ResultItem, sortBy: string): number | string {
     case "title": return item.title ?? "";
     default: return 0;
   }
+}
+
+function getTodoStatusOrder(todo: TodoItem): number {
+  const overdue = isOverdueTodo(todo);
+  const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
+  if (overdue && !todo.completed) return 0; // overdue
+  if (!todo.completed) return 1; // pending
+  if (lateDone) return 2; // late-done
+  return 3; // done
 }
 
 /* ============================================================
@@ -867,23 +852,23 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   function getTodoCardStatus(todo: TodoItem): { label: string; className: string } {
     const overdue = isOverdueTodo(todo);
     const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
-    if (overdue) return { label: t("common.overdue"), className: "overdue" };
-    if (lateDone) return { label: `${t("common.overdue")} ${t("common.completed")}`, className: "overdue" };
-    if (todo.completed) return { label: t("common.completed"), className: "done" };
-    return { label: t("common.inProgress"), className: "pending" };
+    if (overdue && !todo.completed) return { label: "逾期", className: "overdue" };
+    if (lateDone) return { label: "逾期完成", className: "late-done" };
+    if (todo.completed) return { label: "已完成", className: "done" };
+    return { label: "", className: "pending" };
   }
 
   function getScheduleCardStatus(schedule: ScheduleItem): { label: string; className: string } {
     const now = Math.floor(Date.now() / 1000);
-    if (schedule.end_at && schedule.end_at < now) return { label: t("common.completed"), className: "done" };
-    if (schedule.start_at && schedule.start_at > now) return { label: t("common.inProgress"), className: "pending" };
-    return { label: t("common.inProgress"), className: "pending" };
+    if (schedule.end_at && schedule.end_at < now) return { label: "已完成", className: "done" };
+    if (schedule.start_at && schedule.start_at > now) return { label: "进行中", className: "pending" };
+    return { label: "进行中", className: "pending" };
   }
 
   function getNotifyCardStatus(notify: NotificationItem): { label: string; className: string } {
     const now = Math.floor(Date.now() / 1000);
-    if (notify.trigger_at < now) return { label: t("common.completed"), className: "done" };
-    return { label: t("common.inProgress"), className: "pending" };
+    if (notify.trigger_at < now) return { label: "已完成", className: "done" };
+    return { label: "进行中", className: "pending" };
   }
 
   /* ============================================================
@@ -894,30 +879,23 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
     <div className="ms-container">
       {/* Top section: dark gradient header */}
       <div className="ms-top-section">
-        <div className="ms-top-row">
-          <h2 className="ms-title">{t("tab.search") || "Search"}</h2>
-          <button
-            type="button"
-            className={`ms-regex-toggle${useRegex ? " active" : ""}`}
-            onClick={() => setUseRegex(!useRegex)}
-            disabled={idSearch}
-            aria-label={t("common.regex")}
-          >
-            .*
-          </button>
-        </div>
-
         <div className="ms-search-field">
           <SearchIcon />
           <input
             type="text"
+            enterkeyhint="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSearchSubmit(); }}
             placeholder={idSearch ? t("search.inputIdPlaceholder") : mode === "todo" ? t("search.searchTodos") : mode === "schedule" ? t("search.searchSchedules") : t("search.searchNotifications")}
           />
-          <button type="button" className="ms-go-btn" disabled={busy} onClick={handleSearchSubmit}>
-            {busy ? "..." : t("common.search")}
+          <button
+            type="button"
+            className={`ms-filter-toggle${anyFilterActive ? " active" : ""}`}
+            onClick={() => setSheetOpen(true)}
+            aria-label={t("search.match")}
+          >
+            <FilterIcon />
           </button>
         </div>
 
@@ -979,7 +957,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
         ) : null}
 
         {/* Result cards */}
-        <div className="ms-result-list">
+        <div className="ms-card-list">
           {results.map((result) => {
             const key = resultKey(result);
             const isEditing = editingKey === key;
@@ -987,11 +965,9 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
             if (result.type === "todo") {
               const todo = result.item;
               const cardStatus = getTodoCardStatus(todo);
-              const overdue = isOverdueTodo(todo);
-              const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
               return (
                 <div
-                  className={`ms-result-card${todo.completed ? " ms-completed" : ""}${overdue ? " ms-overdue" : ""}${lateDone ? " ms-late-done" : ""}`}
+                  className={`ms-card ms-card--${cardStatus.className}`}
                   key={key}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -999,68 +975,70 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                   }}
                   onClick={() => setDetail(result)}
                 >
-                  <div className="ms-card-top">
-                    <span className="ms-type-badge ms-type-badge--todo">{t("tab.todo")}</span>
-                    <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
+                  <div className="ms-card-header">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        className="ms-card-edit-input"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") void saveRename(result);
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        onBlur={() => void saveRename(result)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <div
+                          className={`ms-card-title${todo.completed ? " ms-card-title--completed" : ""}`}
+                          onDoubleClick={() => beginRename(result)}
+                        >
+                          {todo.title}
+                        </div>
+                        {cardStatus.label && (
+                          <span className="ms-card-status">
+                            <span className={`ms-card-dot ms-card-dot--${cardStatus.className}`}></span>
+                            <span className={`ms-card-status-label ms-card-status-label--${cardStatus.className}`}>{cardStatus.label}</span>
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
-
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      className="ms-card-edit-input"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === "Enter") void saveRename(result);
-                        if (e.key === "Escape") cancelRename();
-                      }}
-                      onBlur={() => void saveRename(result)}
-                      onClick={(e) => e.stopPropagation()}
-                      autoFocus
-                    />
-                  ) : (
-                    <div
-                      className="ms-card-title"
-                      onDoubleClick={() => beginRename(result)}
-                    >
-                      {todo.completed ? <s>{todo.title}</s> : todo.title}
-                    </div>
-                  )}
 
                   {todo.description ? (
                     <div className="ms-card-desc">{todo.description}</div>
                   ) : null}
 
                   <div className="ms-card-meta">
-                    {todo.due_at !== null ? (
-                      <span className="ms-meta-item">
-                        <CalendarIcon />
-                        <span>{formatDueTime(todo.due_at)}</span>
-                      </span>
-                    ) : (
-                      <span className="ms-meta-item">
-                        <CalendarIcon />
-                        <span>{t("common.noDueDate")}</span>
-                      </span>
-                    )}
-                    {todo.tag ? (
-                      <span className="ms-meta-item">
-                        <TagIcon />
-                        <span>{todo.tag}</span>
-                      </span>
-                    ) : null}
+                    <span className="ms-card-meta-item ms-card-meta-item--due">
+                      <CalendarIcon />
+                      <span>{todo.due_at !== null ? formatEpoch(todo.due_at) : "无截止时间"}</span>
+                    </span>
+                    <span className="ms-card-meta-item ms-card-meta-item--id">
+                      <span>🆔</span>
+                      <span>{todo.id}</span>
+                    </span>
                     {todo.attachment_count ? (
-                      <span className="ms-meta-item">
+                      <span className="ms-card-meta-item ms-card-meta-item--attach">
                         <AttachmentCountIcon />
                         <span>{todo.attachment_count}</span>
                       </span>
                     ) : null}
-                    <span className="ms-meta-item ms-meta-id">
-                      <IdIcon />
-                      <span>{todo.id}</span>
-                    </span>
+                    {todo.tag ? (
+                      <span className="ms-card-meta-item ms-card-meta-item--tag">
+                        <TagIcon />
+                        <span>{todo.tag}</span>
+                      </span>
+                    ) : null}
                   </div>
+
+                  {(todo.completed || cardStatus.className === "done" || cardStatus.className === "late-done") && todo.completed_at ? (
+                    <div className="ms-card-completed">完成于 {formatEpoch(todo.completed_at)}</div>
+                  ) : null}
                 </div>
               );
             }
@@ -1070,7 +1048,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
               const cardStatus = getScheduleCardStatus(schedule);
               return (
                 <div
-                  className="ms-preview-card"
+                  className={`ms-card ms-card--${cardStatus.className}`}
                   key={key}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1078,60 +1056,57 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                   }}
                   onClick={() => setDetail(result)}
                 >
-                  <div className="ms-card-top">
-                    <span className="ms-type-badge ms-type-badge--schedule">{t("tab.schedule")}</span>
-                    <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
+                  <div className="ms-card-header">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        className="ms-card-edit-input"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") void saveRename(result);
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        onBlur={() => void saveRename(result)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <div
+                          className="ms-card-title"
+                          onDoubleClick={() => beginRename(result)}
+                        >
+                          {schedule.title}
+                        </div>
+                        <span className="ms-card-status">
+                          <span className={`ms-card-dot ms-card-dot--${cardStatus.className}`}></span>
+                          <span className={`ms-card-status-label ms-card-status-label--${cardStatus.className}`}>{cardStatus.label}</span>
+                        </span>
+                      </>
+                    )}
                   </div>
-
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      className="ms-card-edit-input"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === "Enter") void saveRename(result);
-                        if (e.key === "Escape") cancelRename();
-                      }}
-                      onBlur={() => void saveRename(result)}
-                      onClick={(e) => e.stopPropagation()}
-                      autoFocus
-                    />
-                  ) : (
-                    <div
-                      className="ms-card-title"
-                      onDoubleClick={() => beginRename(result)}
-                    >
-                      {schedule.title}
-                    </div>
-                  )}
 
                   {schedule.description ? (
                     <div className="ms-card-desc">{schedule.description}</div>
                   ) : null}
 
                   <div className="ms-card-meta">
-                    <span className="ms-meta-item">
-                      <ClockIcon />
-                      <span>{formatEpoch(schedule.start_at)} - {formatEpoch(schedule.end_at)}</span>
+                    <span className="ms-card-meta-item ms-card-meta-item--due">
+                      <CalendarIcon />
+                      <span>{formatEpoch(schedule.start_at)}</span>
                     </span>
-                    {schedule.location ? (
-                      <span className="ms-meta-item">
-                        <LocationIcon />
-                        <span>{schedule.location}</span>
-                      </span>
-                    ) : null}
+                    <span className="ms-card-meta-item ms-card-meta-item--id">
+                      <span>🆔</span>
+                      <span>{schedule.id}</span>
+                    </span>
                     {schedule.category ? (
-                      <span className="ms-meta-item">
+                      <span className="ms-card-meta-item ms-card-meta-item--tag">
                         <TagIcon />
                         <span>{schedule.category}</span>
                       </span>
                     ) : null}
-                    <span className="ms-meta-item ms-meta-id">
-                      <IdIcon />
-                      <span>{schedule.id}</span>
-                    </span>
                   </div>
                 </div>
               );
@@ -1142,7 +1117,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
             const cardStatus = getNotifyCardStatus(notify);
             return (
               <div
-                className="ms-preview-card"
+                className={`ms-card ms-card--${cardStatus.className}`}
                 key={key}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -1150,46 +1125,49 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 }}
                 onClick={() => setEditingNotifyId(notify.id)}
               >
-                <div className="ms-card-top">
-                  <span className="ms-type-badge ms-type-badge--notify">{t("tab.notify")}</span>
-                  <span className={`ms-card-status ms-status-${cardStatus.className}`}>{cardStatus.label}</span>
+                <div className="ms-card-header">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="ms-card-edit-input"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") void saveRename(result);
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                      onBlur={() => void saveRename(result)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <>
+                      <div
+                        className="ms-card-title"
+                        onDoubleClick={() => beginRename(result)}
+                      >
+                        {notify.title}
+                      </div>
+                      <span className="ms-card-status">
+                        <span className={`ms-card-dot ms-card-dot--${cardStatus.className}`}></span>
+                        <span className={`ms-card-status-label ms-card-status-label--${cardStatus.className}`}>{cardStatus.label}</span>
+                      </span>
+                    </>
+                  )}
                 </div>
-
-                {isEditing ? (
-                  <input
-                    type="text"
-                    className="ms-card-edit-input"
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === "Enter") void saveRename(result);
-                      if (e.key === "Escape") cancelRename();
-                    }}
-                    onBlur={() => void saveRename(result)}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                  />
-                ) : (
-                  <div
-                    className="ms-card-title"
-                    onDoubleClick={() => beginRename(result)}
-                  >
-                    {notify.title}
-                  </div>
-                )}
 
                 {notify.description ? (
                   <div className="ms-card-desc">{notify.description}</div>
                 ) : null}
 
                 <div className="ms-card-meta">
-                  <span className="ms-meta-item">
-                    <NotifyIcon />
-                    <span>{t("common.trigger")} {formatEpoch(notify.trigger_at)}</span>
+                  <span className="ms-card-meta-item ms-card-meta-item--due">
+                    <CalendarIcon />
+                    <span>{formatEpoch(notify.trigger_at)}</span>
                   </span>
-                  <span className="ms-meta-item ms-meta-id">
-                    <IdIcon />
+                  <span className="ms-card-meta-item ms-card-meta-item--id">
+                    <span>🆔</span>
                     <span>{notify.id}</span>
                   </span>
                 </div>
@@ -1245,16 +1223,6 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
           )}
         </div>
 
-        {/* Floating filter button */}
-        <button
-          type="button"
-          className="ms-floating-filter"
-          onClick={() => setSheetOpen(true)}
-          aria-label={t("search.match")}
-        >
-          <FilterIcon />
-          {anyFilterActive && <span className="ms-filter-active-dot" />}
-        </button>
       </div>
 
       {/* Filter bottom sheet */}
