@@ -113,6 +113,7 @@ class UiMessageRouter:
         self._handlers["attachment.init_download"] = self._handle_init_download
         self._handlers["attachment.remove"] = self._handle_attachment_remove
         self._handlers["attachment.remove_orphaned"] = self._handle_attachment_remove_orphaned
+        self._handlers["attachment.rename"] = self._handle_attachment_rename
         # Changelog
         self._handlers["todo.changelog"] = self._handle_todo_changelog
         self._handlers["schedule.changelog"] = self._handle_schedule_changelog
@@ -157,9 +158,13 @@ class UiMessageRouter:
 
     def _resolve_attachment_owner(self, p: dict) -> tuple[str, int]:
         """Resolve owner_type and owner_id from attachment payload."""
-        if "todo_id" in p:
+        has_todo = "todo_id" in p
+        has_schedule = "schedule_id" in p
+        if has_todo and has_schedule:
+            raise ValidationError("Cannot specify both todo_id and schedule_id")
+        if has_todo:
             return "todo", p["todo_id"]
-        if "schedule_id" in p:
+        if has_schedule:
             return "schedule", p["schedule_id"]
         raise ValidationError("Missing todo_id or schedule_id")
 
@@ -278,6 +283,7 @@ class UiMessageRouter:
                 description=p.get("description"),
                 priority=p.get("priority", 0),
                 tag=p.get("tag"),
+                extra_fields=p.get("extra_fields"),
             ))
             uow.session.flush()
             return {"ok": True, "todo": todo_to_dict(todo, self.settings.timezone)}
@@ -285,7 +291,7 @@ class UiMessageRouter:
     def _handle_todo_update(self, p: dict) -> dict:
         with self._uow() as uow:
             svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-            fields = (set(p.keys()) - {"todo_id"}) & {"title", "planned_at", "due_at", "description", "priority", "tag"}
+            fields = (set(p.keys()) - {"todo_id"}) & {"title", "planned_at", "due_at", "description", "priority", "tag", "extra_fields"}
             todo = svc.update(p["todo_id"], TodoUpdate(
                 title=p.get("title"),
                 planned_at=p.get("planned_at"),
@@ -293,6 +299,7 @@ class UiMessageRouter:
                 description=p.get("description"),
                 priority=p.get("priority"),
                 tag=p.get("tag"),
+                extra_fields=p.get("extra_fields"),
                 _fields_set=frozenset(fields),
             ))
             uow.session.flush()
@@ -353,6 +360,7 @@ class UiMessageRouter:
                         description=item.get("description"),
                         priority=item.get("priority", 0),
                         tag=item.get("tag"),
+                        extra_fields=item.get("extra_fields"),
                     ))
                     results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, self.settings.timezone)})
                 except AMToDoError as exc:
@@ -366,7 +374,7 @@ class UiMessageRouter:
             results = []
             for idx, item in enumerate(p["items"]):
                 try:
-                    fields = (set(item.keys()) - {"id"}) & {"title", "planned_at", "due_at", "description", "priority", "tag"}
+                    fields = (set(item.keys()) - {"id"}) & {"title", "planned_at", "due_at", "description", "priority", "tag", "extra_fields"}
                     todo = svc.update(item["id"], TodoUpdate(
                         title=item.get("title"),
                         planned_at=item.get("planned_at"),
@@ -374,6 +382,7 @@ class UiMessageRouter:
                         description=item.get("description"),
                         priority=item.get("priority"),
                         tag=item.get("tag"),
+                        extra_fields=item.get("extra_fields"),
                         _fields_set=frozenset(fields),
                     ))
                     results.append({"target": idx, "ok": True, "todo": todo_to_dict(todo, self.settings.timezone)})
@@ -871,6 +880,15 @@ class UiMessageRouter:
             svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
             svc.remove(owner_id, p["attachment_id"])
             return {"ok": True}
+
+    def _handle_attachment_rename(self, p: dict) -> dict:
+        with self._uow() as uow:
+            owner_type, owner_id = self._resolve_attachment_owner(p)
+            changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
+            svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
+            attachment = svc.rename(owner_id, p["attachment_id"], p["filename"])
+            dict_fn = attachment_to_dict if owner_type == "todo" else schedule_attachment_to_dict
+            return {"ok": True, "attachment": dict_fn(attachment, self.user_id)}
 
     def _handle_attachment_remove_orphaned(self, p: dict) -> dict:
         with self._uow() as uow:

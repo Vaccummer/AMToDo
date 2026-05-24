@@ -267,6 +267,12 @@ class AMTodoClient:
             {"todo_id": todo_id, "attachment_id": attachment_id},
         )
 
+    def todo_attachment_rename(self, todo_id: int, attachment_id: int, filename: str) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/todos/attachments/rename",
+            {"todo_id": todo_id, "attachment_id": attachment_id, "filename": filename},
+        )
+
     def todo_attachment_download(self, todo_id: int, attachment_id: int) -> bytes:
         data_key: bytes | None = None
         body: dict[str, Any] = {"access_token": self._access_token, "todo_id": todo_id, "attachment_id": attachment_id}
@@ -476,6 +482,12 @@ class AMTodoClient:
         return self._user_post(
             "/api/v1/schedules/attachments/remove",
             {"schedule_id": schedule_id, "attachment_id": attachment_id},
+        )
+
+    def schedule_attachment_rename(self, schedule_id: int, attachment_id: int, filename: str) -> dict[str, Any]:
+        return self._user_post(
+            "/api/v1/schedules/attachments/rename",
+            {"schedule_id": schedule_id, "attachment_id": attachment_id, "filename": filename},
         )
 
     def schedule_attachment_remove_orphaned(self, schedule_id: int) -> dict[str, Any]:

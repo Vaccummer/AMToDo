@@ -126,6 +126,22 @@ class TodoChangelogService:
         )
         return self._repository.add(entry)
 
+    def record_attachment_rename(
+        self, entity_id: int, old_meta: dict, new_meta: dict,
+    ) -> object:
+        """Record an attachment being renamed."""
+        now = self._clock.now_epoch()
+        entry = self._model(
+            entity_id=entity_id,
+            action="attachment_rename",
+            changed_fields=json.dumps(["filename"]),
+            before_snapshot=json.dumps(old_meta),
+            after_snapshot=json.dumps(new_meta),
+            created_at=now,
+            updated_at=None,
+        )
+        return self._repository.add(entry)
+
     def query(
         self,
         *,
@@ -262,6 +278,22 @@ class ScheduleChangelogService:
             changed_fields=json.dumps(["attachment"]),
             before_snapshot=json.dumps(attachment_meta),
             after_snapshot=None,
+            created_at=now,
+            updated_at=None,
+        )
+        return self._repository.add(entry)
+
+    def record_attachment_rename(
+        self, entity_id: int, old_meta: dict, new_meta: dict,
+    ) -> object:
+        """Record an attachment being renamed."""
+        now = self._clock.now_epoch()
+        entry = self._model(
+            entity_id=entity_id,
+            action="attachment_rename",
+            changed_fields=json.dumps(["filename"]),
+            before_snapshot=json.dumps(old_meta),
+            after_snapshot=json.dumps(new_meta),
             created_at=now,
             updated_at=None,
         )

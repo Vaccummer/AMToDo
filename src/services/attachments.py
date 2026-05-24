@@ -202,6 +202,26 @@ class AttachmentService:
         self._touch_owner(owner_id)
         return attachment
 
+    def rename(self, owner_id: int, attachment_id: int, new_filename: str) -> object:
+        """Rename an attachment's display filename."""
+
+        attachment = self.show(owner_id, attachment_id)
+        clean_name = _clean_filename(new_filename)
+
+        from serialization import attachment_to_dict, schedule_attachment_to_dict
+        dict_fn = attachment_to_dict if self._owner_type == "todo" else schedule_attachment_to_dict
+        old_meta = dict_fn(attachment, self._user_id)
+
+        attachment.filename = clean_name
+        attachment.updated_at = self._clock.now_epoch()
+        self._repository.update(attachment)
+
+        new_meta = dict_fn(attachment, self._user_id)
+        if self._changelog:
+            self._changelog.record_attachment_rename(owner_id, old_meta, new_meta)
+
+        return attachment
+
     def remove_orphaned(self, owner_id: int) -> int:
         """Delete all orphaned attachments for an owner. Returns count removed."""
 
