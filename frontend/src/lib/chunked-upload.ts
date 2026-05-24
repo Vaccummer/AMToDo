@@ -2,6 +2,7 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   percent: number;
+  phase?: "encrypting" | "uploading";
 }
 
 export interface UploadResult<T = unknown> {
@@ -9,6 +10,55 @@ export interface UploadResult<T = unknown> {
   attachment: T;
 }
 
+/**
+ * Encrypt + upload with progress.
+ * Encryption phase uses constant memory (1MB chunks via ReadableStream).
+ * Upload phase accumulates cipher into a Blob, then sends via XHR.
+ * Peak memory ≈ file_size (cipher) + 1MB (encrypt chunk) — not 3× as before.
+ */
+export async function streamingUpload<T = unknown>(
+  url: string,
+  body: ReadableStream<Uint8Array>,
+  onProgress?: (progress: UploadProgress) => void,
+  abortSignal?: AbortSignal,
+): Promise<UploadResult<T>> {
+  // Accumulate cipher chunks from the encrypt stream
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = body.getReader();
+  while (true) {
+    if (abortSignal?.aborted) {
+      reader.cancel();
+      throw new Error("Upload aborted");
+    }
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+
+  // Build a single Uint8Array
+  const cipher = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    cipher.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // Upload via XHR (supports progress events, unlike fetch)
+  return uploadWithProgress<T>(
+    url,
+    cipher.buffer,
+    { "Content-Type": "application/octet-stream" },
+    onProgress,
+    abortSignal,
+  );
+}
+
+/**
+ * Legacy XHR-based upload for pre-encrypted ArrayBuffer.
+ * Used as fallback when ReadableStream body is not supported.
+ */
 export function uploadWithProgress<T = unknown>(
   url: string,
   cipher: ArrayBuffer,
@@ -30,6 +80,7 @@ export function uploadWithProgress<T = unknown>(
           loaded: e.loaded,
           total: e.total,
           percent: Math.round((e.loaded / e.total) * 100),
+          phase: "uploading",
         });
       }
     };

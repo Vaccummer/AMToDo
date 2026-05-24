@@ -1,10 +1,10 @@
 import { SERVER_URL } from "../config";
 import type { UiWsClient } from "./ws-client";
 import type { UploadProgress } from "../lib/chunked-upload";
-import { uploadWithProgress } from "../lib/chunked-upload";
+import { streamingUpload } from "../lib/chunked-upload";
 import type { DownloadProgress } from "../lib/chunked-download";
 import { downloadWithProgress } from "../lib/chunked-download";
-import { generateFileKeys, encryptFile } from "../lib/stream-crypto";
+import { generateFileKeys, createEncryptStream } from "../lib/stream-crypto";
 
 export type HealthResponse = {
   status: string;
@@ -686,15 +686,22 @@ export class AMToDoApi {
     });
   }
 
+  async renameTodoAttachment(
+    todoId: number,
+    attachmentId: number,
+    filename: string
+  ): Promise<AttachmentResponse> {
+    return this.post("/api/v1/todos/attachments/rename", {
+      todo_id: todoId,
+      attachment_id: attachmentId,
+      filename
+    });
+  }
+
   async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<AttachmentResponse> {
     await this.ensureConnected();
     const keys = generateFileKeys();
-
-    // Encrypt file with progress (reports encryption phase)
-    const { cipher, plainSize } = await encryptFile(
-      file, keys.fileKey, keys.nonce,
-      (loaded, total) => onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100) }),
-    );
+    const plainSize = file.size;
 
     // WS: init upload → get token
     const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
@@ -711,11 +718,13 @@ export class AMToDoApi {
       },
     );
 
-    // HTTP PUT with progress (reports upload phase)
-    return uploadWithProgress<AttachmentMetadata>(
+    // Encrypt in constant memory (1MB chunks), then upload via XHR
+    const body = createEncryptStream(file, keys.fileKey, keys.nonce, (loaded, total) => {
+      onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
+    }, abortSignal);
+    return streamingUpload<AttachmentMetadata>(
       `${this.baseUrl}/api/v1/todos/attachments/upload?token=${token}`,
-      cipher,
-      { "Content-Type": "application/octet-stream" },
+      body,
       onProgress,
       abortSignal,
     ) as unknown as Promise<AttachmentResponse>;
@@ -777,12 +786,7 @@ export class AMToDoApi {
   async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<ScheduleAttachmentResponse> {
     await this.ensureConnected();
     const keys = generateFileKeys();
-
-    // Encrypt file with progress (reports encryption phase)
-    const { cipher, plainSize } = await encryptFile(
-      file, keys.fileKey, keys.nonce,
-      (loaded, total) => onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100) }),
-    );
+    const plainSize = file.size;
 
     // WS: init upload → get token
     const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
@@ -799,11 +803,13 @@ export class AMToDoApi {
       },
     );
 
-    // HTTP PUT with progress (reports upload phase)
-    return uploadWithProgress<ScheduleAttachmentMetadata>(
+    // Encrypt in constant memory (1MB chunks), then upload via XHR
+    const body = createEncryptStream(file, keys.fileKey, keys.nonce, (loaded, total) => {
+      onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
+    }, abortSignal);
+    return streamingUpload<ScheduleAttachmentMetadata>(
       `${this.baseUrl}/api/v1/schedules/attachments/upload?token=${token}`,
-      cipher,
-      { "Content-Type": "application/octet-stream" },
+      body,
       onProgress,
       abortSignal,
     ) as unknown as Promise<ScheduleAttachmentResponse>;

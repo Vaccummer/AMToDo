@@ -27,6 +27,7 @@ import { decryptBuffer, bufferToBase64, decodeKeys, timingSafeEqual } from "./st
 type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
 
 const CACHE_DIR = "attachment-cache";
+const STREAM_BUF_SIZE = 1024 * 1024 + 16; // 1MB + 16 bytes for alignment buffer
 
 // In-memory metadata index for fast cache invalidation
 const metaIndex = new Map<string, { updated_at: number; plain_size_bytes: number }>();
@@ -161,6 +162,12 @@ async function streamingDownloadAndDecrypt(
   let bytesRead = 0;
   const tagParts: Uint8Array[] = [];
 
+  // Buffer cipher bytes to ensure only 16-byte-aligned blocks go to ctr32.
+  // ctr32 only advances its internal counter for full 16-byte blocks; partial
+  // blocks would corrupt the keystream position for all subsequent data.
+  let cipherBufPos = 0;
+  const cipherBuf = new Uint8Array(STREAM_BUF_SIZE);
+
   try {
     while (true) {
       const { done, value: chunk } = await reader.read();
@@ -172,33 +179,54 @@ async function streamingDownloadAndDecrypt(
       if (chunkStart >= cipherLen) {
         // Entire chunk is HMAC tag bytes
         tagParts.push(chunk);
-      } else if (chunkEnd <= cipherLen) {
-        // Entire chunk is cipher
-        h.update(chunk);
-        const plain = unsafe.ctr32(xk, false, counter, chunk);
-        await Filesystem.appendFile({ path: outPath, data: bufferToBase64(plain), directory: Directory.Cache });
       } else {
-        // Chunk straddles the cipher/tag boundary
-        const splitPoint = cipherLen - chunkStart;
-        const cipherPart = chunk.subarray(0, splitPoint);
-        const tagPart = chunk.subarray(splitPoint);
+        // Append cipher bytes (or the cipher portion) to buffer
+        const take = Math.min(chunk.length, cipherLen - chunkStart);
+        const cipherPart = take === chunk.length ? chunk : chunk.subarray(0, take);
+        cipherBuf.set(cipherPart, cipherBufPos);
+        cipherBufPos += cipherPart.length;
 
-        h.update(cipherPart);
-        const plain = unsafe.ctr32(xk, false, counter, cipherPart);
-        await Filesystem.appendFile({ path: outPath, data: bufferToBase64(plain), directory: Directory.Cache });
+        // Process complete 16-byte blocks
+        const fullBlocks = (cipherBufPos >> 4) << 4;
+        if (fullBlocks > 0) {
+          const aligned = cipherBuf.subarray(0, fullBlocks);
+          h.update(aligned);
+          const plain = unsafe.ctr32(xk, false, counter, aligned);
+          await Filesystem.appendFile({ path: outPath, data: bufferToBase64(plain), directory: Directory.Cache });
+          // Shift remainder to front
+          if (fullBlocks < cipherBufPos) {
+            cipherBuf.copyWithin(0, fullBlocks, cipherBufPos);
+          }
+          cipherBufPos -= fullBlocks;
+        }
 
-        tagParts.push(tagPart);
+        // Collect tag bytes if this chunk crosses the boundary
+        if (chunkEnd > cipherLen) {
+          tagParts.push(chunk.subarray(take));
+        }
       }
 
       bytesRead = chunkEnd;
       onProgress?.({
-        loaded: bytesRead,
+        loaded: Math.min(bytesRead, cipherLen),
         total: contentLength,
-        percent: Math.round((bytesRead / contentLength) * 100),
+        percent: Math.round((Math.min(bytesRead, cipherLen) / contentLength) * 100),
       });
     }
   } finally {
     reader.releaseLock();
+  }
+
+  // Process any remaining cipher bytes (< 16, the final partial block)
+  if (cipherBufPos > 0) {
+    const remainder = cipherBuf.subarray(0, cipherBufPos);
+    h.update(remainder);
+    // Pad to 16 bytes, decrypt as a full block (advances counter), truncate output.
+    // XOR with zero-padded tail is identity, so truncated output is correct.
+    const padded = new Uint8Array(16);
+    padded.set(remainder);
+    const plain = unsafe.ctr32(xk, false, counter, padded);
+    await Filesystem.appendFile({ path: outPath, data: bufferToBase64(plain.subarray(0, cipherBufPos)), directory: Directory.Cache });
   }
 
   // Validate download completeness
