@@ -312,6 +312,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
                 theme="gold"
               />
               <TimeWheelPicker
+                className="schedule-modal-datetime-time"
                 value={triggerTime}
                 onChange={setTriggerTime}
               />

@@ -8,7 +8,7 @@ import { FileOpener } from "@capacitor-community/file-opener";
 import { getMimeType } from "../../lib/mime-types";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal, formatTime } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
-import { TimeInput } from "./TimeInput";
+import { TimeWheelPicker } from "./TimeWheelPicker";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { useI18n } from "../../i18n";
@@ -706,8 +706,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 hasError={!startValid && startDate !== ""}
                 theme="gold"
               />
-              <TimeInput
-                className={`schedule-modal-input schedule-modal-datetime-time${!startValid && startDate !== "" ? " invalid" : ""}`}
+              <TimeWheelPicker
+                className={`schedule-modal-datetime-time${!startValid && startDate !== "" ? " invalid" : ""}`}
                 value={startTime}
                 onChange={setStartTime}
               />
@@ -726,8 +726,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
                 hasError={!endValid && endDate !== ""}
                 theme="gold"
               />
-              <TimeInput
-                className={`schedule-modal-input schedule-modal-datetime-time${!endValid && endDate !== "" ? " invalid" : ""}`}
+              <TimeWheelPicker
+                className={`schedule-modal-datetime-time${!endValid && endDate !== "" ? " invalid" : ""}`}
                 value={endTime}
                 onChange={setEndTime}
               />

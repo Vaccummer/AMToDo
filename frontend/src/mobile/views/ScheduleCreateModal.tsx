@@ -180,6 +180,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 theme="gold"
               />
               <TimeWheelPicker
+                className="schedule-modal-datetime-time"
                 value={startTime}
                 onChange={setStartTime}
               />
@@ -196,6 +197,7 @@ export function ScheduleCreateModal({ api, startAt, endAt, onClose, onCreate }: 
                 theme="gold"
               />
               <TimeWheelPicker
+                className="schedule-modal-datetime-time"
                 value={endTime}
                 onChange={setEndTime}
               />
