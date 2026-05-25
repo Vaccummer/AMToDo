@@ -212,14 +212,49 @@ class AMTodoClient:
     def todo_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         return self._user_post("/api/v1/todos/batch-update", {"items": items})
 
-    def todo_trash_list(self, **kwargs: Any) -> dict[str, Any]:
-        return self._user_post("/api/v1/todos/trash/list", kwargs)
+    # ── unified trash ──
 
-    def todo_trash_restore(self, targets: list[int]) -> dict[str, Any]:
-        return self._user_post("/api/v1/todos/trash/restore", {"targets": targets})
+    def trash_get(self, *, todo_id: int | None = None, schedule_id: int | None = None, notification_id: int | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if todo_id is not None:
+            body["todo_id"] = todo_id
+        elif schedule_id is not None:
+            body["schedule_id"] = schedule_id
+        elif notification_id is not None:
+            body["notification_id"] = notification_id
+        return self._user_post("/api/v1/trash/get", body)
 
-    def todo_trash_delete(self, targets: list[int]) -> dict[str, Any]:
-        return self._user_post("/api/v1/todos/trash/delete", {"targets": targets})
+    def trash_update(self, *, todo_id: int | None = None, schedule_id: int | None = None, notification_id: int | None = None, **fields: object) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if todo_id is not None:
+            body["todo_id"] = todo_id
+        elif schedule_id is not None:
+            body["schedule_id"] = schedule_id
+        elif notification_id is not None:
+            body["notification_id"] = notification_id
+        body.update(fields)
+        return self._user_post("/api/v1/trash/update", body)
+
+    def trash_list(self, entity_type: str, **filters: object) -> dict[str, Any]:
+        body: dict[str, Any] = {"entity_type": entity_type}
+        body.update(filters)
+        return self._user_post("/api/v1/trash/list", body)
+
+    def trash_restore(self, *, targets: list[int] | None = None, notification_id: int | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if targets is not None:
+            body["targets"] = targets
+        elif notification_id is not None:
+            body["notification_id"] = notification_id
+        return self._user_post("/api/v1/trash/restore", body)
+
+    def trash_delete(self, *, targets: list[int] | None = None, notification_id: int | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if targets is not None:
+            body["targets"] = targets
+        elif notification_id is not None:
+            body["notification_id"] = notification_id
+        return self._user_post("/api/v1/trash/delete", body)
 
     def todo_changelog(
         self,
@@ -244,7 +279,7 @@ class AMTodoClient:
     def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
         content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
         return self._user_post(
-            "/api/v1/todos/attachments/upload",
+            "/api/v1/attachment/upload",
             {
                 "todo_id": todo_id,
                 "filename": file_path.name,
@@ -253,23 +288,23 @@ class AMTodoClient:
         )
 
     def todo_attachment_list(self, todo_id: int) -> dict[str, Any]:
-        return self._user_post("/api/v1/todos/attachments/list", {"todo_id": todo_id})
+        return self._user_post("/api/v1/attachment/list", {"todo_id": todo_id})
 
     def todo_attachment_get(self, todo_id: int, attachment_id: int) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/todos/attachments/get",
+            "/api/v1/attachment/get",
             {"todo_id": todo_id, "attachment_id": attachment_id},
         )
 
     def todo_attachment_remove(self, todo_id: int, attachment_id: int) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/todos/attachments/remove",
+            "/api/v1/attachment/remove",
             {"todo_id": todo_id, "attachment_id": attachment_id},
         )
 
     def todo_attachment_rename(self, todo_id: int, attachment_id: int, filename: str) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/todos/attachments/rename",
+            "/api/v1/attachment/rename",
             {"todo_id": todo_id, "attachment_id": attachment_id, "filename": filename},
         )
 
@@ -283,14 +318,14 @@ class AMTodoClient:
             body = envelope
 
         response = self._client.post(
-            "/api/v1/todos/attachments/download",
+            "/api/v1/attachment/download",
             json=body,
         )
         response.raise_for_status()
         return response.content
 
     def todo_attachment_remove_orphaned(self, todo_id: int) -> dict[str, Any]:
-        return self._user_post("/api/v1/todos/attachments/remove-orphaned", {"todo_id": todo_id})
+        return self._user_post("/api/v1/attachment/remove-orphaned", {"todo_id": todo_id})
 
     # ── schedules ──
 
@@ -411,14 +446,6 @@ class AMTodoClient:
     def schedule_batch_update(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         return self._user_post("/api/v1/schedules/batch-update", {"items": items})
 
-    def schedule_trash_list(self, **kwargs: Any) -> dict[str, Any]:
-        return self._user_post("/api/v1/schedules/trash/list", kwargs)
-
-    def schedule_trash_restore(self, targets: list[int]) -> dict[str, Any]:
-        return self._user_post("/api/v1/schedules/trash/restore", {"targets": targets})
-
-    def schedule_trash_delete(self, targets: list[int]) -> dict[str, Any]:
-        return self._user_post("/api/v1/schedules/trash/delete", {"targets": targets})
 
     def schedule_changelog(
         self,
@@ -443,18 +470,18 @@ class AMTodoClient:
     # ── schedule attachments ──
 
     def schedule_attachment_list(self, schedule_id: int) -> dict[str, Any]:
-        return self._user_post("/api/v1/schedules/attachments/list", {"schedule_id": schedule_id})
+        return self._user_post("/api/v1/attachment/list", {"schedule_id": schedule_id})
 
     def schedule_attachment_get(self, schedule_id: int, attachment_id: int) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/schedules/attachments/get",
+            "/api/v1/attachment/get",
             {"schedule_id": schedule_id, "attachment_id": attachment_id},
         )
 
     def schedule_attachment_upload(self, schedule_id: int, file_path: Path) -> dict[str, Any]:
         content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
         return self._user_post(
-            "/api/v1/schedules/attachments/upload",
+            "/api/v1/attachment/upload",
             {
                 "schedule_id": schedule_id,
                 "filename": file_path.name,
@@ -472,7 +499,7 @@ class AMTodoClient:
             body = envelope
 
         response = self._client.post(
-            "/api/v1/schedules/attachments/download",
+            "/api/v1/attachment/download",
             json=body,
         )
         response.raise_for_status()
@@ -480,18 +507,84 @@ class AMTodoClient:
 
     def schedule_attachment_remove(self, schedule_id: int, attachment_id: int) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/schedules/attachments/remove",
+            "/api/v1/attachment/remove",
             {"schedule_id": schedule_id, "attachment_id": attachment_id},
         )
 
     def schedule_attachment_rename(self, schedule_id: int, attachment_id: int, filename: str) -> dict[str, Any]:
         return self._user_post(
-            "/api/v1/schedules/attachments/rename",
+            "/api/v1/attachment/rename",
             {"schedule_id": schedule_id, "attachment_id": attachment_id, "filename": filename},
         )
 
     def schedule_attachment_remove_orphaned(self, schedule_id: int) -> dict[str, Any]:
-        return self._user_post("/api/v1/schedules/attachments/remove-orphaned", {"schedule_id": schedule_id})
+        return self._user_post("/api/v1/attachment/remove-orphaned", {"schedule_id": schedule_id})
+
+    # ── notifications ──
+
+    def notification_create(
+        self,
+        title: str,
+        trigger_at: int,
+        *,
+        description: str | None = None,
+        extra_fields: str = "{}",
+        mentions: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "trigger_at": trigger_at,
+            "extra_fields": extra_fields,
+        }
+        if description is not None:
+            body["description"] = description
+        if mentions is not None:
+            body["mentions"] = mentions
+        return self._user_post("/api/v1/notifications/create", body)
+
+    def notification_get(self, notification_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/notifications/get", {"notification_id": notification_id})
+
+    def notification_list(self, *, start_at: int | None = None, end_at: int | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if start_at is not None:
+            body["start_at"] = start_at
+        if end_at is not None:
+            body["end_at"] = end_at
+        return self._user_post("/api/v1/notifications/list", body)
+
+    def notification_list_triggered(self, after: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/notifications/list_triggered", {"after": after})
+
+    def notification_update(self, notification_id: int, **fields: object) -> dict[str, Any]:
+        body: dict[str, Any] = {"notification_id": notification_id, **fields}
+        return self._user_post("/api/v1/notifications/update", body)
+
+    def notification_remove(self, notification_id: int) -> dict[str, Any]:
+        return self._user_post("/api/v1/notifications/remove", {"notification_id": notification_id})
+
+    def notification_changelog(
+        self,
+        *,
+        entity_id: int | None = None,
+        action: str | None = None,
+        start_at: int | None = None,
+        end_at: int | None = None,
+        limit: int = 50,
+        after_id: int | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit}
+        if entity_id is not None:
+            body["entity_id"] = entity_id
+        if action is not None:
+            body["action"] = action
+        if start_at is not None:
+            body["start_at"] = start_at
+        if end_at is not None:
+            body["end_at"] = end_at
+        if after_id is not None:
+            body["after_id"] = after_id
+        return self._user_post("/api/v1/notifications/changelog", body)
 
     # ── internal helpers ──
 

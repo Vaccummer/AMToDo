@@ -17,10 +17,12 @@ from config import AppSettings, __version__, cli_root, load_cli_settings
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.factory import get_user_tables
 from models.user import User
-from serialization import attachment_to_dict, schedule_to_dict, todo_to_dict, user_to_dict_with_token
+from serialization import attachment_to_dict, notification_to_dict, schedule_to_dict, todo_to_dict, user_to_dict_with_token
 from services import (
     AttachmentDraft,
     AttachmentService,
+    NotificationService,
+    NotificationUpdate,
     ScheduleDraft,
     ScheduleService,
     ScheduleUpdate,
@@ -42,8 +44,8 @@ schedule_app = typer.Typer(no_args_is_help=True)
 user_app = typer.Typer(no_args_is_help=True)
 admin_app = typer.Typer(no_args_is_help=True)
 cache_app = typer.Typer(no_args_is_help=True)
-todo_attachment_app = typer.Typer(no_args_is_help=True, help="Manage ToDo attachments.")
-schedule_attachment_app = typer.Typer(no_args_is_help=True, help="Manage schedule attachments.")
+attachment_app = typer.Typer(no_args_is_help=True, help="Manage attachments.")
+trash_app = typer.Typer(no_args_is_help=True, help="Manage trashed items.")
 
 
 @app.callback()
@@ -492,266 +494,6 @@ def todo_stats(
         _exit_with_error(exc)
 
 
-# ── todo attachment commands ──
-
-
-@todo_attachment_app.command("list")
-def todo_attachment_list(todo_id: int = typer.Argument(..., help="ToDo id.")) -> None:
-    """List attachment metadata for a ToDo."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        client = AMTodoClient(settings)
-        try:
-            result = client.todo_attachment_list(todo_id)
-            if result.get("ok") and "attachments" in result:
-                for a in result["attachments"]:
-                    prefix = "[ORPHANED] " if a.get("is_orphaned") else ""
-                    print(f"{prefix}{a.get('filename', '')}")
-            else:
-                _echo_json(result)
-                if result.get("ok") is False:
-                    raise typer.Exit(1)
-        finally:
-            client.close()
-        return
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachments = service.list_for_todo(todo_id)
-            for a in attachments:
-                d = attachment_to_dict(a, uow.user_id)
-                prefix = "[ORPHANED] " if d.get("is_orphaned") else ""
-                print(f"{prefix}{d.get('filename', '')}")
-    except AMToDoError as exc:
-        _exit_with_error(exc)
-
-
-@todo_attachment_app.command("get")
-def todo_attachment_get(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-) -> None:
-    """Fetch an attachment into the local decrypted cache."""
-
-    settings = load_cli_settings()
-    root = cli_root()
-    cache = AttachmentCache(root)
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        client = AMTodoClient(settings)
-        try:
-            result = client.todo_attachment_get(todo_id, attachment_id)
-            if result.get("ok") is False:
-                _echo_json(result)
-                raise typer.Exit(1)
-            metadata = result["attachment"]
-            if metadata.get("is_orphaned"):
-                _exit_with_error(
-                    ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。")
-                )
-            cache_result = cache.get_or_download(
-                metadata,
-                lambda: client.todo_attachment_download(todo_id, attachment_id),
-            )
-            _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
-            return
-        finally:
-            client.close()
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachment = service.show(todo_id, attachment_id)
-            metadata = attachment_to_dict(attachment, uow.user_id)
-            cipher = service.read_cipher(todo_id, attachment_id)
-        cache_result = cache.get_or_download(metadata, lambda: cipher)
-        _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
-    except (AMToDoError, ValueError) as exc:
-        _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
-
-
-@todo_attachment_app.command("upload")
-def todo_attachment_upload(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-    file: Annotated[
-        Path,
-        typer.Argument(
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-            help="Local file path to attach.",
-        ),
-    ] = ...,
-) -> None:
-    """Attach a local file to a ToDo."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        _run_http(lambda client: client.todo_attachment_upload(todo_id, file), settings)
-        return
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachment = service.create(
-                todo_id,
-                AttachmentDraft(filename=file.name, content=file.read_bytes()),
-            )
-            uow.session.flush()
-            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
-    except AMToDoError as exc:
-        _exit_with_error(exc)
-
-
-@todo_attachment_app.command("download")
-def todo_attachment_download(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-    output: Annotated[
-        Path | None,
-        typer.Option(
-            "--output",
-            "-o",
-            help="Output file path. Defaults to the attachment's original filename in the current directory.",
-        ),
-    ] = None,
-) -> None:
-    """Download and decrypt an attachment to a local file."""
-
-    settings = load_cli_settings()
-    root = cli_root()
-    cache = AttachmentCache(root)
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        client = AMTodoClient(settings)
-        try:
-            result = client.todo_attachment_get(todo_id, attachment_id)
-            if result.get("ok") is False:
-                _echo_json(result)
-                raise typer.Exit(1)
-            metadata = result["attachment"]
-            if metadata.get("is_orphaned"):
-                _exit_with_error(
-                    ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。")
-                )
-            cache_result = cache.get_or_download(
-                metadata,
-                lambda: client.todo_attachment_download(todo_id, attachment_id),
-            )
-            dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
-            _echo_json({"ok": True, "path": str(dest)})
-            return
-        finally:
-            client.close()
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachment = service.show(todo_id, attachment_id)
-            metadata = attachment_to_dict(attachment, uow.user_id)
-            cipher = service.read_cipher(todo_id, attachment_id)
-        cache_result = cache.get_or_download(metadata, lambda: cipher)
-        dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
-        _echo_json({"ok": True, "path": str(dest)})
-    except (AMToDoError, ValueError) as exc:
-        _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
-
-
-@todo_attachment_app.command("remove")
-def todo_attachment_remove(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-) -> None:
-    """Remove an attachment from a ToDo."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        _run_http(lambda client: client.todo_attachment_remove(todo_id, attachment_id), settings)
-        return
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachment = service.remove(todo_id, attachment_id)
-            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
-    except AMToDoError as exc:
-        _exit_with_error(exc)
-
-
-@todo_attachment_app.command("rename")
-def todo_attachment_rename(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-    filename: str = typer.Argument(..., help="New display filename."),
-) -> None:
-    """Rename an attachment's display filename."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        _run_http(lambda client: client.todo_attachment_rename(todo_id, attachment_id, filename), settings)
-        return
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            attachment = service.rename(todo_id, attachment_id, filename)
-            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
-    except AMToDoError as exc:
-        _exit_with_error(exc)
-
-
-@todo_attachment_app.command("remove-orphaned")
-def todo_attachment_remove_orphaned(
-    todo_id: int = typer.Argument(..., help="ToDo id."),
-) -> None:
-    """Remove all orphaned attachment metadata for a ToDo."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "todo_attachment_remove_orphaned"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        _run_http(lambda client: client.todo_attachment_remove_orphaned(todo_id), settings)
-        return
-
-    context = create_application_context(settings)
-    context.database.create_schema()
-
-    try:
-        with UnitOfWork(context.database) as uow:
-            service = _attachment_service(uow, context.clock)
-            count = service.remove_orphaned(todo_id)
-            _echo_json({"ok": True, "removed": count})
-    except AMToDoError as exc:
-        _exit_with_error(exc)
-
-
 # ── schedule commands ──
 
 
@@ -1096,203 +838,6 @@ def schedule_stats(
         )
     except AMToDoError as exc:
         _exit_with_error(exc)
-
-
-# ── schedule attachment commands ──
-
-
-@schedule_attachment_app.command("list")
-def schedule_attachment_list(schedule_id: int = typer.Argument(..., help="Schedule id.")) -> None:
-    """List attachment metadata for a schedule."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_list"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        client = AMTodoClient(settings)
-        try:
-            result = client.schedule_attachment_list(schedule_id)
-            if result.get("ok") and "attachments" in result:
-                for a in result["attachments"]:
-                    prefix = "[ORPHANED] " if a.get("is_orphaned") else ""
-                    print(f"{prefix}{a.get('filename', '')}")
-            else:
-                _echo_json(result)
-                if result.get("ok") is False:
-                    raise typer.Exit(1)
-        finally:
-            client.close()
-        return
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("get")
-def schedule_attachment_get(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-) -> None:
-    """Fetch a schedule attachment into the local decrypted cache."""
-
-    settings = load_cli_settings()
-    root = cli_root()
-    cache = AttachmentCache(root)
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_get"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        client = AMTodoClient(settings)
-        try:
-            result = client.schedule_attachment_get(schedule_id, attachment_id)
-            if result.get("ok") is False:
-                _echo_json(result)
-                raise typer.Exit(1)
-            metadata = result["attachment"]
-            if metadata.get("is_orphaned"):
-                _exit_with_error(
-                    ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。")
-                )
-            cache_result = cache.get_or_download(
-                metadata,
-                lambda: client.schedule_attachment_download(schedule_id, attachment_id),
-            )
-            _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
-            return
-        finally:
-            client.close()
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("upload")
-def schedule_attachment_upload(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-    file: Annotated[
-        Path,
-        typer.Argument(
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-            help="Local file path to attach.",
-        ),
-    ] = ...,
-) -> None:
-    """Attach a local file to a schedule."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_upload"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        _run_http(lambda client: client.schedule_attachment_upload(schedule_id, file), settings)
-        return
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("download")
-def schedule_attachment_download(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-    output: Annotated[
-        Path | None,
-        typer.Option(
-            "--output",
-            "-o",
-            help="Output file path. Defaults to the attachment's original filename in the current directory.",
-        ),
-    ] = None,
-) -> None:
-    """Download and decrypt a schedule attachment to a local file."""
-
-    settings = load_cli_settings()
-    root = cli_root()
-    cache = AttachmentCache(root)
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_download"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        client = AMTodoClient(settings)
-        try:
-            result = client.schedule_attachment_get(schedule_id, attachment_id)
-            if result.get("ok") is False:
-                _echo_json(result)
-                raise typer.Exit(1)
-            metadata = result["attachment"]
-            if metadata.get("is_orphaned"):
-                _exit_with_error(
-                    ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。")
-                )
-            cache_result = cache.get_or_download(
-                metadata,
-                lambda: client.schedule_attachment_download(schedule_id, attachment_id),
-            )
-            dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
-            _echo_json({"ok": True, "path": str(dest)})
-            return
-        finally:
-            client.close()
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("remove")
-def schedule_attachment_remove(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-) -> None:
-    """Remove an attachment from a schedule."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_remove"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        _run_http(lambda client: client.schedule_attachment_remove(schedule_id, attachment_id), settings)
-        return
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("rename")
-def schedule_attachment_rename(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-    attachment_id: int = typer.Argument(..., help="Attachment id."),
-    filename: str = typer.Argument(..., help="New display filename."),
-) -> None:
-    """Rename a schedule attachment's display filename."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        _run_http(lambda client: client.schedule_attachment_rename(schedule_id, attachment_id, filename), settings)
-        return
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
-
-
-@schedule_attachment_app.command("remove-orphaned")
-def schedule_attachment_remove_orphaned(
-    schedule_id: int = typer.Argument(..., help="Schedule id."),
-) -> None:
-    """Remove all orphaned attachment metadata for a schedule."""
-
-    settings = load_cli_settings()
-    if settings.server_url:
-        from client.http import AMTodoClient
-
-        if not hasattr(AMTodoClient, "schedule_attachment_remove_orphaned"):
-            _exit_with_error(ValidationError("该操作不被当前服务器支持"))
-        _run_http(lambda client: client.schedule_attachment_remove_orphaned(schedule_id), settings)
-        return
-
-    _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
 
 
 # ── user commands (self-service, access_token) ──
@@ -1674,17 +1219,6 @@ def _schedule_target_result(
     return {"target": target, "ok": True, "schedule": schedule_to_dict(schedule)}
 
 
-def _attachment_service(uow: UnitOfWork, clock: Clock) -> AttachmentService:
-    return AttachmentService(
-        uow.attachments,
-        uow.todos,
-        clock,
-        uow.attachment_model,
-        cli_root(),
-        uow.user_id,
-    )
-
-
 def _echo_json(payload: dict[str, object]) -> None:
     typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
@@ -1764,13 +1298,601 @@ def fingerprint(
     })
 
 
+# ── attachment commands (unified) ──
+
+
+def _make_attachment_service_for(uow: UnitOfWork, clock: Clock, owner_type: str) -> AttachmentService:
+    """Create an AttachmentService for the given owner type ('todo' or 'schedule')."""
+    from config import cli_root as _cli_root
+    if owner_type == "todo":
+        return AttachmentService(
+            uow.attachments, uow.todos, clock, uow.attachment_model, _cli_root(), uow.user_id,
+        )
+    return AttachmentService(
+        uow.schedule_attachments, uow.schedules, clock, uow.schedule_attachment_model, _cli_root(), uow.user_id,
+    )
+
+
+@attachment_app.command("list")
+def attachment_list(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+) -> None:
+    """List attachment metadata for a ToDo or Schedule."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_list(owner_id) if owner_type == "todo" else client.schedule_attachment_list(owner_id), settings)
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachments = service.list_for_owner(owner_id)
+            for a in attachments:
+                d = attachment_to_dict(a, uow.user_id)
+                prefix = "[ORPHANED] " if d.get("is_orphaned") else ""
+                print(f"{prefix}{d.get('filename', '')}")
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@attachment_app.command("get")
+def attachment_get(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+) -> None:
+    """Fetch an attachment into the local decrypted cache."""
+
+    settings = load_cli_settings()
+    root = cli_root()
+    cache = AttachmentCache(root)
+    if settings.server_url:
+        from client.http import AMTodoClient
+        client = AMTodoClient(settings)
+        try:
+            if owner_type == "todo":
+                result = client.todo_attachment_get(owner_id, attachment_id)
+                dl = lambda: client.todo_attachment_download(owner_id, attachment_id)
+            else:
+                result = client.schedule_attachment_get(owner_id, attachment_id)
+                dl = lambda: client.schedule_attachment_download(owner_id, attachment_id)
+            if result.get("ok") is False:
+                _echo_json(result)
+                raise typer.Exit(1)
+            metadata = result["attachment"]
+            if metadata.get("is_orphaned"):
+                _exit_with_error(ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。"))
+            cache_result = cache.get_or_download(metadata, dl)
+            _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
+        finally:
+            client.close()
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachment = service.show(owner_id, attachment_id)
+            metadata = attachment_to_dict(attachment, uow.user_id)
+            cipher = service.read_cipher(owner_id, attachment_id)
+        cache_result = cache.get_or_download(metadata, lambda: cipher)
+        _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
+    except (AMToDoError, ValueError) as exc:
+        _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
+
+
+@attachment_app.command("upload")
+def attachment_upload(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+    file: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False, readable=True, help="Local file path to attach.")] = ...,
+) -> None:
+    """Attach a local file to a ToDo or Schedule."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_upload(owner_id, file) if owner_type == "todo" else client.schedule_attachment_upload(owner_id, file), settings)
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachment = service.create(owner_id, AttachmentDraft(filename=file.name, content=file.read_bytes()))
+            uow.session.flush()
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@attachment_app.command("download")
+def attachment_download(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file path.")] = None,
+) -> None:
+    """Download and decrypt an attachment to a local file."""
+
+    settings = load_cli_settings()
+    root = cli_root()
+    cache = AttachmentCache(root)
+    if settings.server_url:
+        from client.http import AMTodoClient
+        client = AMTodoClient(settings)
+        try:
+            if owner_type == "todo":
+                result = client.todo_attachment_get(owner_id, attachment_id)
+                dl = lambda: client.todo_attachment_download(owner_id, attachment_id)
+            else:
+                result = client.schedule_attachment_get(owner_id, attachment_id)
+                dl = lambda: client.schedule_attachment_download(owner_id, attachment_id)
+            if result.get("ok") is False:
+                _echo_json(result)
+                raise typer.Exit(1)
+            metadata = result["attachment"]
+            if metadata.get("is_orphaned"):
+                _exit_with_error(ValidationError(f"附件 #{attachment_id} 文件丢失，元数据已标记为 orphaned。"))
+            cache_result = cache.get_or_download(metadata, dl)
+            dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
+            _echo_json({"ok": True, "path": str(dest)})
+        finally:
+            client.close()
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachment = service.show(owner_id, attachment_id)
+            metadata = attachment_to_dict(attachment, uow.user_id)
+            cipher = service.read_cipher(owner_id, attachment_id)
+        cache_result = cache.get_or_download(metadata, lambda: cipher)
+        dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
+        _echo_json({"ok": True, "path": str(dest)})
+    except (AMToDoError, ValueError) as exc:
+        _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
+
+
+@attachment_app.command("remove")
+def attachment_remove(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+) -> None:
+    """Remove an attachment from a ToDo or Schedule."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_remove(owner_id, attachment_id) if owner_type == "todo" else client.schedule_attachment_remove(owner_id, attachment_id), settings)
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachment = service.remove(owner_id, attachment_id)
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@attachment_app.command("rename")
+def attachment_rename(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    attachment_id: int = typer.Argument(..., help="Attachment id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+    filename: str = typer.Argument(..., help="New display filename."),
+) -> None:
+    """Rename an attachment's display filename."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_rename(owner_id, attachment_id, filename) if owner_type == "todo" else client.schedule_attachment_rename(owner_id, attachment_id, filename), settings)
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            attachment = service.rename(owner_id, attachment_id, filename)
+            _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@attachment_app.command("remove-orphaned")
+def attachment_remove_orphaned(
+    owner_id: int = typer.Argument(..., help="Owner entity id."),
+    owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
+) -> None:
+    """Remove all orphaned attachment metadata for a ToDo or Schedule."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.todo_attachment_remove_orphaned(owner_id) if owner_type == "todo" else client.schedule_attachment_remove_orphaned(owner_id), settings)
+        return
+
+    if owner_type != "todo":
+        _exit_with_error(ValidationError("本地模式暂不支持日程附件操作，请配置 server_url。"))
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_attachment_service_for(uow, context.clock, owner_type)
+            count = service.remove_orphaned(owner_id)
+            _echo_json({"ok": True, "removed": count})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+# ── trash commands ──
+
+
+def _make_notification_service(uow: UnitOfWork, clock: Clock) -> NotificationService:
+    return NotificationService(
+        uow.notifications,
+        uow.notification_mentions,
+        clock,
+        uow.notification_model,
+        uow.notification_mention_model,
+        changelog_service=uow.notification_changelog_service,
+    )
+
+
+@trash_app.command("list")
+def trash_list(
+    entity_type: str = typer.Argument(help="Entity type: todo, schedule, or notification."),
+    query: str | None = typer.Option(None, "--query", "-q", help="Full-text search (todo/schedule only)."),
+    tag: str | None = typer.Option(None, "--tag", help="Filter by tag (todo only)."),
+    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category (schedule only)."),
+    location: str | None = typer.Option(None, "--location", "-l", help="Filter by location (schedule only)."),
+    from_time: int | None = typer.Option(None, "--from", "-f", help="Range start epoch."),
+    to_time: int | None = typer.Option(None, "--to", "-t", help="Range end epoch."),
+) -> None:
+    """List trashed items by entity type."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        filters: dict[str, object] = {}
+        if query is not None:
+            filters["query"] = query
+        if tag is not None:
+            filters["tag"] = tag
+        if category is not None:
+            filters["category"] = category
+        if location is not None:
+            filters["location"] = location
+        if from_time is not None:
+            filters["start_at"] = from_time
+        if to_time is not None:
+            filters["end_at"] = to_time
+        _run_http(lambda client: client.trash_list(entity_type, **filters), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            if entity_type == "todo":
+                service = TodoService(uow.todos, context.clock, uow.todo_model)
+                items = service.list_deleted(
+                    planned_start_at=from_time,
+                    planned_end_at=to_time,
+                    tag=tag,
+                )
+                result = [todo_to_dict(t, context.settings.timezone) for t in items]
+            elif entity_type == "schedule":
+                service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+                items = service.list_deleted(
+                    start_at=from_time,
+                    end_at=to_time,
+                    category=category,
+                    location=location,
+                )
+                result = [schedule_to_dict(s) for s in items]
+            elif entity_type == "notification":
+                svc = _make_notification_service(uow, context.clock)
+                items = svc.list_deleted()
+                result = [notification_to_dict(n) for n in items]
+            else:
+                _echo_json({"ok": False, "error": f"Unknown entity_type: {entity_type}"})
+                raise typer.Exit(1)
+
+            _echo_json({"ok": True, "count": len(result), "items": result})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@trash_app.command("show")
+def trash_show(
+    entity_id: int = typer.Argument(help="Entity ID."),
+    entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
+) -> None:
+    """Show a single trashed item."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        kwargs = {f"{entity_type}_id": entity_id}
+        _run_http(lambda client: client.trash_get(**kwargs), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            if entity_type == "todo":
+                service = TodoService(uow.todos, context.clock, uow.todo_model)
+                item = service.show_deleted(entity_id)
+                _echo_json({"ok": True, "todo": todo_to_dict(item, context.settings.timezone)})
+            elif entity_type == "schedule":
+                service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+                item = service.show_deleted(entity_id)
+                _echo_json({"ok": True, "schedule": schedule_to_dict(item)})
+            elif entity_type == "notification":
+                svc = _make_notification_service(uow, context.clock)
+                item = svc.show_deleted(entity_id)
+                mentions = svc.get_mentions(entity_id)
+                _echo_json({"ok": True, "notification": notification_to_dict(item, mentions)})
+            else:
+                _echo_json({"ok": False, "error": f"Unknown entity_type: {entity_type}"})
+                raise typer.Exit(1)
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@trash_app.command("update")
+def trash_update(
+    entity_id: int = typer.Argument(help="Entity ID."),
+    entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
+    title: str | None = typer.Option(None, "--title", help="New title."),
+    description: str | None = typer.Option(None, "--desc", help="New description."),
+    priority: int | None = typer.Option(None, "--priority", help="Priority 0-3 (todo only)."),
+    tag: str | None = typer.Option(None, "--tag", help="Tag (todo only)."),
+    planned_at: int | None = typer.Option(None, "--planned", help="Planned epoch (todo only)."),
+    due_at: int | None = typer.Option(None, "--due", help="Due epoch (todo only)."),
+    start_at: int | None = typer.Option(None, "--start", help="Start epoch (schedule only)."),
+    end_at: int | None = typer.Option(None, "--end", help="End epoch (schedule only)."),
+    location: str | None = typer.Option(None, "--location", help="Location (schedule only)."),
+    category: str | None = typer.Option(None, "--category", help="Category (schedule only)."),
+    trigger_at: int | None = typer.Option(None, "--trigger", help="Trigger epoch (notification only)."),
+    extra_fields: str | None = typer.Option(None, "--extra", help="Extra JSON fields."),
+) -> None:
+    """Update a trashed item."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        kwargs: dict[str, object] = {f"{entity_type}_id": entity_id}
+        for field_name, val in [
+            ("title", title), ("description", description), ("priority", priority),
+            ("tag", tag), ("planned_at", planned_at), ("due_at", due_at),
+            ("start_at", start_at), ("end_at", end_at), ("location", location),
+            ("category", category), ("trigger_at", trigger_at), ("extra_fields", extra_fields),
+        ]:
+            if val is not None:
+                kwargs[field_name] = val
+        _run_http(lambda client: client.trash_update(**kwargs), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            if entity_type == "todo":
+                service = TodoService(uow.todos, context.clock, uow.todo_model)
+                fields_set: set[str] = set()
+                kw: dict[str, object] = {}
+                for fname, val in [
+                    ("title", title), ("description", description), ("priority", priority),
+                    ("tag", tag), ("planned_at", planned_at), ("due_at", due_at),
+                    ("extra_fields", extra_fields),
+                ]:
+                    if val is not None:
+                        fields_set.add(fname)
+                        kw[fname] = val
+                item = service.update_deleted(
+                    entity_id,
+                    TodoUpdate(**kw, _fields_set=frozenset(fields_set)),
+                )
+                uow.session.flush()
+                _echo_json({"ok": True, "todo": todo_to_dict(item, context.settings.timezone)})
+            elif entity_type == "schedule":
+                service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+                fields_set = set()
+                kw = {}
+                for fname, val in [
+                    ("title", title), ("description", description),
+                    ("start_at", start_at), ("end_at", end_at),
+                    ("location", location), ("category", category),
+                    ("extra_fields", extra_fields),
+                ]:
+                    if val is not None:
+                        fields_set.add(fname)
+                        kw[fname] = val
+                item = service.update_deleted(
+                    entity_id,
+                    ScheduleUpdate(**kw, _fields_set=frozenset(fields_set)),
+                )
+                uow.session.flush()
+                _echo_json({"ok": True, "schedule": schedule_to_dict(item)})
+            elif entity_type == "notification":
+                svc = _make_notification_service(uow, context.clock)
+                fields_set = set()
+                kw = {}
+                for fname, val in [
+                    ("title", title), ("description", description),
+                    ("trigger_at", trigger_at), ("extra_fields", extra_fields),
+                ]:
+                    if val is not None:
+                        fields_set.add(fname)
+                        kw[fname] = val
+                item = svc.update_deleted(
+                    entity_id,
+                    NotificationUpdate(**kw, _fields_set=frozenset(fields_set)),
+                )
+                uow.session.flush()
+                mentions = svc.get_mentions(entity_id)
+                _echo_json({"ok": True, "notification": notification_to_dict(item, mentions)})
+            else:
+                _echo_json({"ok": False, "error": f"Unknown entity_type: {entity_type}"})
+                raise typer.Exit(1)
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@trash_app.command("restore")
+def trash_restore(
+    entity_ids: list[int] = typer.Argument(help="Entity IDs to restore."),
+    entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
+) -> None:
+    """Restore trashed items."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        if entity_type == "notification":
+            _run_http(lambda client: _restore_notifications_http(client, entity_ids), settings)
+        else:
+            _run_http(lambda client: client.trash_restore(targets=entity_ids), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            results = []
+            for eid in entity_ids:
+                try:
+                    if entity_type == "todo":
+                        service = TodoService(uow.todos, context.clock, uow.todo_model)
+                        item = service.restore(eid)
+                        results.append({"id": eid, "ok": True, "todo": todo_to_dict(item, context.settings.timezone)})
+                    elif entity_type == "schedule":
+                        service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+                        item = service.restore(eid)
+                        results.append({"id": eid, "ok": True, "schedule": schedule_to_dict(item)})
+                    elif entity_type == "notification":
+                        svc = _make_notification_service(uow, context.clock)
+                        item = svc.restore(eid)
+                        results.append({"id": eid, "ok": True, "notification": notification_to_dict(item)})
+                    else:
+                        _echo_json({"ok": False, "error": f"Unknown entity_type: {entity_type}"})
+                        raise typer.Exit(1)
+                except AMToDoError as exc:
+                    results.append({"id": eid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
+            uow.session.flush()
+            _echo_json({"ok": all(r["ok"] for r in results), "results": results})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@trash_app.command("purge")
+def trash_purge(
+    entity_ids: list[int] = typer.Argument(help="Entity IDs to permanently delete."),
+    entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
+) -> None:
+    """Permanently delete trashed items."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        if entity_type == "notification":
+            _run_http(lambda client: _purge_notifications_http(client, entity_ids), settings)
+        else:
+            _run_http(lambda client: client.trash_delete(targets=entity_ids), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            results = []
+            for eid in entity_ids:
+                try:
+                    if entity_type == "todo":
+                        service = TodoService(uow.todos, context.clock, uow.todo_model)
+                        item = service.purge(eid)
+                        results.append({"id": eid, "ok": True, "todo": todo_to_dict(item, context.settings.timezone)})
+                    elif entity_type == "schedule":
+                        service = ScheduleService(uow.schedules, context.clock, uow.schedule_model)
+                        item = service.purge(eid)
+                        results.append({"id": eid, "ok": True, "schedule": schedule_to_dict(item)})
+                    elif entity_type == "notification":
+                        svc = _make_notification_service(uow, context.clock)
+                        item = svc.purge(eid)
+                        results.append({"id": eid, "ok": True, "notification": notification_to_dict(item)})
+                    else:
+                        _echo_json({"ok": False, "error": f"Unknown entity_type: {entity_type}"})
+                        raise typer.Exit(1)
+                except AMToDoError as exc:
+                    results.append({"id": eid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
+            uow.session.flush()
+            _echo_json({"ok": all(r["ok"] for r in results), "results": results})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+def _restore_notifications_http(client: "AMTodoClient", ids: list[int]) -> dict[str, Any]:
+    """Helper to restore multiple notifications via HTTP."""
+    results = []
+    for nid in ids:
+        results.append(client.trash_restore(notification_id=nid))
+    return {"ok": all(r.get("ok") for r in results), "results": results}
+
+
+def _purge_notifications_http(client: "AMTodoClient", ids: list[int]) -> dict[str, Any]:
+    """Helper to purge multiple notifications via HTTP."""
+    results = []
+    for nid in ids:
+        results.append(client.trash_delete(notification_id=nid))
+    return {"ok": all(r.get("ok") for r in results), "results": results}
+
+
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")
 app.add_typer(schedule_app, name="schedule", help="Manage schedule items.")
 app.add_typer(user_app, name="user", help="User self-service (me, update, regen-token).")
 app.add_typer(admin_app, name="admin", help="Admin user management (create, list, delete, update, regen-token).")
 app.add_typer(cache_app, name="cache", help="Manage local caches.")
-todo_app.add_typer(todo_attachment_app, name="attachment")
-schedule_app.add_typer(schedule_attachment_app, name="attachment")
+app.add_typer(trash_app, name="trash", help="Manage trashed items.")
+app.add_typer(attachment_app, name="attachment", help="Manage attachments.")
 
 
 def main() -> None:

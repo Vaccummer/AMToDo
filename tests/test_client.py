@@ -207,11 +207,11 @@ class TestTodoClient:
         assert result["count"] == 0
 
         # Visible in trash
-        result = client.todo_trash_list()
+        result = client.trash_list("todo")
         assert result["count"] == 1
 
         # Restore
-        result = client.todo_trash_restore([1])
+        result = client.trash_restore(targets=[1])
         assert result["ok"] is True
         result = client.todo_list()
         assert result["count"] == 1
@@ -219,10 +219,10 @@ class TestTodoClient:
     def test_trash_purge(self, client):
         client.todo_create(title="To purge")
         client.todo_remove([1])
-        result = client.todo_trash_delete([1])
+        result = client.trash_delete(targets=[1])
         assert result["ok"] is True
 
-        result = client.todo_trash_list()
+        result = client.trash_list("todo")
         assert result["count"] == 0
 
 
@@ -292,10 +292,10 @@ class TestScheduleClient:
         result = client.schedule_remove([1])
         assert result["ok"] is True
 
-        result = client.schedule_trash_list()
+        result = client.trash_list("schedule")
         assert result["count"] == 1
 
-        result = client.schedule_trash_restore([1])
+        result = client.trash_restore(targets=[1])
         assert result["ok"] is True
 
         result = client.schedule_list(start_at=0, end_at=5000)
@@ -304,10 +304,10 @@ class TestScheduleClient:
     def test_trash_purge(self, client):
         client.schedule_create(title="To purge", start_at=1000, end_at=2000)
         client.schedule_remove([1])
-        result = client.schedule_trash_delete([1])
+        result = client.trash_delete(targets=[1])
         assert result["ok"] is True
 
-        result = client.schedule_trash_list()
+        result = client.trash_list("schedule")
         assert result["count"] == 0
 
 

@@ -131,7 +131,7 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
         # Step 2: PUT cipher bytes
         upload_response = client.put(
-            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            f"/api/v1/attachment/upload?token={upload_token}",
             content=full_cipher,
             headers={"Content-Type": "application/octet-stream"},
         )
@@ -149,7 +149,7 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
         # Step 3: Verify metadata via list
         list_response = client.post(
-            "/api/v1/todos/attachments/list",
+            "/api/v1/attachment/list",
             json={"access_token": token, "todo_id": todo_id},
         )
         assert list_response.json()["count"] == 1
@@ -165,7 +165,7 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
         # Step 5: GET download
         download_response = client.get(
-            f"/api/v1/todos/attachments/{attachment['id']}/download?token={download_token}",
+            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
         )
         assert download_response.status_code == 200
         assert download_response.content == full_cipher
@@ -197,7 +197,7 @@ def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
     with TestClient(app) as client:
         response = client.put(
-            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            f"/api/v1/attachment/upload?token={upload_token}",
             content=b"some data",
             headers={"Content-Type": "application/octet-stream"},
         )
@@ -233,7 +233,7 @@ def test_upload_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     with TestClient(app) as client:
         # Upload data that exceeds the limit
         response = client.put(
-            f"/api/v1/todos/attachments/upload?token={upload_token}",
+            f"/api/v1/attachment/upload?token={upload_token}",
             content=b"x" * 200,  # 200 bytes > 100 byte limit
             headers={"Content-Type": "application/octet-stream"},
         )
@@ -247,7 +247,7 @@ def test_download_token_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     with TestClient(app) as client:
         response = client.get(
-            "/api/v1/todos/attachments/1/download",
+            "/api/v1/attachment/1/download",
         )
         assert response.status_code == 422  # missing required query param
 
