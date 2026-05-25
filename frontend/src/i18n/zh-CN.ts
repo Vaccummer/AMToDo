@@ -373,6 +373,10 @@ export const zhCN: Record<string, string> = {
   "trash.todo": "待办",
   "trash.schedule": "日程",
   "trash.notification": "通知",
+  "trash.restoreConfirmTitle": "恢复项目",
+  "trash.restoreConfirmMessage": "确定要将此项目从回收站恢复吗？",
+  "trash.restoreAllConfirmTitle": "恢复全部",
+  "trash.restoreAllConfirmMessage": "确定要将回收站中的 {{count}} 个项目全部恢复吗？",
 
   // Notify
   "notify.trash": "通知回收站",

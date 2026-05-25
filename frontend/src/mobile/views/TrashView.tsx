@@ -10,6 +10,7 @@ type Props = {
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
+  onItemClick?: (type: "todo" | "schedule" | "notify", item: TodoItem | ScheduleItem | NotificationItem) => void;
 };
 
 type TrashMode = "todo" | "schedule" | "notify";
@@ -132,23 +133,28 @@ function getStatus(entry: TrashResult, t: (key: string) => string): StatusTag {
 
 const SWIPE_THRESHOLD = 60;
 const SWIPE_MAX = 144;
+const TAP_THRESHOLD = 8;
 
 type SwipeRowProps = {
   entry: TrashResult;
   busy: boolean;
   onRestore: () => void;
   onPurge: () => void;
+  onItemClick: () => void;
   status: StatusTag;
   t: (key: string) => string;
   index: number;
 };
 
-function SwipeRow({ entry, busy, onRestore, onPurge, status, t, index }: SwipeRowProps) {
+function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, index }: SwipeRowProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [revealed, setRevealed] = useState(false);
   const startX = useRef(0);
+  const startY = useRef(0);
   const currentX = useRef(0);
   const dragging = useRef(false);
+  const moved = useRef(false);
+  const pressed = useRef(false);
 
   const applyTransform = useCallback((x: number) => {
     const el = contentRef.current;
@@ -193,24 +199,37 @@ function SwipeRow({ entry, busy, onRestore, onPurge, status, t, index }: SwipeRo
   // Touch events
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
     dragging.current = true;
+    moved.current = false;
+    pressed.current = true;
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (!dragging.current) return;
     const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) moved.current = true;
     currentX.current = dx;
     const base = revealed ? -SWIPE_MAX : 0;
     const x = Math.max(-SWIPE_MAX, Math.min(0, base + dx));
     applyTransform(x);
   }, [revealed, applyTransform]);
 
-  const onTouchEnd = useCallback(() => handleEnd(), [handleEnd]);
+  const onTouchEnd = useCallback(() => {
+    const wasTap = pressed.current && !moved.current && !revealed;
+    pressed.current = false;
+    handleEnd();
+    if (wasTap) onItemClick();
+  }, [handleEnd, revealed, onItemClick]);
 
   // Mouse events
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     startX.current = e.clientX;
+    startY.current = e.clientY;
     dragging.current = true;
+    moved.current = false;
+    pressed.current = true;
     e.preventDefault();
   }, []);
 
@@ -218,19 +237,26 @@ function SwipeRow({ entry, busy, onRestore, onPurge, status, t, index }: SwipeRo
     const onMouseMove = (e: MouseEvent) => {
       if (!dragging.current) return;
       const dx = e.clientX - startX.current;
+      const dy = e.clientY - startY.current;
+      if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) moved.current = true;
       currentX.current = dx;
       const base = revealed ? -SWIPE_MAX : 0;
       const x = Math.max(-SWIPE_MAX, Math.min(0, base + dx));
       applyTransform(x);
     };
-    const onMouseUp = () => handleEnd();
+    const onMouseUp = () => {
+      const wasTap = pressed.current && !moved.current && !revealed;
+      pressed.current = false;
+      handleEnd();
+      if (wasTap) onItemClick();
+    };
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
     return () => {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
-  }, [revealed, applyTransform, handleEnd]);
+  }, [revealed, applyTransform, handleEnd, onItemClick]);
 
   function handlePurgeClick() {
     onPurge();
@@ -290,7 +316,7 @@ function SwipeRow({ entry, busy, onRestore, onPurge, status, t, index }: SwipeRo
   );
 }
 
-export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionError, onItemClick }: Props) {
   const { t } = useI18n();
   const [mode, setMode] = useState<TrashMode>("todo");
   const [query, setQuery] = useState("");
@@ -379,6 +405,12 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
   const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
 
   async function restore(entry: TrashResult) {
+    const ok = await ask({
+      title: t("trash.restoreConfirmTitle"),
+      message: t("trash.restoreConfirmMessage"),
+      confirmLabel: t("common.restore"),
+    });
+    if (!ok) return;
     const key = resultKey(entry);
     setBusyKey(key);
     try {
@@ -499,6 +531,12 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
           className="trash-restore-all-btn"
           disabled={items.length === 0 || busyKey === "restore-all"}
           onClick={async () => {
+            const ok = await ask({
+              title: t("trash.restoreAllConfirmTitle"),
+              message: t("trash.restoreAllConfirmMessage", { count: items.length }),
+              confirmLabel: t("common.restore"),
+            });
+            if (!ok) return;
             setBusyKey("restore-all");
             try {
               const todoIds = items.filter((e) => e.type === "todo").map((e) => e.item.id);
@@ -532,7 +570,6 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           </svg>
-          {filteredItems.length > 0 && <span className="count-dot">{filteredItems.length}</span>}
         </button>
       </div>
 
@@ -568,6 +605,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                       busy={busy}
                       onRestore={() => void restore(entry)}
                       onPurge={() => void purge(entry)}
+                      onItemClick={() => onItemClick?.(entry.type, entry.item)}
                       status={getStatus(entry, t)}
                       t={t}
                       index={idx}

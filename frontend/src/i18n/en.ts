@@ -372,6 +372,10 @@ export const en: Record<string, string> = {
   "trash.todo": "Todo",
   "trash.schedule": "Schedule",
   "trash.notification": "Notification",
+  "trash.restoreConfirmTitle": "Restore Item",
+  "trash.restoreConfirmMessage": "Are you sure you want to restore this item from trash?",
+  "trash.restoreAllConfirmTitle": "Restore All",
+  "trash.restoreAllConfirmMessage": "Are you sure you want to restore all {{count}} items from trash?",
 
   // Notify
   "notify.trash": "Notification Trash",

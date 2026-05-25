@@ -382,6 +382,190 @@
   margin-top: 6px;
 }
 
+/* ── Schedule Card (Timeline) ── */
+
+.mobile-shell .ms-card--schedule {
+  background: #fff;
+}
+
+.mobile-shell .ms-card-schedule-timeline {
+  display: flex;
+  gap: 14px;
+}
+
+.mobile-shell .ms-card-schedule-dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  flex-shrink: 0;
+  width: 12px;
+}
+
+.mobile-shell .ms-card-schedule-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-shell .ms-card-schedule-dot--start {
+  background: var(--status-primary-base, #1a7f72);
+}
+
+.mobile-shell .ms-card-schedule-dot--end {
+  background: var(--status-primary-base, #1a7f72);
+  opacity: 0.4;
+}
+
+.mobile-shell .ms-card-schedule-line {
+  width: 1.5px;
+  flex: 1;
+  background: linear-gradient(to bottom, var(--status-primary-base, #1a7f72), rgba(26, 127, 114, 0.2));
+  min-height: 16px;
+}
+
+.mobile-shell .ms-card-schedule-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-shell .ms-card-schedule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mobile-shell .ms-card-schedule-header .ms-card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-shell .ms-card-schedule-id {
+  font-size: 11px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mobile-shell .ms-card-schedule-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--global-text-secondary, #5c5650);
+}
+
+.mobile-shell .ms-card-schedule-time-row + .ms-card-schedule-time-row {
+  margin-top: 2px;
+}
+
+.mobile-shell .ms-card-schedule-time-label {
+  font-size: 10px;
+  color: #9ca3af;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.mobile-shell .ms-card-schedule-time-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-shell .ms-card-schedule-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.mobile-shell .ms-card-schedule-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mobile-shell .ms-card-schedule-chip--cat {
+  color: var(--accent-indigo, #6366f1);
+  background: var(--accent-indigo-light, #eef2ff);
+}
+
+.mobile-shell .ms-card-schedule-chip--loc {
+  color: #9ca3af;
+  background: #f3f0eb;
+}
+
+.mobile-shell .ms-card-schedule-chip--attach {
+  color: #8b7355;
+  background: #f8f2e8;
+}
+
+/* ── Notify Card ── */
+
+.mobile-shell .ms-card--notify {
+  background: #fff;
+}
+
+.mobile-shell .ms-card-notify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-shell .ms-card-notify-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.mobile-shell .ms-card-notify-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mobile-shell .ms-card-notify-icon--done {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.mobile-shell .ms-card-notify-title {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--global-text-primary, #342f2a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-shell .ms-card-notify-time {
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.mobile-shell .ms-card-notify-id {
+  font-size: 11px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 
 /* ── Empty States ── */
 
@@ -767,21 +951,51 @@
 
 .mobile-shell .ms-sort-controls .dropdown-trigger {
   height: 30px;
+  width: 110px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 13px;
   border-radius: 8px;
   border: 1px solid rgba(229, 223, 215, 0.6);
   background: #fff;
   color: #5c5650;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.mobile-shell .ms-sort-controls .dropdown-trigger:focus,
+.mobile-shell .ms-sort-controls .dropdown-trigger:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 .mobile-shell .ms-sort-controls .dropdown-trigger-text {
-  font-size: 11px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .mobile-shell .ms-sort-controls .dropdown-panel {
   max-height: none;
   overflow-y: visible;
+}
+
+.mobile-shell .ms-sort-controls .dropdown-trigger:active {
+  background: #f3f0eb;
+}
+
+/* Global override — portaled dropdown panel lives outside .mobile-shell */
+.dropdown-option {
+  font-size: 13px;
+}
+
+.dropdown-option.selected {
+  background: transparent;
+  font-weight: 600;
+  color: #5c5650;
 }
 
 .mobile-shell .ms-sort-order-btn {

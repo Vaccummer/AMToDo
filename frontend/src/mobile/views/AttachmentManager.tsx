@@ -93,6 +93,7 @@ export function AttachmentManager({
   const [pickerAttachment, setPickerAttachment] = useState<AnyAttachment | null>(null);
   const [swipedAttachId, setSwipedAttachId] = useState<number | null>(null);
   const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const zoomRef = useRef({
     scale: 1, x: 0, y: 0,
@@ -213,6 +214,7 @@ export function AttachmentManager({
 
     for (const file of selected) {
       if (file.size > api.maxAttachmentSize) {
+        setUploadError(t("common.fileTooLarge", { name: file.name, size: formatSize(file.size), max: formatSize(api.maxAttachmentSize) }));
         return;
       }
     }
@@ -220,9 +222,11 @@ export function AttachmentManager({
     const ac = new AbortController();
     uploadAbortRef.current = ac;
     setAttachmentBusy(true);
+    setUploadError(null);
     try {
       for (const file of selected) {
         const key = `${file.name}-${file.size}`;
+        setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total: file.size, percent: 0, phase: "encrypting" } }));
         try {
           await uploadFile(file, (progress) => {
             setUploadProgress((prev) => ({ ...prev, [key]: progress }));
@@ -231,10 +235,17 @@ export function AttachmentManager({
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
         }
       }
-      const updatedAttachments = await loadAttachments();
-      onAttachmentsChanged?.(updatedAttachments.length);
-    } catch {
-      // error handled by parent via uploadFile
+      // Refresh attachment list — failure here is non-fatal (upload already succeeded)
+      try {
+        const updatedAttachments = await loadAttachments();
+        onAttachmentsChanged?.(updatedAttachments.length);
+      } catch {
+        // List refresh failed but upload succeeded; user can pull-to-refresh
+      }
+    } catch (err: unknown) {
+      if (!ac.signal.aborted) {
+        setUploadError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
+      }
     } finally {
       uploadAbortRef.current = null;
       setAttachmentBusy(false);
@@ -653,7 +664,7 @@ export function AttachmentManager({
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
         </button>
-        <input ref={fileInputRef} type="file" multiple hidden onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.currentTarget.value = ""; }} />
+        <input ref={fileInputRef} type="file" multiple hidden onChange={(e) => { const input = e.target as HTMLInputElement; if (input.files && input.files.length > 0) uploadFiles(input.files); setTimeout(() => { input.value = ""; }, 100); }} />
         <span className="attach-count">{t("common.attachmentCount", { count: attachments.length })}</span>
       </div>
 
@@ -679,6 +690,18 @@ export function AttachmentManager({
           </div>
         </div>
       ))}
+
+      {/* Upload error */}
+      {uploadError ? (
+        <div className="attach-upload-error">
+          <span>{uploadError}</span>
+          <button type="button" className="attach-upload-error-dismiss" onClick={() => setUploadError(null)} aria-label={t("common.close")}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
 
       {/* Attachment list */}
       <div className="attachment-list">

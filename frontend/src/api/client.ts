@@ -177,6 +177,7 @@ export type ScheduleItem = {
   created_at: number;
   updated_at: number;
   deleted_at?: number | null;
+  attachment_count?: number;
   extra_fields?: Record<string, string> | null;
 };
 
@@ -355,7 +356,7 @@ export const API_NETWORK_STATUS_EVENT = "amtodo:api-network-status";
 /** Convert REST path like "/api/v1/todos/list" to WS message type like "todo.list". */
 function pathToWsType(path: string): string {
   const parts = path.replace(/^\/api\/v1\//, "").split("/");
-  // Attachment paths: /api/v1/todos/attachments/upload → attachment.upload
+  // Attachment paths: /api/v1/attachment/upload → attachment.upload
   if (parts.length >= 3 && parts[1] === "attachments") {
     return "attachment." + parts.slice(2).join(".").replace(/-/g, "_");
   }
@@ -596,14 +597,16 @@ export class AMToDoApi {
     });
   }
 
-  async getTodo(todoId: number): Promise<TodoResponse> {
-    const res = await this.post<TodoResponse>("/api/v1/todos/get", { todo_id: todoId });
+  async getTodo(todoId: number, trashMode?: boolean): Promise<TodoResponse> {
+    const path = trashMode ? "/api/v1/trash/get" : "/api/v1/todos/get";
+    const res = await this.post<TodoResponse>(path, { todo_id: todoId });
     parseExtraFields(res.todo);
     return res;
   }
 
-  async updateTodo(todoId: number, fields: TodoUpdateRequest): Promise<TodoResponse> {
-    const res = await this.post<TodoResponse>("/api/v1/todos/update", { todo_id: todoId, ...fields });
+  async updateTodo(todoId: number, fields: TodoUpdateRequest, trashMode?: boolean): Promise<TodoResponse> {
+    const path = trashMode ? "/api/v1/trash/update" : "/api/v1/todos/update";
+    const res = await this.post<TodoResponse>(path, { todo_id: todoId, ...fields });
     parseExtraFields(res.todo);
     return res;
   }
@@ -637,11 +640,11 @@ export class AMToDoApi {
   }
 
   async restoreTodos(targets: number[]): Promise<TargetsResponse> {
-    return this.post("/api/v1/todos/trash/restore", { targets });
+    return this.post("/api/v1/trash/restore", { targets });
   }
 
   async purgeTodos(targets: number[]): Promise<TargetsResponse> {
-    return this.post("/api/v1/todos/trash/delete", { targets });
+    return this.post("/api/v1/trash/delete", { targets });
   }
 
   async todoChangelog(params?: {
@@ -663,14 +666,14 @@ export class AMToDoApi {
   }
 
   async listTodoAttachments(todoId: number): Promise<AttachmentListResponse> {
-    return this.post("/api/v1/todos/attachments/list", { todo_id: todoId });
+    return this.post("/api/v1/attachment/list", { todo_id: todoId });
   }
 
   async getTodoAttachment(
     todoId: number,
     attachmentId: number
   ): Promise<AttachmentResponse> {
-    return this.post("/api/v1/todos/attachments/get", {
+    return this.post("/api/v1/attachment/get", {
       todo_id: todoId,
       attachment_id: attachmentId
     });
@@ -680,7 +683,7 @@ export class AMToDoApi {
     todoId: number,
     attachmentId: number
   ): Promise<AttachmentResponse> {
-    return this.post("/api/v1/todos/attachments/remove", {
+    return this.post("/api/v1/attachment/remove", {
       todo_id: todoId,
       attachment_id: attachmentId
     });
@@ -691,7 +694,7 @@ export class AMToDoApi {
     attachmentId: number,
     filename: string
   ): Promise<AttachmentResponse> {
-    return this.post("/api/v1/todos/attachments/rename", {
+    return this.post("/api/v1/attachment/rename", {
       todo_id: todoId,
       attachment_id: attachmentId,
       filename
@@ -723,7 +726,7 @@ export class AMToDoApi {
       onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
     }, abortSignal);
     return streamingUpload<AttachmentMetadata>(
-      `${this.baseUrl}/api/v1/todos/attachments/upload?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
       body,
       onProgress,
       abortSignal,
@@ -738,7 +741,7 @@ export class AMToDoApi {
     );
 
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/todos/attachments/${attachmentId}/download?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
       onProgress,
       abortSignal,
     );
@@ -750,24 +753,24 @@ export class AMToDoApi {
       "attachment.init_download",
       { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
     );
-    return `${this.baseUrl}/api/v1/todos/attachments/${attachmentId}/download?token=${token}`;
+    return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
   }
 
   async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
-    return this.post("/api/v1/todos/attachments/remove-orphaned", { todo_id: todoId });
+    return this.post("/api/v1/attachment/remove-orphaned", { todo_id: todoId });
   }
 
   // --- Schedule attachments ---
 
   async listScheduleAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
-    return this.post("/api/v1/schedules/attachments/list", { schedule_id: scheduleId });
+    return this.post("/api/v1/attachment/list", { schedule_id: scheduleId });
   }
 
   async getScheduleAttachment(
     scheduleId: number,
     attachmentId: number
   ): Promise<ScheduleAttachmentResponse> {
-    return this.post("/api/v1/schedules/attachments/get", {
+    return this.post("/api/v1/attachment/get", {
       schedule_id: scheduleId,
       attachment_id: attachmentId
     });
@@ -777,7 +780,7 @@ export class AMToDoApi {
     scheduleId: number,
     attachmentId: number
   ): Promise<ScheduleAttachmentResponse> {
-    return this.post("/api/v1/schedules/attachments/remove", {
+    return this.post("/api/v1/attachment/remove", {
       schedule_id: scheduleId,
       attachment_id: attachmentId
     });
@@ -808,7 +811,7 @@ export class AMToDoApi {
       onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
     }, abortSignal);
     return streamingUpload<ScheduleAttachmentMetadata>(
-      `${this.baseUrl}/api/v1/schedules/attachments/upload?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
       body,
       onProgress,
       abortSignal,
@@ -823,7 +826,7 @@ export class AMToDoApi {
     );
 
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/schedules/attachments/${attachmentId}/download?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
       onProgress,
       abortSignal,
     );
@@ -835,11 +838,23 @@ export class AMToDoApi {
       "attachment.init_download",
       { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
     );
-    return `${this.baseUrl}/api/v1/schedules/attachments/${attachmentId}/download?token=${token}`;
+    return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
   }
 
   async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
-    return this.post("/api/v1/schedules/attachments/remove-orphaned", { schedule_id: scheduleId });
+    return this.post("/api/v1/attachment/remove-orphaned", { schedule_id: scheduleId });
+  }
+
+  async renameScheduleAttachment(
+    scheduleId: number,
+    attachmentId: number,
+    filename: string
+  ): Promise<ScheduleAttachmentResponse> {
+    return this.post("/api/v1/attachment/rename", {
+      schedule_id: scheduleId,
+      attachment_id: attachmentId,
+      filename
+    });
   }
 
   async listSchedules(startAt: number, endAt: number): Promise<ScheduleListResponse> {
@@ -926,17 +941,20 @@ export class AMToDoApi {
     });
   }
 
-  async getSchedule(scheduleId: number): Promise<ScheduleResponse> {
-    const res = await this.post<ScheduleResponse>("/api/v1/schedules/get", { schedule_id: scheduleId });
+  async getSchedule(scheduleId: number, trashMode?: boolean): Promise<ScheduleResponse> {
+    const path = trashMode ? "/api/v1/trash/get" : "/api/v1/schedules/get";
+    const res = await this.post<ScheduleResponse>(path, { schedule_id: scheduleId });
     parseExtraFields(res.schedule);
     return res;
   }
 
   async updateSchedule(
     scheduleId: number,
-    fields: ScheduleUpdateRequest
+    fields: ScheduleUpdateRequest,
+    trashMode?: boolean
   ): Promise<ScheduleResponse> {
-    const res = await this.post<ScheduleResponse>("/api/v1/schedules/update", { schedule_id: scheduleId, ...fields });
+    const path = trashMode ? "/api/v1/trash/update" : "/api/v1/schedules/update";
+    const res = await this.post<ScheduleResponse>(path, { schedule_id: scheduleId, ...fields });
     parseExtraFields(res.schedule);
     return res;
   }
@@ -962,11 +980,11 @@ export class AMToDoApi {
   }
 
   async restoreSchedules(targets: number[]): Promise<TargetsResponse> {
-    return this.post("/api/v1/schedules/trash/restore", { targets });
+    return this.post("/api/v1/trash/restore", { targets });
   }
 
   async purgeSchedules(targets: number[]): Promise<TargetsResponse> {
-    return this.post("/api/v1/schedules/trash/delete", { targets });
+    return this.post("/api/v1/trash/delete", { targets });
   }
 
   async scheduleChangelog(params?: {
@@ -1007,8 +1025,9 @@ export class AMToDoApi {
     return res;
   }
 
-  async getNotification(notificationId: number): Promise<NotificationResponse> {
-    const res = await this.post<NotificationResponse>("/api/v1/notifications/get", { notification_id: notificationId });
+  async getNotification(notificationId: number, trashMode?: boolean): Promise<NotificationResponse> {
+    const path = trashMode ? "/api/v1/trash/get" : "/api/v1/notifications/get";
+    const res = await this.post<NotificationResponse>(path, { notification_id: notificationId });
     parseExtraFields(res.notification);
     return res;
   }
@@ -1072,11 +1091,11 @@ export class AMToDoApi {
   }
 
   async restoreNotification(notificationId: number): Promise<{ ok: boolean }> {
-    return this.post("/api/v1/notifications/trash/restore", { notification_id: notificationId });
+    return this.post("/api/v1/trash/restore", { notification_id: notificationId });
   }
 
   async purgeNotification(notificationId: number): Promise<{ ok: boolean }> {
-    return this.post("/api/v1/notifications/trash/delete", { notification_id: notificationId });
+    return this.post("/api/v1/trash/delete", { notification_id: notificationId });
   }
 
   // --- Private helpers ---

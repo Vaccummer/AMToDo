@@ -29,6 +29,7 @@ type Props = {
   settings: UISettings;
   onClose: () => void;
   onEdit: (id: number) => void;
+  trashMode?: boolean;
 };
 
 export function NotifyDetailModal({
@@ -37,6 +38,7 @@ export function NotifyDetailModal({
   settings,
   onClose,
   onEdit,
+  trashMode,
 }: Props) {
   const [notification, setNotification] = useState<NotificationItem | null>(null);
   const [mentions, setMentions] = useState<MentionDisplay[]>([]);
@@ -50,7 +52,7 @@ export function NotifyDetailModal({
     setError(null);
 
     api
-      .getNotification(notificationId)
+      .getNotification(notificationId, trashMode)
       .then(async (res) => {
         if (cancelled) return;
         setNotification(res.notification);
@@ -60,7 +62,7 @@ export function NotifyDetailModal({
           res.notification.mentions.map(async (m) => {
             try {
               if (m.target_type === "todo") {
-                const r = await api.getTodo(m.target_id);
+                const r = await api.getTodo(m.target_id, trashMode);
                 return {
                   target_type: m.target_type,
                   target_id: m.target_id,
@@ -68,7 +70,7 @@ export function NotifyDetailModal({
                   error: false,
                 };
               } else {
-                const r = await api.getSchedule(m.target_id);
+                const r = await api.getSchedule(m.target_id, trashMode);
                 return {
                   target_type: m.target_type,
                   target_id: m.target_id,
