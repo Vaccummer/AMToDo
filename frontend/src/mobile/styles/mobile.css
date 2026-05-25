@@ -2582,8 +2582,9 @@
 }
 
 .mobile-shell .attachment-preview-close {
-  top: calc(env(safe-area-inset-top, 12px) + 8px);
-  right: 0;
+  position: absolute;
+  top: max(env(safe-area-inset-top, 12px), 16px);
+  right: max(env(safe-area-inset-right, 0px), 8px);
   z-index: 10;
   background: rgba(255, 255, 255, 0.9);
   color: var(--global-text-primary);
@@ -2607,4 +2608,375 @@
 
 .mobile-shell .preview-counter {
   bottom: 12px;
+}
+
+/* ── Directory Picker Modal ── */
+
+.dirpicker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 28, 24, 0.45);
+  backdrop-filter: blur(4px);
+  animation: backdrop-in 0.2s ease-out;
+}
+
+.dirpicker-card {
+  width: min(480px, 92vw);
+  max-height: 88vh;
+  background: var(--global-surface-bg);
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 8px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  overflow: hidden;
+  animation: modal-in 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.dirpicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--global-border-light);
+}
+
+.dirpicker-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--global-text-primary);
+}
+
+.dirpicker-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--global-text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dirpicker-close:active {
+  background: var(--global-bg-hover);
+}
+
+/* Path breadcrumb */
+.dirpicker-pathbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--global-border-light);
+  font-size: 13px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.dirpicker-pathbar::-webkit-scrollbar {
+  display: none;
+}
+
+.dirpicker-path-segment {
+  display: inline;
+  border: none;
+  background: transparent;
+  color: var(--global-text-secondary);
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.dirpicker-path-segment.active {
+  color: var(--global-text-primary);
+  font-weight: 600;
+}
+
+.dirpicker-path-segment:active:not(.active) {
+  background: var(--global-bg-hover);
+}
+
+.dirpicker-path-sep {
+  color: var(--global-text-tertiary);
+  margin: 0 1px;
+  flex-shrink: 0;
+}
+
+/* Body / directory listing */
+.dirpicker-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.dirpicker-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dirpicker-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  background: transparent;
+  color: var(--global-text-primary);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dirpicker-entry:active {
+  background: var(--global-bg-hover);
+}
+
+.dirpicker-entry-icon {
+  flex-shrink: 0;
+  color: var(--global-text-secondary);
+}
+
+.dirpicker-entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirpicker-newfolder-btn .dirpicker-entry-name {
+  color: var(--global-text-secondary);
+}
+
+.dirpicker-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--global-text-tertiary);
+  font-size: 14px;
+}
+
+.dirpicker-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.dirpicker-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--global-border-light);
+  border-top-color: var(--global-accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* New folder inline input */
+.dirpicker-newfolder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+}
+
+.dirpicker-newfolder-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--global-border);
+  border-radius: 8px;
+  background: var(--global-surface-bg);
+  color: var(--global-text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.dirpicker-newfolder-input:focus {
+  border-color: var(--global-accent);
+}
+
+.dirpicker-newfolder-confirm,
+.dirpicker-newfolder-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dirpicker-newfolder-confirm {
+  color: var(--global-accent);
+}
+
+.dirpicker-newfolder-confirm:active {
+  background: var(--global-bg-hover);
+}
+
+.dirpicker-newfolder-cancel {
+  color: var(--global-text-tertiary);
+}
+
+.dirpicker-newfolder-cancel:active {
+  background: var(--global-bg-hover);
+}
+
+/* Permission denied */
+.dirpicker-permission-denied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--global-text-secondary);
+  font-size: 14px;
+}
+
+.dirpicker-share-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 10px;
+  background: var(--global-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dirpicker-share-btn:active {
+  opacity: 0.85;
+}
+
+/* Error */
+.dirpicker-error {
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--status-danger-base) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--status-danger-base) 16%, transparent);
+  color: var(--status-danger-base);
+  font-size: 13px;
+  animation: modal-error-slide 0.25s ease-out;
+}
+
+/* Footer */
+.dirpicker-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--global-border-light);
+  background: var(--global-surface-bg);
+}
+
+.dirpicker-save-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--global-text-tertiary);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.dirpicker-save-path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirpicker-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dirpicker-filename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--global-border);
+  border-radius: 10px;
+  background: var(--global-bg);
+  color: var(--global-text-primary);
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.dirpicker-filename-input:focus {
+  border-color: var(--global-accent);
+}
+
+.dirpicker-save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--global-accent);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s ease;
+}
+
+.dirpicker-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dirpicker-save-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.dirpicker-save-btn-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Mobile full-screen override */
+.mobile-shell .dirpicker-backdrop {
+  place-items: stretch;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-shell .dirpicker-card {
+  width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  animation: mobile-modal-in 0.2s ease-out;
+}
+
+.mobile-shell .dirpicker-header {
+  padding-top: calc(18px + env(safe-area-inset-top));
+}
+
+.mobile-shell .dirpicker-card button,
+.mobile-shell .dirpicker-card input {
+  -webkit-tap-highlight-color: transparent;
 }
