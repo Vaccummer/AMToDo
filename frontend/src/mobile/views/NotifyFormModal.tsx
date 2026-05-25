@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AMToDoApi } from "../../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
@@ -52,6 +52,27 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
   const { t } = useI18n();
 
   const isEdit = editId !== null;
+
+  // System gesture navigation: push history entry so Android back gesture closes the modal
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    history.pushState({ modal: "notify-form" }, "");
+    const onPopState = () => { onCloseRef.current(); };
+    window.addEventListener("popstate", onPopState);
+
+    let capacitorHandle: { remove: () => Promise<void> } | undefined;
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("backButton", () => {
+        onCloseRef.current();
+      }).then((h) => { capacitorHandle = h; });
+    }).catch(() => {});
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      capacitorHandle?.remove();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!editId) return;
@@ -280,14 +301,13 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           <div className="schedule-modal-section-label">{t("notify.basicInfo")}</div>
 
           <div className="schedule-modal-field">
-            <label className="schedule-modal-label" htmlFor="nfm-title">{t("common.title")}</label>
+            <label className="schedule-modal-label" id="nfm-title-label" htmlFor="nfm-title">{t("common.title")}</label>
             <input
               id="nfm-title"
               type="text"
               className="schedule-modal-input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              autoFocus
             />
           </div>
 

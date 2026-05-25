@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, type HealthResponse, type TodoItem } from "../api/client";
+import { AMToDoApi, type HealthResponse, type TodoItem, type ScheduleItem, type NotificationItem } from "../api/client";
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "../api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "../api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
@@ -14,6 +14,8 @@ import { SearchView } from "./views/SearchView";
 import { TodoView } from "./views/TodoView";
 import { TrashView } from "./views/TrashView";
 import { TodoDetailModal } from "./views/TodoDetailModal";
+import { ScheduleDetailModal } from "./views/ScheduleDetailModal";
+import { NotifyDetailModal } from "./views/NotifyDetailModal";
 import gearIcon from "../assets/gear.svg";
 import todoIcon from "../assets/todo.svg";
 import scheduleIcon from "../assets/schedule.svg";
@@ -53,6 +55,10 @@ export function App() {
   } | null>(null);
   const [selectedDateCache, setSelectedDateCache] = useState<Record<string, string>>({});
   const [crossTypeEdit, setCrossTypeEdit] = useState<{ type: "todo"; item: TodoItem } | null>(null);
+  const [editingTrashItem, setEditingTrashItem] = useState<{
+    type: "todo" | "schedule" | "notify";
+    item: TodoItem | ScheduleItem | NotificationItem;
+  } | null>(null);
 
   const [settings, setSettings] = useState<UISettings>(() => ({
     ...DEFAULT_SETTINGS,
@@ -435,7 +441,7 @@ export function App() {
         </div>
         {/* Trash: remount on entry via key */}
         {activeTab === "trash" && (
-          <TrashView key={trashKey} api={api} />
+          <TrashView key={trashKey} api={api} onItemClick={(type, item) => setEditingTrashItem({ type, item })} />
         )}
       </main>
 
@@ -492,6 +498,37 @@ export function App() {
           onClose={() => setCrossTypeEdit(null)}
           onDelete={() => setCrossTypeEdit(null)}
           onUpdate={(updated) => setCrossTypeEdit((prev) => prev ? { ...prev, item: updated } : null)}
+        />
+      )}
+
+      {editingTrashItem && editingTrashItem.type === "todo" && (
+        <TodoDetailModal
+          todo={editingTrashItem.item as TodoItem}
+          api={api}
+          trashMode
+          onClose={() => setEditingTrashItem(null)}
+          onDelete={() => setEditingTrashItem(null)}
+          onUpdate={(updated) => setEditingTrashItem((prev) => prev ? { ...prev, item: updated } : null)}
+        />
+      )}
+      {editingTrashItem && editingTrashItem.type === "schedule" && (
+        <ScheduleDetailModal
+          schedule={editingTrashItem.item as ScheduleItem}
+          api={api}
+          trashMode
+          onClose={() => setEditingTrashItem(null)}
+          onDelete={() => setEditingTrashItem(null)}
+          onUpdate={(updated) => setEditingTrashItem((prev) => prev ? { ...prev, item: updated } : null)}
+        />
+      )}
+      {editingTrashItem && editingTrashItem.type === "notify" && (
+        <NotifyDetailModal
+          notificationId={editingTrashItem.item.id}
+          api={api}
+          settings={settings}
+          trashMode
+          onClose={() => setEditingTrashItem(null)}
+          onEdit={() => {}}
         />
       )}
     </div>

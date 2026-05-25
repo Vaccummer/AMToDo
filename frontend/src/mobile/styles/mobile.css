@@ -213,6 +213,10 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.mobile-shell .schedule-modal-field #nfm-title-label {
+  max-width: 33%;
+}
+
 /* ── Mobile overrides for existing views ── */
 
 .mobile-shell .todo-view,
@@ -1584,6 +1588,29 @@
 .mobile-shell .attach-action-bar {
   border-radius: 14px;
   padding: 6px 10px;
+}
+
+.mobile-shell .attach-upload-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 10px;
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  font-size: 13px;
+}
+
+.mobile-shell .attach-upload-error-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #dc3545;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
 }
 
 .mobile-shell .attach-icon-btn {

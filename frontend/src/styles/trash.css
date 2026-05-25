@@ -58,6 +58,7 @@
   color: var(--global-text-muted);
   transition: all var(--duration-normal);
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .filter-tabs button:hover {
@@ -132,6 +133,7 @@
   transition: all var(--duration-fast);
   padding: 0;
   flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .trash-restore-all-btn svg {
@@ -165,7 +167,7 @@
   transition: all var(--duration-fast);
   padding: 0;
   flex-shrink: 0;
-  position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .trash-clear-btn:hover {
@@ -180,25 +182,6 @@
   border-color: var(--global-surface-border-warm);
   color: var(--global-text-muted);
   background: var(--components-input-bg);
-}
-
-.trash-clear-btn .count-dot {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 50%;
-  background: var(--status-danger-base);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 18px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* ── Search input ── */
@@ -539,6 +522,7 @@
   cursor: pointer;
   padding: 0;
   transition: filter var(--duration-fast);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .swipe-action-btn svg {
@@ -577,11 +561,7 @@
   background: var(--global-surface-bg);
   touch-action: pan-y;
   will-change: transform;
-  cursor: grab;
-}
-
-.swipe-content:active {
-  cursor: grabbing;
+  cursor: pointer;
 }
 
 /* ── Status-based row backgrounds ── */

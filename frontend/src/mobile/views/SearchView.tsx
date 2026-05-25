@@ -264,6 +264,23 @@ function IdIcon() {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 function ResetIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -304,6 +321,26 @@ function formatEpoch(epoch: number | null): string {
     return `${month}/${day} ${hours}:${minutes}`;
   }
   return `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+function formatNotifyTime(epoch: number | null): string {
+  if (epoch === null) return "";
+  const d = new Date(epoch * 1000);
+  const yy = String(d.getFullYear()).slice(2);
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yy}/${mo}/${day} ${h}:${mi}`;
+}
+
+function formatScheduleDate(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${m}/${day} ${h}:${min}`;
 }
 
 function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
@@ -427,9 +464,29 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   const [scheduleSortBy, setScheduleSortBy] = useState(initialConfig.scheduleSortBy);
   const [notifySortBy, setNotifySortBy] = useState("trigger_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>(initialConfig.sortOrder);
-  const [results, setResults] = useState<ResultItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [status, setStatus] = useState(t("search.notSearched"));
+  const [resultsMap, setResultsMap] = useState<Record<SearchMode, { results: ResultItem[]; total: number; status: string }>>({
+    todo: { results: [], total: 0, status: t("search.notSearched") },
+    schedule: { results: [], total: 0, status: t("search.notSearched") },
+    notify: { results: [], total: 0, status: t("search.notSearched") },
+  });
+  const results = resultsMap[mode].results;
+  const total = resultsMap[mode].total;
+  const status = resultsMap[mode].status;
+  function setResults(items: ResultItem[] | ((prev: ResultItem[]) => ResultItem[])) {
+    setResultsMap((prev) => {
+      const current = prev[mode].results;
+      const next = typeof items === "function" ? items(current) : items;
+      return { ...prev, [mode]: { ...prev[mode], results: next } };
+    });
+  }
+  function setTotal(n: number | ((prev: number) => number)) {
+    setResultsMap((prev) => {
+      const current = prev[mode].total;
+      const next = typeof n === "function" ? n(current) : n;
+      return { ...prev, [mode]: { ...prev[mode], total: next } };
+    });
+  }
+  function setStatus(s: string) { setResultsMap((prev) => ({ ...prev, [mode]: { ...prev[mode], status: s } })); }
   const [busy, setBusy] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -779,9 +836,6 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
   function handleModeChange(next: SearchMode) {
     setMode(next);
-    setResults([]);
-    setTotal(0);
-    setStatus(t("search.notSearched"));
     setContextMenu(null);
     setDetail(null);
     setEditingNotifyId(null);
@@ -1045,10 +1099,9 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
             if (result.type === "schedule") {
               const schedule = result.item;
-              const cardStatus = getScheduleCardStatus(schedule);
               return (
                 <div
-                  className={`ms-card ms-card--${cardStatus.className}`}
+                  className="ms-card ms-card--schedule"
                   key={key}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1056,68 +1109,65 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                   }}
                   onClick={() => setDetail(result)}
                 >
-                  <div className="ms-card-header">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className="ms-card-edit-input"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyDown={(e) => {
-                          e.stopPropagation();
-                          if (e.key === "Enter") void saveRename(result);
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        onBlur={() => void saveRename(result)}
-                        onClick={(e) => e.stopPropagation()}
-                        autoFocus
-                      />
-                    ) : (
-                      <>
-                        <div
-                          className="ms-card-title"
-                          onDoubleClick={() => beginRename(result)}
-                        >
-                          {schedule.title}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="ms-card-edit-input"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") void saveRename(result);
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                      onBlur={() => void saveRename(result)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="ms-card-schedule-timeline">
+                      <div className="ms-card-schedule-dots">
+                        <span className="ms-card-schedule-dot ms-card-schedule-dot--start"></span>
+                        <span className="ms-card-schedule-line"></span>
+                        <span className="ms-card-schedule-dot ms-card-schedule-dot--end"></span>
+                      </div>
+                      <div className="ms-card-schedule-body">
+                        <div className="ms-card-schedule-header">
+                          <div className="ms-card-title" onDoubleClick={() => beginRename(result)}>{schedule.title}</div>
+                          <span className="ms-card-schedule-id">🆔 {schedule.id}</span>
                         </div>
-                        <span className="ms-card-status">
-                          <span className={`ms-card-dot ms-card-dot--${cardStatus.className}`}></span>
-                          <span className={`ms-card-status-label ms-card-status-label--${cardStatus.className}`}>{cardStatus.label}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  {schedule.description ? (
-                    <div className="ms-card-desc">{schedule.description}</div>
-                  ) : null}
-
-                  <div className="ms-card-meta">
-                    <span className="ms-card-meta-item ms-card-meta-item--due">
-                      <CalendarIcon />
-                      <span>{formatEpoch(schedule.start_at)}</span>
-                    </span>
-                    <span className="ms-card-meta-item ms-card-meta-item--id">
-                      <span>🆔</span>
-                      <span>{schedule.id}</span>
-                    </span>
-                    {schedule.category ? (
-                      <span className="ms-card-meta-item ms-card-meta-item--tag">
-                        <TagIcon />
-                        <span>{schedule.category}</span>
-                      </span>
-                    ) : null}
-                  </div>
+                        <div className="ms-card-schedule-time-row">
+                          <span className="ms-card-schedule-time-label">起</span>
+                          <span className="ms-card-schedule-time-value">{formatScheduleDate(schedule.start_at)}</span>
+                        </div>
+                        <div className="ms-card-schedule-time-row">
+                          <span className="ms-card-schedule-time-label">止</span>
+                          <span className="ms-card-schedule-time-value">{formatScheduleDate(schedule.end_at)}</span>
+                        </div>
+                        <div className="ms-card-schedule-footer">
+                          {schedule.attachment_count ? (
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--attach">📂 {schedule.attachment_count}</span>
+                          ) : null}
+                          {schedule.category ? (
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--cat">🏷 {schedule.category}</span>
+                          ) : null}
+                          {schedule.location ? (
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--loc">📍 {schedule.location}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             }
 
             // Notify result
             const notify = result.item;
-            const cardStatus = getNotifyCardStatus(notify);
+            const triggered = notify.trigger_at < Math.floor(Date.now() / 1000);
             return (
               <div
-                className={`ms-card ms-card--${cardStatus.className}`}
+                className="ms-card ms-card--notify"
                 key={key}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -1125,7 +1175,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                 }}
                 onClick={() => setEditingNotifyId(notify.id)}
               >
-                <div className="ms-card-header">
+                <div className="ms-card-notify-row">
                   {isEditing ? (
                     <input
                       type="text"
@@ -1143,33 +1193,18 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     />
                   ) : (
                     <>
-                      <div
-                        className="ms-card-title"
+                      <span className={`ms-card-notify-icon${triggered ? " ms-card-notify-icon--done" : ""}`}>
+                        {triggered ? <CheckIcon /> : <BellIcon />}
+                      </span>
+                      <span
+                        className="ms-card-notify-title"
                         onDoubleClick={() => beginRename(result)}
                       >
                         {notify.title}
-                      </div>
-                      <span className="ms-card-status">
-                        <span className={`ms-card-dot ms-card-dot--${cardStatus.className}`}></span>
-                        <span className={`ms-card-status-label ms-card-status-label--${cardStatus.className}`}>{cardStatus.label}</span>
                       </span>
+                      <span className="ms-card-notify-time">{formatNotifyTime(notify.trigger_at)}</span>
                     </>
                   )}
-                </div>
-
-                {notify.description ? (
-                  <div className="ms-card-desc">{notify.description}</div>
-                ) : null}
-
-                <div className="ms-card-meta">
-                  <span className="ms-card-meta-item ms-card-meta-item--due">
-                    <CalendarIcon />
-                    <span>{formatEpoch(notify.trigger_at)}</span>
-                  </span>
-                  <span className="ms-card-meta-item ms-card-meta-item--id">
-                    <span>🆔</span>
-                    <span>{notify.id}</span>
-                  </span>
                 </div>
               </div>
             );

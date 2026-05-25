@@ -237,7 +237,7 @@ def _setup_encryption_middleware(app: FastAPI, settings: AppSettings) -> None:
             return await call_next(request)
 
         # Streaming upload passes through unencrypted (token-authenticated)
-        if request.method == "PUT" and request.url.path.rstrip("/").endswith("/attachments/upload"):
+        if request.method == "PUT" and request.url.path.rstrip("/").endswith("/attachment/upload"):
             return await call_next(request)
 
         content_type = request.headers.get("content-type", "")
