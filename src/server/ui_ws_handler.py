@@ -76,10 +76,22 @@ class UiMessageRouter:
         self._handlers["todo.remove"] = self._handle_todo_remove
         self._handlers["todo.batch.create"] = self._handle_todo_batch_create
         self._handlers["todo.batch.update"] = self._handle_todo_batch_update
-        # Todo trash
+        # Unified trash
+        self._handlers["trash.get"] = self._handle_trash_get
+        self._handlers["trash.update"] = self._handle_trash_update
+        self._handlers["trash.list"] = self._handle_trash_list
+        self._handlers["trash.restore"] = self._handle_trash_restore
+        self._handlers["trash.delete"] = self._handle_trash_delete
+        # Entity-specific trash (delegate to unified handlers)
+        self._handlers["todo.trash.get"] = self._handle_trash_get
+        self._handlers["todo.trash.update"] = self._handle_trash_update
         self._handlers["todo.trash.list"] = self._handle_todo_trash_list
-        self._handlers["todo.trash.restore"] = self._handle_todo_trash_restore
-        self._handlers["todo.trash.delete"] = self._handle_todo_trash_delete
+        self._handlers["schedule.trash.get"] = self._handle_trash_get
+        self._handlers["schedule.trash.update"] = self._handle_trash_update
+        self._handlers["schedule.trash.list"] = self._handle_schedule_trash_list
+        self._handlers["notification.trash.get"] = self._handle_trash_get
+        self._handlers["notification.trash.update"] = self._handle_trash_update
+        self._handlers["notification.trash.list"] = self._handle_notification_trash_list
         # Schedule
         self._handlers["schedule.list"] = self._handle_schedule_list
         self._handlers["schedule.search"] = self._handle_schedule_search
@@ -91,10 +103,6 @@ class UiMessageRouter:
         self._handlers["schedule.remove"] = self._handle_schedule_remove
         self._handlers["schedule.batch.create"] = self._handle_schedule_batch_create
         self._handlers["schedule.batch.update"] = self._handle_schedule_batch_update
-        # Schedule trash
-        self._handlers["schedule.trash.list"] = self._handle_schedule_trash_list
-        self._handlers["schedule.trash.restore"] = self._handle_schedule_trash_restore
-        self._handlers["schedule.trash.delete"] = self._handle_schedule_trash_delete
         # Notification
         self._handlers["notification.list"] = self._handle_notification_list
         self._handlers["notification.list_triggered"] = self._handle_notification_list_triggered
@@ -102,10 +110,6 @@ class UiMessageRouter:
         self._handlers["notification.create"] = self._handle_notification_create
         self._handlers["notification.update"] = self._handle_notification_update
         self._handlers["notification.remove"] = self._handle_notification_remove
-        # Notification trash
-        self._handlers["notification.trash.list"] = self._handle_notification_trash_list
-        self._handlers["notification.trash.restore"] = self._handle_notification_trash_restore
-        self._handlers["notification.trash.delete"] = self._handle_notification_trash_delete
         # Attachment
         self._handlers["attachment.list"] = self._handle_attachment_list
         self._handlers["attachment.get"] = self._handle_attachment_get
@@ -392,84 +396,258 @@ class UiMessageRouter:
             return {"ok": all(r["ok"] for r in results), "results": results}
 
     # ------------------------------------------------------------------
-    # Todo trash handlers
+    # Unified trash handlers
     # ------------------------------------------------------------------
 
-    def _handle_todo_trash_list(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-            todos = svc.list_deleted(
-                planned_start_at=p.get("planned_start_at"),
-                planned_end_at=p.get("planned_end_at"),
-                due_start_at=p.get("due_start_at"),
-                due_end_at=p.get("due_end_at"),
-                created_start_at=p.get("created_start_at"),
-                created_end_at=p.get("created_end_at"),
-                updated_start_at=p.get("updated_start_at"),
-                updated_end_at=p.get("updated_end_at"),
-                completed=p.get("completed"),
-                priority_min=p.get("priority_min"),
-                priority_max=p.get("priority_max"),
-                tag=p.get("tag"),
-            )
-            query = p.get("query", "")
-            if query:
-                regex = compile_search_query(query, use_regex=p.get("use_regex", False), ignore_case=p.get("ignore_case", True))
-                resolved_fields = set(p.get("fields", ["title", "description", "tag"])) & {"title", "description", "tag"}
-                todos = [t for t in todos if regex.search(search_text(t, resolved_fields))]
-            todos = sort_results(todos, sort_by=p.get("sort_by", "updated_at"), sort_order=p.get("sort_order", "desc"), value_fn=_todo_sort_value)
-            limit = p.get("limit", 50)
-            after_id = p.get("after_id")
-            if after_id is not None:
-                cursor_idx = next((i for i, t in enumerate(todos) if t.id == after_id), None)
-                if cursor_idx is not None:
-                    todos = todos[cursor_idx + 1:]
-            paged = todos[:limit + 1]
-            has_more = len(paged) > limit
-            if has_more:
-                paged = paged[:limit]
-            return {
-                "ok": True,
-                "total": len(todos),
-                "count": len(paged),
-                "todos": [todo_to_dict(t, self.settings.timezone) for t in paged],
-                "has_more": has_more,
-                "next_cursor": paged[-1].id if has_more and paged else None,
-            }
+    def _handle_trash_get(self, p: dict) -> dict:
+        if p.get("todo_id") is not None:
+            with self._uow() as uow:
+                svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+                todo = svc.show_deleted(p["todo_id"])
+                return {"ok": True, "todo": todo_to_dict(todo, self.settings.timezone)}
+        elif p.get("schedule_id") is not None:
+            with self._uow() as uow:
+                svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
+                schedule = svc.show_deleted(p["schedule_id"])
+                return {"ok": True, "schedule": schedule_to_dict(schedule)}
+        elif p.get("notification_id") is not None:
+            with self._uow() as uow:
+                svc = self._make_notification_service(uow)
+                notification = svc.show_deleted(p["notification_id"])
+                mentions = svc.get_mentions(notification.id)
+                return {"ok": True, "notification": notification_to_dict(notification, mentions)}
+        return {"ok": False, "error": "exactly one of todo_id, schedule_id, notification_id required"}
 
-    def _handle_todo_trash_restore(self, p: dict) -> dict:
+    def _handle_trash_update(self, p: dict) -> dict:
+        if p.get("todo_id") is not None:
+            with self._uow() as uow:
+                svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+                fields = (set(p.keys()) - {"todo_id"}) & {"title", "planned_at", "due_at", "description", "priority", "tag", "extra_fields"}
+                todo = svc.update_deleted(p["todo_id"], TodoUpdate(
+                    title=p.get("title"),
+                    planned_at=p.get("planned_at"),
+                    due_at=p.get("due_at"),
+                    description=p.get("description"),
+                    priority=p.get("priority"),
+                    tag=p.get("tag"),
+                    extra_fields=p.get("extra_fields"),
+                    _fields_set=frozenset(fields),
+                ))
+                uow.session.flush()
+                return {"ok": True, "todo": todo_to_dict(todo, self.settings.timezone)}
+        elif p.get("schedule_id") is not None:
+            with self._uow() as uow:
+                svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
+                fields = (set(p.keys()) - {"schedule_id"}) & {"title", "start_at", "end_at", "description", "location", "category", "extra_fields"}
+                schedule = svc.update_deleted(p["schedule_id"], ScheduleUpdate(
+                    title=p.get("title"),
+                    start_at=p.get("start_at"),
+                    end_at=p.get("end_at"),
+                    description=p.get("description"),
+                    location=p.get("location"),
+                    category=p.get("category"),
+                    extra_fields=p.get("extra_fields"),
+                    _fields_set=frozenset(fields),
+                ))
+                uow.session.flush()
+                return {"ok": True, "schedule": schedule_to_dict(schedule)}
+        elif p.get("notification_id") is not None:
+            with self._uow() as uow:
+                svc = self._make_notification_service(uow)
+                fields_set: set[str] = set()
+                if "title" in p:
+                    fields_set.add("title")
+                if "description" in p:
+                    fields_set.add("description")
+                if "trigger_at" in p:
+                    fields_set.add("trigger_at")
+                if "extra_fields" in p:
+                    fields_set.add("extra_fields")
+                if "mentions" in p:
+                    fields_set.add("mentions")
+                update = NotificationUpdate(
+                    title=p.get("title"),
+                    description=p.get("description"),
+                    trigger_at=p.get("trigger_at"),
+                    extra_fields=p.get("extra_fields"),
+                    mentions=p.get("mentions"),
+                    _fields_set=frozenset(fields_set),
+                )
+                notification = svc.update_deleted(p["notification_id"], update)
+                mentions = svc.get_mentions(notification.id)
+                uow.session.flush()
+                return {"ok": True, "notification": notification_to_dict(notification, mentions)}
+        return {"ok": False, "error": "exactly one of todo_id, schedule_id, notification_id required"}
+
+    def _handle_trash_list(self, p: dict) -> dict:
+        entity_type = p.get("entity_type", "todo")
+        if entity_type == "todo":
+            with self._uow() as uow:
+                svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+                todos = svc.list_deleted(
+                    planned_start_at=p.get("planned_start_at"),
+                    planned_end_at=p.get("planned_end_at"),
+                    due_start_at=p.get("due_start_at"),
+                    due_end_at=p.get("due_end_at"),
+                    created_start_at=p.get("created_start_at"),
+                    created_end_at=p.get("created_end_at"),
+                    updated_start_at=p.get("updated_start_at"),
+                    updated_end_at=p.get("updated_end_at"),
+                    completed=p.get("completed"),
+                    priority_min=p.get("priority_min"),
+                    priority_max=p.get("priority_max"),
+                    tag=p.get("tag"),
+                )
+                query = p.get("query", "")
+                if query:
+                    regex = compile_search_query(query, use_regex=p.get("use_regex", False), ignore_case=p.get("ignore_case", True))
+                    resolved_fields = set(p.get("fields", ["title", "description"])) & {"title", "description", "tag"}
+                    todos = [t for t in todos if regex.search(search_text(t, resolved_fields))]
+                todos = sort_results(todos, sort_by=p.get("sort_by", "updated_at"), sort_order=p.get("sort_order", "desc"), value_fn=_todo_sort_value)
+                limit = p.get("limit", 50)
+                after_id = p.get("after_id")
+                if after_id is not None:
+                    cursor_idx = next((i for i, t in enumerate(todos) if t.id == after_id), None)
+                    if cursor_idx is not None:
+                        todos = todos[cursor_idx + 1:]
+                paged = todos[:limit + 1]
+                has_more = len(paged) > limit
+                if has_more:
+                    paged = paged[:limit]
+                return {
+                    "ok": True,
+                    "total": len(todos),
+                    "count": len(paged),
+                    "todos": [todo_to_dict(t, self.settings.timezone) for t in paged],
+                    "has_more": has_more,
+                    "next_cursor": paged[-1].id if has_more and paged else None,
+                }
+        elif entity_type == "schedule":
+            with self._uow() as uow:
+                svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
+                schedules = svc.list_deleted(
+                    start_at=p.get("planned_start_at"),
+                    end_at=p.get("planned_end_at"),
+                    created_start_at=p.get("created_start_at"),
+                    created_end_at=p.get("created_end_at"),
+                    updated_start_at=p.get("updated_start_at"),
+                    updated_end_at=p.get("updated_end_at"),
+                    category=p.get("category"),
+                    location=p.get("location"),
+                )
+                query = p.get("query", "")
+                if query:
+                    regex = compile_search_query(query, use_regex=p.get("use_regex", False), ignore_case=p.get("ignore_case", True))
+                    resolved_fields = set(p.get("fields", ["title", "description"])) & {"title", "description", "location", "category"}
+                    schedules = [s for s in schedules if regex.search(search_text(s, resolved_fields))]
+                schedules = sort_results(schedules, sort_by=p.get("sort_by", "updated_at"), sort_order=p.get("sort_order", "desc"), value_fn=_schedule_sort_value)
+                limit = p.get("limit", 50)
+                after_id = p.get("after_id")
+                if after_id is not None:
+                    cursor_idx = next((i for i, s in enumerate(schedules) if s.id == after_id), None)
+                    if cursor_idx is not None:
+                        schedules = schedules[cursor_idx + 1:]
+                paged = schedules[:limit + 1]
+                has_more = len(paged) > limit
+                if has_more:
+                    paged = paged[:limit]
+                return {
+                    "ok": True,
+                    "total": len(schedules),
+                    "count": len(paged),
+                    "schedules": [schedule_to_dict(s) for s in paged],
+                    "has_more": has_more,
+                    "next_cursor": paged[-1].id if has_more and paged else None,
+                }
+        else:  # notification
+            with self._uow() as uow:
+                svc = self._make_notification_service(uow)
+                notifications = svc.list_deleted()
+                mentions_map = svc.get_mentions_batch([n.id for n in notifications])
+                result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
+                return {"ok": True, "count": len(result), "notifications": result}
+
+    def _handle_trash_restore(self, p: dict) -> dict:
+        if p.get("notification_id") is not None:
+            with self._uow() as uow:
+                svc = self._make_notification_service(uow)
+                svc.restore(p["notification_id"])
+                uow.session.flush()
+                return {"ok": True}
+        targets = _unique_targets(p.get("targets", []))
         with self._uow() as uow:
-            svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-            targets = _unique_targets(p["targets"])
+            todo_svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+            schedule_svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
             results = []
             for tid in targets:
                 try:
-                    todo = svc.restore(tid)
+                    todo = todo_svc.restore(tid)
                     results.append({"target": tid, "ok": True, "todo": todo_to_dict(todo, self.settings.timezone)})
+                except NotFoundError:
+                    try:
+                        schedule = schedule_svc.restore(tid)
+                        results.append({"target": tid, "ok": True, "schedule": schedule_to_dict(schedule)})
+                    except NotFoundError:
+                        results.append({"target": tid, "ok": False, "error": {"type": "NotFoundError", "message": f"item #{tid} was not found in trash"}})
+                    except AMToDoError as exc:
+                        results.append({"target": tid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
                 except AMToDoError as exc:
                     results.append({"target": tid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
             uow.session.flush()
             return {"ok": all(r["ok"] for r in results), "results": results}
 
-    def _handle_todo_trash_delete(self, p: dict) -> dict:
+    def _handle_trash_delete(self, p: dict) -> dict:
+        if p.get("notification_id") is not None:
+            with self._uow() as uow:
+                svc = self._make_notification_service(uow)
+                svc.purge(p["notification_id"])
+                uow.session.flush()
+                return {"ok": True}
+        targets = _unique_targets(p.get("targets", []))
         with self._uow() as uow:
-            svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-            att_svc = self._make_attachment_service(uow, "todo", changelog_service=uow.todo_changelog_service)
-            targets = _unique_targets(p["targets"])
+            todo_svc = TodoService(uow.todos, self.clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
+            schedule_svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
+            todo_att_svc = self._make_attachment_service(uow, "todo", changelog_service=uow.todo_changelog_service)
+            schedule_att_svc = self._make_attachment_service(uow, "schedule", changelog_service=uow.schedule_changelog_service)
             results = []
             for tid in targets:
                 try:
-                    for att in att_svc.list_for_owner(tid):
-                        att_svc.remove(tid, att.id)
-                except NotFoundError:
+                    for att in todo_att_svc.list_for_owner(tid):
+                        todo_att_svc.remove(tid, att.id)
+                except (NotFoundError, AMToDoError):
                     pass
                 try:
-                    todo = svc.purge(tid)
+                    todo = todo_svc.purge(tid)
                     results.append({"target": tid, "ok": True, "todo": todo_to_dict(todo, self.settings.timezone)})
+                except NotFoundError:
+                    try:
+                        for att in schedule_att_svc.list_for_owner(tid):
+                            schedule_att_svc.remove(tid, att.id)
+                    except (NotFoundError, AMToDoError):
+                        pass
+                    try:
+                        schedule = schedule_svc.purge(tid)
+                        results.append({"target": tid, "ok": True, "schedule": schedule_to_dict(schedule)})
+                    except NotFoundError:
+                        results.append({"target": tid, "ok": False, "error": {"type": "NotFoundError", "message": f"item #{tid} was not found in trash"}})
+                    except AMToDoError as exc:
+                        results.append({"target": tid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
                 except AMToDoError as exc:
                     results.append({"target": tid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
             uow.session.flush()
             return {"ok": all(r["ok"] for r in results), "results": results}
+
+    def _handle_todo_trash_list(self, p: dict) -> dict:
+        p.setdefault("entity_type", "todo")
+        return self._handle_trash_list(p)
+
+    def _handle_schedule_trash_list(self, p: dict) -> dict:
+        p.setdefault("entity_type", "schedule")
+        return self._handle_trash_list(p)
+
+    def _handle_notification_trash_list(self, p: dict) -> dict:
+        p.setdefault("entity_type", "notification")
+        return self._handle_trash_list(p)
 
     # ------------------------------------------------------------------
     # Schedule handlers
@@ -567,7 +745,7 @@ class UiMessageRouter:
     def _handle_schedule_update(self, p: dict) -> dict:
         with self._uow() as uow:
             svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
-            fields = (set(p.keys()) - {"schedule_id"}) & {"title", "start_at", "end_at", "description", "location", "category"}
+            fields = (set(p.keys()) - {"schedule_id"}) & {"title", "start_at", "end_at", "description", "location", "category", "extra_fields"}
             schedule = svc.update(p["schedule_id"], ScheduleUpdate(
                 title=p.get("title"),
                 start_at=p.get("start_at"),
@@ -575,6 +753,7 @@ class UiMessageRouter:
                 description=p.get("description"),
                 location=p.get("location"),
                 category=p.get("category"),
+                extra_fields=p.get("extra_fields"),
                 _fields_set=frozenset(fields),
             ))
             uow.session.flush()
@@ -634,82 +813,6 @@ class UiMessageRouter:
                     results.append({"target": idx, "ok": True, "schedule": schedule_to_dict(schedule)})
                 except AMToDoError as exc:
                     results.append({"target": idx, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
-            uow.session.flush()
-            return {"ok": all(r["ok"] for r in results), "results": results}
-
-    # ------------------------------------------------------------------
-    # Schedule trash handlers
-    # ------------------------------------------------------------------
-
-    def _handle_schedule_trash_list(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
-            schedules = svc.list_deleted(
-                start_at=p.get("start_at"),
-                end_at=p.get("end_at"),
-                created_start_at=p.get("created_start_at"),
-                created_end_at=p.get("created_end_at"),
-                updated_start_at=p.get("updated_start_at"),
-                updated_end_at=p.get("updated_end_at"),
-                category=p.get("category"),
-                location=p.get("location"),
-            )
-            query = p.get("query", "")
-            if query:
-                regex = compile_search_query(query, use_regex=p.get("use_regex", False), ignore_case=p.get("ignore_case", True))
-                resolved_fields = set(p.get("fields", ["title", "description", "location", "category"])) & {"title", "description", "location", "category"}
-                schedules = [s for s in schedules if regex.search(search_text(s, resolved_fields))]
-            schedules = sort_results(schedules, sort_by=p.get("sort_by", "updated_at"), sort_order=p.get("sort_order", "desc"), value_fn=_schedule_sort_value)
-            limit = p.get("limit", 50)
-            after_id = p.get("after_id")
-            if after_id is not None:
-                cursor_idx = next((i for i, s in enumerate(schedules) if s.id == after_id), None)
-                if cursor_idx is not None:
-                    schedules = schedules[cursor_idx + 1:]
-            paged = schedules[:limit + 1]
-            has_more = len(paged) > limit
-            if has_more:
-                paged = paged[:limit]
-            return {
-                "ok": True,
-                "total": len(schedules),
-                "count": len(paged),
-                "schedules": [schedule_to_dict(s) for s in paged],
-                "has_more": has_more,
-                "next_cursor": paged[-1].id if has_more and paged else None,
-            }
-
-    def _handle_schedule_trash_restore(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
-            targets = _unique_targets(p["targets"])
-            results = []
-            for sid in targets:
-                try:
-                    schedule = svc.restore(sid)
-                    results.append({"target": sid, "ok": True, "schedule": schedule_to_dict(schedule)})
-                except AMToDoError as exc:
-                    results.append({"target": sid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
-            uow.session.flush()
-            return {"ok": all(r["ok"] for r in results), "results": results}
-
-    def _handle_schedule_trash_delete(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = ScheduleService(uow.schedules, self.clock, uow.schedule_model, changelog_service=uow.schedule_changelog_service)
-            att_svc = self._make_attachment_service(uow, "schedule", changelog_service=uow.schedule_changelog_service)
-            targets = _unique_targets(p["targets"])
-            results = []
-            for sid in targets:
-                try:
-                    for att in att_svc.list_for_owner(sid):
-                        att_svc.remove(sid, att.id)
-                except NotFoundError:
-                    pass
-                try:
-                    schedule = svc.purge(sid)
-                    results.append({"target": sid, "ok": True, "schedule": schedule_to_dict(schedule)})
-                except AMToDoError as exc:
-                    results.append({"target": sid, "ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}})
             uow.session.flush()
             return {"ok": all(r["ok"] for r in results), "results": results}
 
@@ -781,26 +884,6 @@ class UiMessageRouter:
         with self._uow() as uow:
             svc = self._make_notification_service(uow)
             svc.remove(p["notification_id"])
-            return {"ok": True}
-
-    def _handle_notification_trash_list(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = self._make_notification_service(uow)
-            notifications = svc.list_deleted()
-            mentions_map = svc.get_mentions_batch([n.id for n in notifications])
-            result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
-            return {"ok": True, "count": len(result), "notifications": result}
-
-    def _handle_notification_trash_restore(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = self._make_notification_service(uow)
-            svc.restore(p["notification_id"])
-            return {"ok": True}
-
-    def _handle_notification_trash_delete(self, p: dict) -> dict:
-        with self._uow() as uow:
-            svc = self._make_notification_service(uow)
-            svc.purge(p["notification_id"])
             return {"ok": True}
 
     # ------------------------------------------------------------------

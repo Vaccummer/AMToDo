@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ── Auth mixins ──
 
@@ -169,46 +169,6 @@ class TodoBatchUpdateRequest(UserAuthMixin):
     items: list[TodoBatchUpdateItem]
 
 
-class TodoTrashListRequest(UserAuthMixin):
-    query: str = ""
-    use_regex: bool = False
-    ignore_case: bool = True
-    fields: list[str] = Field(default_factory=lambda: ["title", "description", "tag"])
-    planned_start_at: int | None = None
-    planned_end_at: int | None = None
-    due_start_at: int | None = None
-    due_end_at: int | None = None
-    created_start_at: int | None = None
-    created_end_at: int | None = None
-    updated_start_at: int | None = None
-    updated_end_at: int | None = None
-    completed: bool | None = None
-    priority_min: int | None = Field(default=None, ge=0)
-    priority_max: int | None = Field(default=None, ge=0)
-    tag: str | None = None
-    sort_by: str = "updated_at"
-    sort_order: str = "desc"
-    limit: int = Field(default=50, ge=1, le=500)
-    after_id: int | None = None
-
-
-class TodoTrashRestoreRequest(UserAuthMixin):
-    targets: list[int]
-
-
-class TodoTrashDeleteRequest(UserAuthMixin):
-    targets: list[int]
-
-
-class TodoAttachmentListRequest(UserAuthMixin):
-    todo_id: int
-
-
-class TodoAttachmentGetRequest(UserAuthMixin):
-    todo_id: int
-    attachment_id: int
-
-
 class AttachmentInitUploadRequest(UserAuthMixin):
     owner_type: Literal["todo", "schedule"]
     owner_id: int
@@ -226,45 +186,70 @@ class AttachmentInitDownloadRequest(UserAuthMixin):
     attachment_id: int
 
 
-class TodoAttachmentRemoveRequest(UserAuthMixin):
-    todo_id: int
+# ── Unified Attachments ──
+
+class AttachmentListRequest(UserAuthMixin):
+    """List attachments. Exactly one of todo_id or schedule_id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
+
+    @model_validator(mode="after")
+    def _check_one_id(self) -> "AttachmentListRequest":
+        if (self.todo_id is None) == (self.schedule_id is None):
+            raise ValueError("exactly one of todo_id or schedule_id is required")
+        return self
+
+
+class AttachmentGetRequest(UserAuthMixin):
+    """Get attachment metadata. Exactly one of todo_id or schedule_id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
     attachment_id: int
 
+    @model_validator(mode="after")
+    def _check_one_id(self) -> "AttachmentGetRequest":
+        if (self.todo_id is None) == (self.schedule_id is None):
+            raise ValueError("exactly one of todo_id or schedule_id is required")
+        return self
 
-class TodoAttachmentRemoveOrphanedRequest(UserAuthMixin):
-    todo_id: int
+
+class AttachmentRemoveRequest(UserAuthMixin):
+    """Remove an attachment. Exactly one of todo_id or schedule_id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
+    attachment_id: int
+
+    @model_validator(mode="after")
+    def _check_one_id(self) -> "AttachmentRemoveRequest":
+        if (self.todo_id is None) == (self.schedule_id is None):
+            raise ValueError("exactly one of todo_id or schedule_id is required")
+        return self
 
 
-class TodoAttachmentRenameRequest(UserAuthMixin):
-    todo_id: int
+class AttachmentRenameRequest(UserAuthMixin):
+    """Rename an attachment. Exactly one of todo_id or schedule_id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
     attachment_id: int
     filename: str
 
-
-# ── Schedule Attachments ──
-
-class ScheduleAttachmentListRequest(UserAuthMixin):
-    schedule_id: int
-
-
-class ScheduleAttachmentGetRequest(UserAuthMixin):
-    schedule_id: int
-    attachment_id: int
+    @model_validator(mode="after")
+    def _check_one_id(self) -> "AttachmentRenameRequest":
+        if (self.todo_id is None) == (self.schedule_id is None):
+            raise ValueError("exactly one of todo_id or schedule_id is required")
+        return self
 
 
-class ScheduleAttachmentRemoveRequest(UserAuthMixin):
-    schedule_id: int
-    attachment_id: int
+class AttachmentRemoveOrphanedRequest(UserAuthMixin):
+    """Remove orphaned attachments. Exactly one of todo_id or schedule_id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
 
-
-class ScheduleAttachmentRemoveOrphanedRequest(UserAuthMixin):
-    schedule_id: int
-
-
-class ScheduleAttachmentRenameRequest(UserAuthMixin):
-    schedule_id: int
-    attachment_id: int
-    filename: str
+    @model_validator(mode="after")
+    def _check_one_id(self) -> "AttachmentRemoveOrphanedRequest":
+        if (self.todo_id is None) == (self.schedule_id is None):
+            raise ValueError("exactly one of todo_id or schedule_id is required")
+        return self
 
 
 # ── Schedule ──
@@ -366,35 +351,6 @@ class ScheduleBatchUpdateRequest(UserAuthMixin):
     items: list[ScheduleBatchUpdateItem]
 
 
-class ScheduleTrashListRequest(UserAuthMixin):
-    query: str = ""
-    use_regex: bool = False
-    ignore_case: bool = True
-    fields: list[str] = Field(
-        default_factory=lambda: ["title", "description", "location", "category"]
-    )
-    start_at: int | None = None
-    end_at: int | None = None
-    created_start_at: int | None = None
-    created_end_at: int | None = None
-    updated_start_at: int | None = None
-    updated_end_at: int | None = None
-    category: str | None = None
-    location: str | None = None
-    sort_by: str = "updated_at"
-    sort_order: str = "desc"
-    limit: int = Field(default=50, ge=1, le=500)
-    after_id: int | None = None
-
-
-class ScheduleTrashRestoreRequest(UserAuthMixin):
-    targets: list[int]
-
-
-class ScheduleTrashDeleteRequest(UserAuthMixin):
-    targets: list[int]
-
-
 # ── Changelog ──
 
 class TodoChangelogQueryRequest(UserAuthMixin):
@@ -465,9 +421,108 @@ class NotificationListTriggeredRequest(UserAuthMixin):
     after: int
 
 
-class NotificationTrashRestoreRequest(UserAuthMixin):
-    notification_id: int
+# ── Unified Trash ──
+
+class TrashGetRequest(UserAuthMixin):
+    """Get a single trashed item. Exactly one id must be provided."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
+    notification_id: int | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_id(self) -> "TrashGetRequest":
+        ids = [self.todo_id, self.schedule_id, self.notification_id]
+        if sum(v is not None for v in ids) != 1:
+            raise ValueError("exactly one of todo_id, schedule_id, notification_id must be provided")
+        return self
 
 
-class NotificationTrashDeleteRequest(UserAuthMixin):
-    notification_id: int
+class TrashUpdateRequest(UserAuthMixin):
+    """Update a trashed item. Exactly one id must be provided, fields must match entity type."""
+    todo_id: int | None = None
+    schedule_id: int | None = None
+    notification_id: int | None = None
+    # Todo fields
+    title: str | None = None
+    planned_at: int | None = None
+    due_at: int | None = None
+    description: str | None = None
+    priority: int | None = Field(default=None, ge=0)
+    tag: str | None = None
+    # Schedule fields (title, description shared)
+    start_at: int | None = None
+    end_at: int | None = None
+    location: str | None = None
+    category: str | None = None
+    # Notification fields (title, description shared)
+    trigger_at: int | None = None
+    mentions: list[NotificationMentionInput] | None = None
+    # Common
+    extra_fields: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_id(self) -> "TrashUpdateRequest":
+        ids = [self.todo_id, self.schedule_id, self.notification_id]
+        if sum(v is not None for v in ids) != 1:
+            raise ValueError("exactly one of todo_id, schedule_id, notification_id must be provided")
+        return self
+
+
+class TrashListRequest(UserAuthMixin):
+    """List trashed items of a specific entity type."""
+    entity_type: Literal["todo", "schedule", "notification"]
+    # Shared search fields
+    query: str = ""
+    use_regex: bool = False
+    ignore_case: bool = True
+    sort_by: str = "updated_at"
+    sort_order: str = "desc"
+    limit: int = Field(default=50, ge=1, le=200)
+    after_id: int | None = None
+    # Todo filters
+    planned_start_at: int | None = None
+    planned_end_at: int | None = None
+    due_start_at: int | None = None
+    due_end_at: int | None = None
+    completed: bool | None = None
+    priority_min: int | None = None
+    priority_max: int | None = None
+    tag: str | None = None
+    # Schedule filters (start_at/end_at, created/updated ranges shared)
+    category: str | None = None
+    location: str | None = None
+    # Common date filters
+    created_start_at: int | None = None
+    created_end_at: int | None = None
+    updated_start_at: int | None = None
+    updated_end_at: int | None = None
+    # Fields to search in
+    fields: list[str] = Field(default_factory=lambda: ["title", "description"])
+
+
+class TrashRestoreRequest(UserAuthMixin):
+    """Restore trashed items. Either targets (batch) or notification_id (single)."""
+    targets: list[int] | None = None
+    notification_id: int | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "TrashRestoreRequest":
+        if self.targets is None and self.notification_id is None:
+            raise ValueError("either targets or notification_id must be provided")
+        if self.targets is not None and self.notification_id is not None:
+            raise ValueError("provide either targets or notification_id, not both")
+        return self
+
+
+class TrashDeleteRequest(UserAuthMixin):
+    """Permanently delete trashed items. Either targets (batch) or notification_id (single)."""
+    targets: list[int] | None = None
+    notification_id: int | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "TrashDeleteRequest":
+        if self.targets is None and self.notification_id is None:
+            raise ValueError("either targets or notification_id must be provided")
+        if self.targets is not None and self.notification_id is not None:
+            raise ValueError("provide either targets or notification_id, not both")
+        return self

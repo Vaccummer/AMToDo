@@ -3,34 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    Request,
-    Response,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
 
 from clock import Clock
 from config import AppSettings
 from exceptions import AMToDoError, NotFoundError, ValidationError
-from serialization import attachment_to_dict, changelog_entry_to_dict, schedule_attachment_to_dict, todo_to_dict
-from server.attachment_helpers import (
-    make_attachment_service,
-    unique_targets,
-)
+from serialization import changelog_entry_to_dict, todo_to_dict
+from server.attachment_helpers import unique_targets
 from server.common import target_result as _target_result_helper
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
-    TodoAttachmentGetRequest,
-    TodoAttachmentListRequest,
-    TodoAttachmentRemoveOrphanedRequest,
-    TodoAttachmentRemoveRequest,
-    TodoAttachmentRenameRequest,
     TodoBatchCreateRequest,
     TodoBatchUpdateRequest,
     TodoChangelogQueryRequest,
@@ -40,9 +28,6 @@ from server.schemas import (
     TodoSearchRequest,
     TodoStatsRequest,
     TodoTargetsRequest,
-    TodoTrashDeleteRequest,
-    TodoTrashListRequest,
-    TodoTrashRestoreRequest,
     TodoUpdateRequest,
 )
 from services import TodoDraft, TodoService, TodoUpdate
@@ -217,185 +202,6 @@ def todo_stats(
     }
 
 
-@router.post("/attachments/list")
-def list_attachments(
-    body: TodoAttachmentListRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """List encrypted attachment metadata for a ToDo."""
-
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    attachments = service.list_for_owner(body.todo_id)
-    return {
-        "ok": True,
-        "count": len(attachments),
-        "attachments": [
-            attachment_to_dict(attachment, uow.user_id) for attachment in attachments
-        ],
-    }
-
-
-@router.post("/attachments/get")
-def show_attachment(
-    body: TodoAttachmentGetRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Return encrypted attachment metadata."""
-
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    attachment = service.show(body.todo_id, body.attachment_id)
-    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
-
-
-@router.post("/attachments/remove")
-def remove_attachment(
-    body: TodoAttachmentRemoveRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Remove an attachment from a ToDo."""
-
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    attachment = service.remove(body.todo_id, body.attachment_id)
-    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
-
-
-@router.post("/attachments/rename")
-def rename_attachment(
-    body: TodoAttachmentRenameRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Rename an attachment's display filename."""
-
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    attachment = service.rename(body.todo_id, body.attachment_id, body.filename)
-    return {"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)}
-
-
-@router.put("/attachments/upload")
-async def stream_upload_attachment(request: Request, token: str):
-    """Stream-upload a pre-encrypted cipher file using a one-time upload token."""
-    upload_token_store = request.app.state.upload_token_store
-    settings_obj = request.app.state.settings
-
-    # 1. Validate token
-    tok = upload_token_store.get(token)
-    if not tok:
-        raise HTTPException(404, "Invalid or expired token")
-
-    # 2. Check Content-Length header (fast reject)
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > settings_obj.max_attachment_size_bytes + 32:
-        upload_token_store.pop(token)
-        raise HTTPException(413, "File too large")
-
-    # 3. Stream to temp file with byte counter
-    temp_path = tok.temp_path
-    total = 0
-    try:
-        with open(temp_path, "wb") as f:
-            async for chunk in request.stream():
-                total += len(chunk)
-                if total > settings_obj.max_attachment_size_bytes + 32:
-                    raise HTTPException(413, "File too large")
-                f.write(chunk)
-    except HTTPException:
-        temp_path.unlink(missing_ok=True)
-        upload_token_store.pop(token)
-        raise
-    except Exception:
-        temp_path.unlink(missing_ok=True)
-        upload_token_store.pop(token)
-        raise
-
-    # 4. Finalize -- remove token, keep temp file
-    tok_final = upload_token_store.finalize(token)
-    if not tok_final:
-        temp_path.unlink(missing_ok=True)
-        raise HTTPException(408, "Token expired during upload")
-
-    # 5. Service creates metadata + moves file to final location
-    from clock import SystemClock
-
-    clock = SystemClock()
-    db = request.app.state.db
-
-    with UnitOfWork(db, tok_final.user_id) as uow:
-        svc = make_attachment_service(uow, clock, request, tok_final.owner_type)
-        attachment = svc.create_from_cipher(
-            owner_id=tok_final.owner_id,
-            cipher_path=temp_path,
-            cipher_size=total,
-            filename=tok_final.filename,
-            mime_type=tok_final.mime_type,
-            file_key=tok_final.file_key,
-            hmac_key=tok_final.hmac_key,
-            nonce=tok_final.nonce,
-            plain_size=tok_final.plain_size,
-        )
-        uow.session.flush()
-        dict_fn = attachment_to_dict if tok_final.owner_type == "todo" else schedule_attachment_to_dict
-        result = {"ok": True, "attachment": dict_fn(attachment, uow.user_id)}
-
-    return JSONResponse(result)
-
-
-@router.get("/attachments/{attachment_id}/download")
-async def stream_download_attachment(
-    attachment_id: int,
-    token: str,
-    request: Request,
-):
-    """Stream-download an encrypted attachment using a one-time download token."""
-    download_token_store = request.app.state.download_token_store
-
-    # 1. Validate token
-    tok = download_token_store.get(token)
-    if not tok:
-        raise HTTPException(404, "Invalid or expired token")
-
-    # 2. Resolve attachment
-    from clock import SystemClock
-
-    clock = SystemClock()
-    db = request.app.state.db
-
-    with UnitOfWork(db, tok.user_id) as uow:
-        svc = make_attachment_service(uow, clock, request, tok.owner_type)
-        attachment = svc.show(tok.owner_id, tok.attachment_id)
-        cipher_path = svc.encrypted_path(attachment)
-
-    if not cipher_path.exists():
-        raise HTTPException(404, "File not found")
-
-    # 3. Stream cipher file back
-    safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
-
-    return StreamingResponse(
-        _file_iterator(cipher_path),
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}.enc"',
-            "Content-Length": str(attachment.cipher_size_bytes),
-            "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
-            "X-AMToDo-Updated-At": str(attachment.updated_at),
-        },
-    )
-
-
-def _file_iterator(path: Path, chunk_size: int = 65536):
-    with open(path, "rb") as f:
-        while chunk := f.read(chunk_size):
-            yield chunk
-
-
 @router.post("/create")
 def create_todo(
     body: TodoCreateRequest,
@@ -522,112 +328,6 @@ def remove_todos(
     return {"ok": all(result["ok"] for result in results), "results": results}
 
 
-@router.post("/trash/list")
-def list_deleted_todos(
-    body: TodoTrashListRequest,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """List deleted (trashed) ToDos with search filters."""
-    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-    todos = service.list_deleted(
-        planned_start_at=body.planned_start_at,
-        planned_end_at=body.planned_end_at,
-        due_start_at=body.due_start_at,
-        due_end_at=body.due_end_at,
-        created_start_at=body.created_start_at,
-        created_end_at=body.created_end_at,
-        updated_start_at=body.updated_start_at,
-        updated_end_at=body.updated_end_at,
-        completed=body.completed,
-        priority_min=body.priority_min,
-        priority_max=body.priority_max,
-        tag=body.tag,
-    )
-    from services.search_common import sort_results
-
-    if body.query:
-        from services.search_common import compile_search_query, search_text
-
-        regex = compile_search_query(body.query, use_regex=body.use_regex, ignore_case=body.ignore_case)
-        resolved_fields = set(body.fields) & {"title", "description", "tag"}
-        todos = [t for t in todos if regex.search(search_text(t, resolved_fields))]
-    todos = sort_results(todos, sort_by=body.sort_by, sort_order=body.sort_order, value_fn=_todo_sort_value)
-    if body.after_id is not None:
-        cursor_idx = next((i for i, t in enumerate(todos) if t.id == body.after_id), None)
-        if cursor_idx is not None:
-            todos = todos[cursor_idx + 1:]
-    paged = todos[:body.limit + 1]
-    has_more = len(paged) > body.limit
-    if has_more:
-        paged = paged[:body.limit]
-    return {
-        "ok": True,
-        "total": len(todos),
-        "count": len(paged),
-        "pagination": {
-            "limit": body.limit,
-            "has_more": has_more,
-            "next_cursor": paged[-1].id if has_more and paged else None,
-        },
-        "todos": [todo_to_dict(todo, settings.timezone) for todo in paged],
-    }
-
-
-@router.post("/trash/restore")
-def restore_todos(
-    body: TodoTrashRestoreRequest,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Restore one or more soft-deleted ToDos."""
-    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-    results = [
-        _target_result(
-            target,
-            lambda tid: service.restore(tid),
-            settings.timezone,
-        )
-        for target in unique_targets(body.targets)
-    ]
-    uow.session.flush()
-    return {"ok": all(result["ok"] for result in results), "results": results}
-
-
-@router.post("/trash/delete")
-def purge_todos(
-    body: TodoTrashDeleteRequest,
-    request: Request,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Permanently delete one or more soft-deleted ToDos (with attachments)."""
-    service = TodoService(uow.todos, clock, uow.todo_model, changelog_service=uow.todo_changelog_service)
-    att_svc = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-
-    def _purge_with_attachments(todo_id: int) -> Todo:
-        try:
-            for att in att_svc.list_for_owner(todo_id):
-                att_svc.remove(todo_id, att.id)
-        except NotFoundError:
-            pass  # owner already soft-deleted; skip attachment cleanup
-        return service.purge(todo_id)
-
-    results = [
-        _target_result(
-            target,
-            lambda tid: _purge_with_attachments(tid),
-            settings.timezone,
-        )
-        for target in unique_targets(body.targets)
-    ]
-    uow.session.flush()
-    return {"ok": all(result["ok"] for result in results), "results": results}
-
-
 @router.post("/batch-create")
 def batch_create_todos(
     body: TodoBatchCreateRequest,
@@ -696,20 +396,6 @@ def batch_update_todos(
             })
     uow.session.flush()
     return {"ok": all(r["ok"] for r in results), "results": results}
-
-
-@router.post("/attachments/remove-orphaned")
-def remove_orphaned_attachments(
-    body: TodoAttachmentRemoveOrphanedRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Remove orphaned attachment metadata for a ToDo."""
-
-    service = make_attachment_service(uow, clock, request, "todo", changelog_service=uow.todo_changelog_service)
-    count = service.remove_orphaned(body.todo_id)
-    return {"ok": True, "count": count, "attachments": []}
 
 
 @router.post("/changelog")

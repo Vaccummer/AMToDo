@@ -23,11 +23,13 @@ from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationErro
 from models.user import User
 from serialization import error_to_dict
 from server.admin import router as admin_router
+from server.attachment_routes import router as attachment_router
 from server.notifications import router as notification_router
 from server.notification_ws import router as ws_router
 from server.rate_limit import RateLimitMiddleware, RateLimiter
 from server.schedules import router as schedule_router
 from server.todos import router as todo_router
+from server.trash import router as trash_router
 from server.ui_ws import router as ui_ws_router
 
 
@@ -413,9 +415,11 @@ def create_app(settings: AppSettings) -> FastAPI:
 
     app.include_router(admin_router, prefix="/api/v1")
 
+    app.include_router(attachment_router, prefix="/api/v1")
     app.include_router(todo_router, prefix="/api/v1/todos", tags=["todos"])
     app.include_router(schedule_router, prefix="/api/v1/schedules", tags=["schedules"])
     app.include_router(notification_router, prefix="/api/v1/notifications", tags=["notifications"])
+    app.include_router(trash_router, prefix="/api/v1")
     app.include_router(ws_router, prefix="/api/v1/notifications", tags=["notifications"])
     app.include_router(ui_ws_router, prefix="/api/v1", tags=["ui-ws"])
 

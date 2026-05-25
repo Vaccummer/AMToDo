@@ -381,6 +381,95 @@ class TodoService:
             self._changelog.record_purge(todo_id, before)
         return todo
 
+    def show_deleted(self, todo_id: int) -> Todo:
+        """Return a trashed ToDo by id (must be soft-deleted)."""
+        todo = self._repository.get_including_deleted(todo_id)
+        if todo is None:
+            raise NotFoundError(f"todo #{todo_id} was not found")
+        if todo.deleted_at is None:
+            raise ValidationError(f"todo #{todo_id} is not in trash")
+        return todo
+
+    def update_deleted(self, todo_id: int, update: TodoUpdate) -> Todo:
+        """Update mutable fields of a trashed ToDo."""
+        todo = self.show_deleted(todo_id)
+        before = None
+        if self._changelog:
+            from serialization import todo_to_dict
+            before = todo_to_dict(todo, "UTC")
+        changed = False
+        explicit = update._fields_set
+
+        if explicit:
+            if "title" in explicit:
+                title = update.title.strip() if update.title else ""
+                if not title:
+                    raise ValidationError("todo title cannot be empty")
+                todo.title = title
+                changed = True
+            if "planned_at" in explicit:
+                if update.planned_at is not None and update.planned_at < 0:
+                    raise ValidationError("todo planned_at cannot be negative")
+                todo.planned_at = update.planned_at
+                changed = True
+            if "due_at" in explicit:
+                if update.due_at is not None and update.due_at < 0:
+                    raise ValidationError("todo due_at cannot be negative")
+                todo.due_at = update.due_at
+                changed = True
+            if "description" in explicit:
+                todo.description = update.description
+                changed = True
+            if "priority" in explicit:
+                if update.priority is not None and update.priority < 0:
+                    raise ValidationError("todo priority cannot be negative")
+                todo.priority = update.priority
+                changed = True
+            if "tag" in explicit:
+                todo.tag = update.tag
+                changed = True
+            if "extra_fields" in explicit:
+                todo.extra_fields = update.extra_fields
+                changed = True
+        else:
+            if update.title is not None:
+                title = update.title.strip()
+                if not title:
+                    raise ValidationError("todo title cannot be empty")
+                todo.title = title
+                changed = True
+            if update.planned_at is not None:
+                if update.planned_at < 0:
+                    raise ValidationError("todo planned_at cannot be negative")
+                todo.planned_at = update.planned_at
+                changed = True
+            if update.due_at is not None:
+                if update.due_at < 0:
+                    raise ValidationError("todo due_at cannot be negative")
+                todo.due_at = update.due_at
+                changed = True
+            if update.description is not None:
+                todo.description = update.description
+                changed = True
+            if update.priority is not None:
+                if update.priority < 0:
+                    raise ValidationError("todo priority cannot be negative")
+                todo.priority = update.priority
+                changed = True
+            if update.tag is not None:
+                todo.tag = update.tag
+                changed = True
+            if update.extra_fields is not None:
+                todo.extra_fields = update.extra_fields
+                changed = True
+
+        if changed:
+            todo.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            after = todo_to_dict(todo, "UTC")
+            self._changelog.record_update(todo.id, before, after, list(update._fields_set))
+        return todo
+
     def list_deleted(
         self,
         *,

@@ -19,10 +19,7 @@ from server.schemas import (
     NotificationListRequest,
     NotificationListTriggeredRequest,
     NotificationRemoveRequest,
-    NotificationTrashDeleteRequest,
-    NotificationTrashRestoreRequest,
     NotificationUpdateRequest,
-    UserAuthMixin,
 )
 from services import NotificationDraft, NotificationService, NotificationUpdate
 from services.uow import UnitOfWork
@@ -152,42 +149,6 @@ def list_triggered_notifications(
     return {"ok": True, "count": len(result), "notifications": result}
 
 
-@router.post("/trash/list")
-def list_deleted_notifications(
-    body: UserAuthMixin,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    service = make_notification_service(uow, clock)
-    notifications = service.list_deleted()
-    mentions_map = service.get_mentions_batch([n.id for n in notifications])
-    result = [notification_to_dict(n, mentions_map.get(n.id, [])) for n in notifications]
-    return {"ok": True, "count": len(result), "notifications": result}
-
-
-@router.post("/trash/restore")
-def restore_notification(
-    body: NotificationTrashRestoreRequest,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    service = make_notification_service(uow, clock)
-    service.restore(body.notification_id)
-    return {"ok": True}
-
-
-@router.post("/trash/delete")
-def purge_notification(
-    body: NotificationTrashDeleteRequest,
-    settings: SettingsDep,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    service = make_notification_service(uow, clock)
-    service.purge(body.notification_id)
-    return {"ok": True}
 
 
 

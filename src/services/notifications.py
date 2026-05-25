@@ -216,6 +216,78 @@ class NotificationService:
             self._changelog.record_purge(notification_id, before)
         return notification
 
+    def show_deleted(self, notification_id: int) -> object:
+        """Return a trashed notification by id (must be soft-deleted)."""
+        notification = self._repository.get_including_deleted(notification_id)
+        if notification is None:
+            raise NotFoundError(f"notification #{notification_id} was not found")
+        if notification.deleted_at is None:
+            raise ValidationError(f"notification #{notification_id} is not in trash")
+        return notification
+
+    def update_deleted(self, notification_id: int, update: NotificationUpdate) -> object:
+        """Update mutable fields of a trashed notification."""
+        notification = self.show_deleted(notification_id)
+        before = None
+        if self._changelog:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            before = notification_to_dict(notification, mentions)
+        changed = False
+        explicit = update._fields_set
+
+        if explicit:
+            if "title" in explicit:
+                title = update.title.strip() if update.title else ""
+                if not title:
+                    raise ValidationError("notification title cannot be empty")
+                notification.title = title
+                changed = True
+            if "description" in explicit:
+                notification.description = update.description
+                changed = True
+            if "trigger_at" in explicit:
+                if update.trigger_at is not None and update.trigger_at < 0:
+                    raise ValidationError("trigger_at cannot be negative")
+                notification.trigger_at = update.trigger_at
+                changed = True
+            if "extra_fields" in explicit:
+                notification.extra_fields = update.extra_fields
+                changed = True
+            if "mentions" in explicit and update.mentions is not None:
+                self._replace_mentions(notification.id, update.mentions)
+                changed = True
+        else:
+            if update.title is not None:
+                title = update.title.strip()
+                if not title:
+                    raise ValidationError("notification title cannot be empty")
+                notification.title = title
+                changed = True
+            if update.description is not None:
+                notification.description = update.description
+                changed = True
+            if update.trigger_at is not None:
+                if update.trigger_at < 0:
+                    raise ValidationError("trigger_at cannot be negative")
+                notification.trigger_at = update.trigger_at
+                changed = True
+            if update.extra_fields is not None:
+                notification.extra_fields = update.extra_fields
+                changed = True
+            if update.mentions is not None:
+                self._replace_mentions(notification.id, update.mentions)
+                changed = True
+
+        if changed:
+            notification.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            from serialization import notification_to_dict
+            mentions = self._mention_repo.list_for_notification(notification.id)
+            after = notification_to_dict(notification, mentions)
+            self._changelog.record_update(notification.id, before, after, list(update._fields_set))
+        return notification
+
     def list_between(
         self,
         start_at: int | None = None,

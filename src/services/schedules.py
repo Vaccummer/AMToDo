@@ -315,6 +315,87 @@ class ScheduleService:
             self._changelog.record_purge(schedule_id, before)
         return schedule
 
+    def show_deleted(self, schedule_id: int) -> Schedule:
+        """Return a trashed schedule by id (must be soft-deleted)."""
+        schedule = self._repository.get_including_deleted(schedule_id)
+        if schedule is None:
+            raise NotFoundError(f"schedule #{schedule_id} was not found")
+        if schedule.deleted_at is None:
+            raise ValidationError(f"schedule #{schedule_id} is not in trash")
+        return schedule
+
+    def update_deleted(self, schedule_id: int, update: ScheduleUpdate) -> Schedule:
+        """Update mutable fields of a trashed schedule (no conflict check)."""
+        schedule = self.show_deleted(schedule_id)
+        before = None
+        if self._changelog:
+            from serialization import schedule_to_dict
+            before = schedule_to_dict(schedule)
+        next_start_at = schedule.start_at if update.start_at is None else update.start_at
+        next_end_at = schedule.end_at if update.end_at is None else update.end_at
+        self._validate_window(next_start_at, next_end_at)
+
+        changed = False
+        explicit = update._fields_set
+
+        if explicit:
+            if "title" in explicit:
+                title = update.title.strip() if update.title else ""
+                if not title:
+                    raise ValidationError("schedule title cannot be empty")
+                schedule.title = title
+                changed = True
+            if "start_at" in explicit:
+                schedule.start_at = update.start_at
+                changed = True
+            if "end_at" in explicit:
+                schedule.end_at = update.end_at
+                changed = True
+            if "description" in explicit:
+                schedule.description = update.description
+                changed = True
+            if "location" in explicit:
+                schedule.location = update.location
+                changed = True
+            if "category" in explicit:
+                schedule.category = update.category
+                changed = True
+            if "extra_fields" in explicit:
+                schedule.extra_fields = update.extra_fields
+                changed = True
+        else:
+            if update.title is not None:
+                title = update.title.strip()
+                if not title:
+                    raise ValidationError("schedule title cannot be empty")
+                schedule.title = title
+                changed = True
+            if update.start_at is not None:
+                schedule.start_at = update.start_at
+                changed = True
+            if update.end_at is not None:
+                schedule.end_at = update.end_at
+                changed = True
+            if update.description is not None:
+                schedule.description = update.description
+                changed = True
+            if update.location is not None:
+                schedule.location = update.location
+                changed = True
+            if update.category is not None:
+                schedule.category = update.category
+                changed = True
+            if update.extra_fields is not None:
+                schedule.extra_fields = update.extra_fields
+                changed = True
+
+        if changed:
+            schedule.updated_at = self._clock.now_epoch()
+        if changed and self._changelog and before is not None:
+            after = schedule_to_dict(schedule)
+            self._changelog.record_update(schedule.id, before, after, list(update._fields_set))
+        return schedule
+
     def list_deleted(
         self,
         *,
