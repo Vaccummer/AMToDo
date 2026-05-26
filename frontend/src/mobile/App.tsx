@@ -16,6 +16,7 @@ import { TrashView } from "./views/TrashView";
 import { TodoDetailModal } from "./views/TodoDetailModal";
 import { ScheduleDetailModal } from "./views/ScheduleDetailModal";
 import { NotifyDetailModal } from "./views/NotifyDetailModal";
+import { TrashStyleDemo } from "./views/TrashStyleDemo";
 import gearIcon from "../assets/gear.svg";
 import todoIcon from "../assets/todo.svg";
 import scheduleIcon from "../assets/schedule.svg";
@@ -40,6 +41,14 @@ const shell = window.amtodoShell!;
 
 export function App() {
   applyTheme(getTheme(DEFAULT_THEME));
+
+  const isTrashDemo =
+    new URLSearchParams(window.location.search).has("trash-demo") ||
+    window.location.hash.includes("trash-demo");
+
+  if (isTrashDemo) {
+    return <TrashStyleDemo />;
+  }
 
   const [activeTab, setActiveTab] = useState<Tab>("todo");
   const [previousTab, setPreviousTab] = useState<Tab | null>(null);
