@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 
@@ -32,23 +32,29 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
   }, [options, query]);
 
   // Compute fixed position for portaled panel
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     function updatePosition() {
       const trigger = containerRef.current;
+      const panel = panelRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       const PANEL_MAX = 220;
-      const spaceBelow = window.innerHeight - rect.bottom - 8;
-      const spaceAbove = rect.top - 8;
-      const flip = spaceBelow < PANEL_MAX && spaceAbove > spaceBelow;
+      const GAP = 4;
+      const VIEWPORT_PADDING = 8;
+      const naturalHeight = panel?.scrollHeight || PANEL_MAX;
+      const desiredHeight = Math.min(PANEL_MAX, naturalHeight);
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - VIEWPORT_PADDING);
+      const spaceAbove = Math.max(0, rect.top - VIEWPORT_PADDING);
+      const flip = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+      const panelHeight = Math.min(desiredHeight, flip ? spaceAbove : spaceBelow);
       setPanelStyle({
         position: "fixed",
-        top: flip ? rect.top - 4 - Math.min(PANEL_MAX, spaceAbove) : rect.bottom + 4,
+        top: flip ? rect.top - GAP - panelHeight : rect.bottom + GAP,
         left: rect.left,
         width: rect.width,
         zIndex: 10000,
-        maxHeight: flip ? Math.min(PANEL_MAX, spaceAbove) : Math.min(PANEL_MAX, spaceBelow),
+        maxHeight: panelHeight,
       });
     }
     updatePosition();
@@ -58,7 +64,7 @@ export function Dropdown({ value, options, onChange, id, searchable }: Props) {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, filtered.length, searchable]);
 
   useEffect(() => {
     if (!open) return;
