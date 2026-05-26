@@ -228,33 +228,6 @@ function JumpIcon() {
   );
 }
 
-function CalendarIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function TagIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </svg>
-  );
-}
-
-function IdIcon() {
-  return (
-    <svg className="ms-id-icon" viewBox="0 0 1024 1024" aria-hidden="true">
-      <path d="M933.933489 392.327772a38.459877 38.459877 0 0 0 38.35759-38.35759 38.459877 38.459877 0 0 0-38.35759-38.35759h-205.187534L757.488576 42.813412A38.613307 38.613307 0 0 0 723.171318 0.210916 38.562164 38.562164 0 0 0 680.773396 34.732747l-29.151769 280.879845H413.395422l28.486904-272.79918A38.562164 38.562164 0 0 0 407.769642 0.210916a38.562164 38.562164 0 0 0-42.142205 34.317257l-29.407486 281.084419H90.066511a38.459877 38.459877 0 0 0-38.35759 38.35759 38.51102 38.51102 0 0 0 38.35759 38.35759h238.175062l-24.958006 238.635352H90.066511a38.35759 38.35759 0 1 0 0 76.71518h205.187534L266.511424 980.477484a38.35759 38.35759 0 1 0 76.71518 8.080665l29.356342-280.879845h238.226206l-28.486904 272.79918a38.35759 38.35759 0 1 0 76.254889 8.080665l29.407486-280.879845h245.948866a38.35759 38.35759 0 0 0 0-76.71518h-238.175062l24.958006-238.635352z m-315.299389 238.635352H380.407895l24.958005-238.635352h238.226205z" fill="#00C080" />
-    </svg>
-  );
-}
 
 function BellIcon() {
   return (
@@ -303,16 +276,18 @@ function dateRangeParams(startDate: string, endDate: string): [number | null, nu
 function formatEpoch(epoch: number | null): string {
   if (epoch === null) return "";
   const d = new Date(epoch * 1000);
-  const nowYear = new Date().getFullYear();
+  const now = new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   const hours = String(d.getHours()).padStart(2, "0");
   const minutes = String(d.getMinutes()).padStart(2, "0");
-  if (year === nowYear) {
+  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (isToday) {
     return `${month}/${day} ${hours}:${minutes}`;
   }
-  return `${year}/${month}/${day} ${hours}:${minutes}`;
+  const yy = String(year).slice(2);
+  return `${yy}/${month}/${day} ${hours}:${minutes}`;
 }
 
 function formatNotifyTime(epoch: number | null): string {
@@ -1055,36 +1030,38 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     )}
                   </div>
 
-                  {todo.description ? (
-                    <div className="ms-card-desc">{todo.description}</div>
-                  ) : null}
-
                   <div className="ms-card-meta">
-                    <span className="ms-card-meta-item ms-card-meta-item--due">
-                      <CalendarIcon />
-                      <span>{todo.due_at !== null ? formatEpoch(todo.due_at) : "无截止时间"}</span>
-                    </span>
-                    <span className="ms-card-meta-item ms-card-meta-item--id">
-                      <span>🆔</span>
-                      <span>{todo.id}</span>
-                    </span>
-                    {todo.attachment_count ? (
-                      <span className="ms-card-meta-item ms-card-meta-item--attach">
-                        <span>📂</span>
-                        <span>{todo.attachment_count}</span>
-                      </span>
+                    <span className="ms-card-meta-item ms-card-meta-item--id">No.{todo.id}</span>
+                    {(todo.attachment_count ?? 0) > 0 ? (
+                      <span className="ms-card-meta-item ms-card-meta-item--attach">🔗 {todo.attachment_count}</span>
                     ) : null}
                     {todo.tag ? (
                       <span className="ms-card-meta-item ms-card-meta-item--tag">
-                        <TagIcon />
+                        <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor" style={{ flexShrink: 0 }}>
+                          <path d="M745.0624 123.1872H252.928a108.8512 108.8512 0 0 0-108.8512 108.8512v612.3008a83.456 83.456 0 0 0 131.6352 68.1472L445.44 792.6272a108.8 108.8 0 0 1 128.3072 1.8944l146.7904 110.4896a83.456 83.456 0 0 0 133.632-66.56V232.0384a108.8512 108.8512 0 0 0-109.1072-108.8512z m-118.6304 169.984H371.5584a30.72 30.72 0 0 1 0-61.44h254.8736a30.72 30.72 0 0 1 0 61.44z" />
+                        </svg>
                         <span>{todo.tag}</span>
                       </span>
                     ) : null}
                   </div>
 
-                  {(todo.completed || cardStatus.className === "done" || cardStatus.className === "late-done") && todo.completed_at ? (
-                    <div className="ms-card-completed">完成于 {formatEpoch(todo.completed_at)}</div>
-                  ) : null}
+                  <div className="ms-card-dates">
+                    <span className={`ms-card-date-item${!todo.completed && todo.due_at !== null && todo.due_at < Math.floor(Date.now() / 1000) ? " ms-card-date-item--overdue" : ""}`}>
+                      <svg width="14" height="14" viewBox="0 0 1024 1024" fill="currentColor" className="ms-card-date-icon">
+                        <path d="M931.7 63.87c20.6 0 37.32 16.57 37.47 37.17 0.12 20.4-16.32 37.05-36.72 37.17h-75.38v102.11c0 118.75-74.64 220.34-182.87 271.39 108.23 50.53 182.87 152.64 182.87 271.39v102.11h74.64c20.53 0 37.17 16.64 37.17 37.17s-16.64 37.17-37.17 37.17H110.5l-6.72-0.6c-20.25-3.1-34.16-22.03-31.06-42.28 2.84-18.58 19.14-32.1 37.93-31.47h75.24V783.11c0-118.75 74.57-220.34 182.87-271.39-108.3-50.53-182.87-152.64-182.87-271.39V138.21h-75.24c-20.53 0-37.17-16.64-37.17-37.17s16.64-37.17 37.17-37.17H931.7z m-149.29 74.34H260.3V239.8c0 88.45 55.76 169.81 141.59 210.71 25.98 13.66 40.83 37.47 40.83 61.21 0.75 27-15.62 51.53-40.83 61.21-85.31 40.9-141.59 122.26-141.52 210.71V886.2h41.57v-43.29c0-79.87 29.41-167.42 120.62-220.64l14.93-8.14c34.04-14.7 61.95-45.83 83.67-93.3 17.17 43.96 46.28 75.09 87.48 93.3 111.96 57.85 129.65 144.8 129.65 228.77v43.29h44.11V784.15c0-88.45-55.68-169.81-141.52-210.79-25.97-13.66-40.83-37.4-40.83-61.21 0-27.24 14.85-50.98 40.83-61.13 85.31-40.83 141.52-122.19 141.52-210.71v-102.1z m-51.87 149.58c0 48.52-59.71 102.86-115.39 125.92-33.29 13.81-64.64 39.78-93.97 77.93-27.77-38.14-58.22-64.12-91.14-77.92-59.49-24.93-110.39-74.86-110.39-125.92h410.89z" />
+                      </svg>
+                      <span className="ms-card-date-text">{todo.due_at !== null ? formatEpoch(todo.due_at) : "--/--"}</span>
+                    </span>
+                    {todo.completed_at ? (
+                      <span className="ms-card-date-item">
+                        <svg width="14" height="14" viewBox="0 0 1024 1024" fill="currentColor" className="ms-card-date-icon">
+                          <path d="M729.55904 123.28448V56.8576H293.2736v66.42688H56.8576v758.57408c0 46.99136 38.29248 85.27872 85.28384 85.27872h739.71712c46.99136 0 85.27872-38.29248 85.27872-85.27872V123.28448h-237.57824z m-379.42784-9.5744h322.28864v94.85824H350.1312V113.71008z m560.15872 768.14848a28.48256 28.48256 0 0 1-28.43136 28.43136H142.14144a28.47744 28.47744 0 0 1-28.43136-28.43136V180.14208H293.2736v85.28384h436.28544V180.14208h180.73088v701.71648z" />
+                          <path d="M236.70784 726.94784h550.00064v56.8576H236.70784v-56.8576z m479.80032-292.68992l-63.24224-70.49216-176.95232 158.67392-103.84384-102.97856-66.71872 67.3024 167.08608 165.92896 243.67104-218.43456z" />
+                        </svg>
+                        <span className="ms-card-date-text">{formatEpoch(todo.completed_at)}</span>
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               );
             }
@@ -1126,7 +1103,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                       <div className="ms-card-schedule-body">
                         <div className="ms-card-schedule-header">
                           <div className="ms-card-title" onDoubleClick={() => beginRename(result)}>{schedule.title}</div>
-                          <span className="ms-card-schedule-id">🆔 {schedule.id}</span>
+                          <span className="ms-card-schedule-id">No.{schedule.id}</span>
                         </div>
                         <div className="ms-card-schedule-time-row">
                           <span className="ms-card-schedule-time-label">起</span>
@@ -1137,14 +1114,14 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                           <span className="ms-card-schedule-time-value">{formatScheduleDate(schedule.end_at)}</span>
                         </div>
                         <div className="ms-card-schedule-footer">
+                          {schedule.location ? (
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--loc"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M511.744 68.267c-173.517 0-314.027 136.311-314.778 305.937 0 60.911 18.125 118.903 51.763 168.465l3.294 4.693 1.911 3.174 1.57 2.39c1.058 1.553 2.185 3.038 3.448 4.506l.785.853 200.175 232.823a68.267 68.267 0 00103.646-.17L762.641 558.08l-1.314 1.451a50.347 50.347 0 005.342-6.622l1.536-2.355c.631-.99 1.86-3.072 1.826-3.004 35.294-49.323 55.091-109.431 55.825-172.783C825.856 204.954 684.971 68.267 511.744 68.267zm0 68.267c135.97 0 245.845 106.598 245.845 237.824a235.4 235.4 0 01-43.981 134.775l-2.953 4.676-198.997 232.79-200.192-232.824-1.929-3.191-.99-1.451a230.23 230.23 0 01-43.315-134.775C265.83 242.859 375.415 136.533 511.744 136.533z" fill="#444"/><path d="M783.804 714.735a34.133 34.133 0 0145.244 10.018l1.434 2.253 73.387 125.73a68.267 68.267 0 01-54.784 102.554l-4.557.12-666.044-3.636a68.267 68.267 0 01-60.655-98.85l2.133-3.943 69.94-119.262a34.133 34.133 0 0160.16 32.171l-1.263 2.355-69.94 119.262 666.044 3.635-73.387-125.73a34.133 34.133 0 0112.288-46.677z" fill="#444"/><path d="M512 243.951a136.533 136.533 0 100 273.067 136.533 136.533 0 000-273.067zm0 68.267a68.267 68.267 0 110 136.533 68.267 68.267 0 010-136.533z" fill="#00B386"/></svg>{schedule.location}</span>
+                          ) : null}
                           {schedule.attachment_count ? (
-                            <span className="ms-card-schedule-chip ms-card-schedule-chip--attach">📂 {schedule.attachment_count}</span>
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--attach">🔗 {schedule.attachment_count}</span>
                           ) : null}
                           {schedule.category ? (
-                            <span className="ms-card-schedule-chip ms-card-schedule-chip--cat">🏷 {schedule.category}</span>
-                          ) : null}
-                          {schedule.location ? (
-                            <span className="ms-card-schedule-chip ms-card-schedule-chip--loc">📍 {schedule.location}</span>
+                            <span className="ms-card-schedule-chip ms-card-schedule-chip--cat"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M745.062 123.187H252.928a108.851 108.851 0 00-108.851 108.851v612.301a83.456 83.456 0 00131.635 68.147l169.728-119.872a108.8 108.8 0 01128.307 1.894l146.791 110.49a83.456 83.456 0 00133.632-66.56V232.038a108.851 108.851 0 00-109.107-108.851zm-118.63 169.984H371.558a30.72 30.72 0 010-61.44h254.874a30.72 30.72 0 010 61.44z" fill="#505587"/></svg> {schedule.category}</span>
                           ) : null}
                         </div>
                       </div>
