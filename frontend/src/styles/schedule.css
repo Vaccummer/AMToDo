@@ -816,62 +816,123 @@
   background: #4ade80;
 }
 
-/* Today Summary inside agenda panel */
-.today-summary {
+/* Today Summary Banner */
+.ts-banner {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(229, 223, 215, 0.3);
+  padding: 10px 16px;
+  background: #fff;
+  border: none;
+  border-bottom: 1px solid rgba(229, 223, 215, 0.4);
 }
 
-.ts-left {
+.ts-banner-ongoing {
+  background: linear-gradient(135deg, rgba(26, 127, 114, 0.08), rgba(100, 220, 210, 0.04));
+}
+
+.ts-banner-next-schedule {
+  background: linear-gradient(135deg, rgba(74, 111, 165, 0.06), rgba(74, 111, 165, 0.02));
+}
+
+.ts-banner-next-notify {
+  background: linear-gradient(135deg, rgba(192, 125, 58, 0.06), rgba(192, 125, 58, 0.02));
+}
+
+.ts-banner-empty {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ts-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
 }
 
-.ts-count {
-  font-size: 20px;
-  font-weight: 800;
-  color: #1a7f72;
-  line-height: 1;
-}
+.ts-banner-ongoing .ts-banner-icon { background: rgba(26, 127, 114, 0.12); }
+.ts-banner-next-schedule .ts-banner-icon { background: rgba(74, 111, 165, 0.1); }
+.ts-banner-next-notify .ts-banner-icon { background: rgba(192, 125, 58, 0.1); }
+.ts-banner-empty .ts-banner-icon { background: rgba(180, 170, 160, 0.08); }
 
-.ts-label {
-  font-size: 11px;
-  color: #9a8f85;
-}
-
-.ts-divider {
-  width: 1px;
-  height: 22px;
-  background: rgba(229, 223, 215, 0.4);
-}
-
-.ts-next {
+.ts-banner-body {
   flex: 1;
   min-width: 0;
 }
 
-.ts-next-label {
+.ts-banner-tag {
   font-size: 9px;
   font-weight: 700;
-  color: #b5aea5;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  display: inline-block;
+  margin-bottom: 3px;
 }
 
-.ts-next-title {
-  font-size: 12px;
+.ts-banner-ongoing .ts-banner-tag { color: #1a7f72; background: rgba(26, 127, 114, 0.1); }
+.ts-banner-next-schedule .ts-banner-tag { color: #4a6fa5; background: rgba(74, 111, 165, 0.1); }
+.ts-banner-next-notify .ts-banner-tag { color: #c07d3a; background: rgba(192, 125, 58, 0.1); }
+.ts-banner-empty .ts-banner-tag { color: #b5aea5; background: rgba(180, 170, 160, 0.08); }
+
+.ts-banner-title {
+  font-size: 13px;
   font-weight: 600;
   color: #342f2a;
-  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ts-next-time {
+.ts-banner-empty .ts-banner-title {
+  color: #b5aea5;
+  font-weight: 500;
+}
+
+.ts-banner-meta {
   font-size: 10px;
   color: #9a8f85;
+  margin-top: 1px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ts-banner-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ts-banner-loc-icon svg,
+.ts-banner-cat-icon svg {
+  flex-shrink: 0;
+}
+
+.ts-banner-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ts-banner-count-num {
+  font-size: 18px;
+  font-weight: 800;
+  color: #9a8f85;
+  line-height: 1;
+}
+
+.ts-banner-count-label {
+  font-size: 9px;
+  color: #b5aea5;
+  font-weight: 600;
+  margin-top: 2px;
 }
 
 /* Time-of-day blocks */
@@ -963,6 +1024,15 @@
   transform: scale(0.98);
 }
 
+.schedule-agenda-card.ongoing {
+  background: linear-gradient(135deg, rgba(26, 127, 114, 0.06) 0%, rgba(100, 220, 210, 0.04) 100%);
+}
+
+.schedule-agenda-card.ongoing .event-time {
+  color: #1a7f72;
+  font-weight: 700;
+}
+
 .schedule-agenda-card-color {
   width: 4px;
   border-radius: 2px;
@@ -1024,7 +1094,7 @@
 .event-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 2px;
 }
 
@@ -1041,6 +1111,50 @@
   border-radius: 4px;
   background: #ede5d8;
   color: #624c10;
+}
+
+.schedule-id-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(74, 111, 165, 0.1);
+  color: #4a6fa5;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.schedule-location-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(120, 120, 120, 0.1);
+  color: #555;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.schedule-attach-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(192, 125, 58, 0.1);
+  color: #c07d3a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.schedule-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(100, 220, 210, 0.12);
+  color: #1a7f72;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* Notify card — single-line compact layout */

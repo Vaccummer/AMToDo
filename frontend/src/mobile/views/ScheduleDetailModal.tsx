@@ -259,7 +259,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">{t("schedule.detail")}<span className="schedule-modal-id-badge">#{schedule.id}</span></h2>
+            <h2 className="schedule-modal-title">{t("schedule.detail")}<span className="schedule-modal-id-badge">No.{schedule.id}</span></h2>
           </div>
           <button
             type="button"

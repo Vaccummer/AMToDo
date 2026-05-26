@@ -1060,11 +1060,38 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
     [selectedDayItems]
   );
 
-  const nextUpItem = useMemo(() => {
+  type SummaryState =
+    | { kind: "ongoing"; item: ScheduleItem }
+    | { kind: "next-schedule"; item: ScheduleItem; remaining: number }
+    | { kind: "next-notify"; item: NotificationItem; remaining: number }
+    | { kind: "empty" };
+
+  const summaryState = useMemo((): SummaryState => {
     const now = Math.floor(Date.now() / 1000);
-    return selectedDayItems.find(
+
+    // Check for ongoing schedule
+    const ongoingEntry = selectedDayItems.find(
+      (e) => e.type === "schedule" && (e.item as ScheduleItem).start_at <= now && now < (e.item as ScheduleItem).end_at
+    );
+    if (ongoingEntry) return { kind: "ongoing", item: ongoingEntry.item as ScheduleItem };
+
+    // Check for next schedule
+    const scheduleEntries = selectedDayItems.filter(
       (e) => e.type === "schedule" && (e.item as ScheduleItem).start_at >= now
-    )?.item as ScheduleItem | undefined;
+    );
+    if (scheduleEntries.length > 0) {
+      return { kind: "next-schedule", item: scheduleEntries[0].item as ScheduleItem, remaining: scheduleEntries.length };
+    }
+
+    // Check for next notification
+    const notifyEntries = selectedDayItems.filter(
+      (e) => e.type === "notify" && (e.item as NotificationItem).trigger_at >= now
+    );
+    if (notifyEntries.length > 0) {
+      return { kind: "next-notify", item: notifyEntries[0].item as NotificationItem, remaining: notifyEntries.length };
+    }
+
+    return { kind: "empty" };
   }, [selectedDayItems]);
 
   function handleFabClick() {
@@ -1167,26 +1194,45 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
         ) : (
           <>
             {/* Today Summary */}
-            <div className="today-summary">
-              <div className="ts-left">
-                <span className="ts-count">{selectedDayItems.length}</span>
-                <span className="ts-label">{locale === "en" ? "events" : "个安排"}</span>
+            <div className={`ts-banner ts-banner-${summaryState.kind}`}>
+              <div className="ts-banner-icon">
+                {summaryState.kind === "ongoing" && <svg width="18" height="18" viewBox="0 0 24 24" fill="#1a7f72"><polygon points="6,3 20,12 6,21"/></svg>}
+                {summaryState.kind === "next-schedule" && "→"}
+                {summaryState.kind === "next-notify" && "🔔"}
+                {summaryState.kind === "empty" && "✓"}
               </div>
-              <div className="ts-divider" />
-              <div className="ts-next">
-                {nextUpItem ? (
+              <div className="ts-banner-body">
+                <span className="ts-banner-tag">
+                  {summaryState.kind === "ongoing" && (locale === "en" ? "In Progress" : "进行中")}
+                  {summaryState.kind === "next-schedule" && (locale === "en" ? "Next up" : "下一个")}
+                  {summaryState.kind === "next-notify" && (locale === "en" ? "Next reminder" : "下一个提醒")}
+                  {summaryState.kind === "empty" && (locale === "en" ? "Done" : "已完成")}
+                </span>
+                {summaryState.kind !== "empty" ? (
                   <>
-                    <span className="ts-next-label">{locale === "en" ? "Next up" : "下一个"}</span>
-                    <div className="ts-next-title">{nextUpItem.title}</div>
-                    <span className="ts-next-time">
-                      {formatTimeShort(nextUpItem.start_at)}
-                      {nextUpItem.location ? ` · ${nextUpItem.location}` : ""}
-                    </span>
+                    <div className="ts-banner-title">{summaryState.item.title}</div>
+                    <div className="ts-banner-meta">
+                      {summaryState.kind === "ongoing" || summaryState.kind === "next-schedule" ? (
+                        <>
+                          <span>🕐 {formatTimeShort((summaryState.item as ScheduleItem).start_at)} — {formatTimeShort((summaryState.item as ScheduleItem).end_at)}</span>
+                          {(summaryState.item as ScheduleItem).location ? <span className="ts-banner-loc-icon"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M511.744 68.267c-173.517 0-314.027 136.311-314.778 305.937 0 60.911 18.125 118.903 51.763 168.465l3.294 4.693 1.911 3.174 1.57 2.39c1.058 1.553 2.185 3.038 3.448 4.506l.785.853 200.175 232.823a68.267 68.267 0 00103.646-.17L762.641 558.08l-1.314 1.451a50.347 50.347 0 005.342-6.622l1.536-2.355c.631-.99 1.86-3.072 1.826-3.004 35.294-49.323 55.091-109.431 55.825-172.783C825.856 204.954 684.971 68.267 511.744 68.267zm0 68.267c135.97 0 245.845 106.598 245.845 237.824a235.4 235.4 0 01-43.981 134.775l-2.953 4.676-198.997 232.79-200.192-232.824-1.929-3.191-.99-1.451a230.23 230.23 0 01-43.315-134.775C265.83 242.859 375.415 136.533 511.744 136.533z" fill="#444"/><path d="M783.804 714.735a34.133 34.133 0 0145.244 10.018l1.434 2.253 73.387 125.73a68.267 68.267 0 01-54.784 102.554l-4.557.12-666.044-3.636a68.267 68.267 0 01-60.655-98.85l2.133-3.943 69.94-119.262a34.133 34.133 0 0160.16 32.171l-1.263 2.355-69.94 119.262 666.044 3.635-73.387-125.73a34.133 34.133 0 0112.288-46.677z" fill="#444"/><path d="M512 243.951a136.533 136.533 0 100 273.067 136.533 136.533 0 000-273.067zm0 68.267a68.267 68.267 0 110 136.533 68.267 68.267 0 010-136.533z" fill="#00B386"/></svg>{(summaryState.item as ScheduleItem).location}</span> : null}
+                          {(summaryState.item as ScheduleItem).category ? <span className="ts-banner-cat-icon"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M745.062 123.187H252.928a108.851 108.851 0 00-108.851 108.851v612.301a83.456 83.456 0 00131.635 68.147l169.728-119.872a108.8 108.8 0 01128.307 1.894l146.791 110.49a83.456 83.456 0 00133.632-66.56V232.038a108.851 108.851 0 00-109.107-108.851zm-118.63 169.984H371.558a30.72 30.72 0 010-61.44h254.874a30.72 30.72 0 010 61.44z" fill="#505587"/></svg>{(summaryState.item as ScheduleItem).category}</span> : null}
+                        </>
+                      ) : (
+                        <span>🔔 {formatTimeShort((summaryState.item as NotificationItem).trigger_at)}</span>
+                      )}
+                    </div>
                   </>
                 ) : (
-                  <span className="ts-next-label">{locale === "en" ? "No upcoming events" : "没有即将到来的安排"}</span>
+                  <div className="ts-banner-title">{locale === "en" ? "No upcoming events" : "今天的安排已结束"}</div>
                 )}
               </div>
+              {summaryState.kind !== "empty" && summaryState.kind !== "ongoing" ? (
+                <div className="ts-banner-count">
+                  <span className="ts-banner-count-num">{summaryState.remaining}</span>
+                  <span className="ts-banner-count-label">{summaryState.kind === "next-notify" ? (locale === "en" ? "reminders" : "个提醒") : (locale === "en" ? "left" : "个待办")}</span>
+                </div>
+              ) : null}
             </div>
 
             {/* Time-of-day blocks */}
@@ -1211,7 +1257,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                         const item = entry.item as ScheduleItem;
                         return (
                           <div
-                            className="schedule-agenda-card"
+                            className={`schedule-agenda-card${item.start_at <= Math.floor(Date.now() / 1000) && Math.floor(Date.now() / 1000) < item.end_at ? " ongoing" : ""}`}
                             key={`s-${item.id}`}
                             onClick={() => handleScheduleClick(item)}
                             onDoubleClick={() => openScheduleDetail(item.id)}
@@ -1225,15 +1271,17 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                             <div className="schedule-agenda-card-body">
                               <div className="event-top">
                                 <span className="event-time">{formatTimeShort(item.start_at)} — {formatTimeShort(item.end_at)}</span>
-                                {item.category ? <span className="event-tag">{item.category}</span> : null}
                               </div>
                               <div className="schedule-agenda-card-title">{item.title}</div>
                               <div className="schedule-agenda-card-meta">
                                 {item.location ? (
-                                  <>
-                                    <svg className="schedule-agenda-card-meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                    {item.location}
-                                  </>
+                                  <span className="schedule-location-text"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M511.744 68.267c-173.517 0-314.027 136.311-314.778 305.937 0 60.911 18.125 118.903 51.763 168.465l3.294 4.693 1.911 3.174 1.57 2.39c1.058 1.553 2.185 3.038 3.448 4.506l.785.853 200.175 232.823a68.267 68.267 0 00103.646-.17L762.641 558.08l-1.314 1.451a50.347 50.347 0 005.342-6.622l1.536-2.355c.631-.99 1.86-3.072 1.826-3.004 35.294-49.323 55.091-109.431 55.825-172.783C825.856 204.954 684.971 68.267 511.744 68.267zm0 68.267c135.97 0 245.845 106.598 245.845 237.824a235.4 235.4 0 01-43.981 134.775l-2.953 4.676-198.997 232.79-200.192-232.824-1.929-3.191-.99-1.451a230.23 230.23 0 01-43.315-134.775C265.83 242.859 375.415 136.533 511.744 136.533z" fill="#444"/><path d="M783.804 714.735a34.133 34.133 0 0145.244 10.018l1.434 2.253 73.387 125.73a68.267 68.267 0 01-54.784 102.554l-4.557.12-666.044-3.636a68.267 68.267 0 01-60.655-98.85l2.133-3.943 69.94-119.262a34.133 34.133 0 0160.16 32.171l-1.263 2.355-69.94 119.262 666.044 3.635-73.387-125.73a34.133 34.133 0 0112.288-46.677z" fill="#444"/><path d="M512 243.951a136.533 136.533 0 100 273.067 136.533 136.533 0 000-273.067zm0 68.267a68.267 68.267 0 110 136.533 68.267 68.267 0 010-136.533z" fill="#00B386"/></svg>{item.location}</span>
+                                ) : null}
+                                {item.attachment_count ? (
+                                  <span className="schedule-attach-pill">🔗 {item.attachment_count}</span>
+                                ) : null}
+                                {item.category ? (
+                                  <span className="schedule-cat-pill"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M745.062 123.187H252.928a108.851 108.851 0 00-108.851 108.851v612.301a83.456 83.456 0 00131.635 68.147l169.728-119.872a108.8 108.8 0 01128.307 1.894l146.791 110.49a83.456 83.456 0 00133.632-66.56V232.038a108.851 108.851 0 00-109.107-108.851zm-118.63 169.984H371.558a30.72 30.72 0 010-61.44h254.874a30.72 30.72 0 010 61.44z" fill="#505587"/></svg> {item.category}</span>
                                 ) : null}
                               </div>
                             </div>

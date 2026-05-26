@@ -282,7 +282,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
         <div className="schedule-modal-header">
           <div className="schedule-modal-header-left">
             <span className="schedule-modal-dot" />
-            <h2 className="schedule-modal-title">{isEdit ? t("notify.editNotification") : t("notify.createNotification")}{isEdit && editId != null && <span className="notify-modal-id-badge">#{editId}</span>}</h2>
+            <h2 className="schedule-modal-title">{isEdit ? "通知详情" : t("notify.createNotification")}{isEdit && editId != null && <span className="notify-modal-id-badge">No.{editId}</span>}</h2>
           </div>
           <button
             type="button"
