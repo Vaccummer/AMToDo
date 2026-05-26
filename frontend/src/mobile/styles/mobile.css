@@ -618,10 +618,6 @@
   font-size: 14px;
 }
 
-.mobile-shell .todo-due {
-  font-size: 11px;
-}
-
 .mobile-shell .todo-content {
   display: flex;
   flex-direction: column;
@@ -639,8 +635,26 @@
   min-width: 0;
 }
 
-.mobile-shell .todo-line1 .todo-due {
+.mobile-shell .todo-line1 .todo-due,
+.mobile-shell .todo-line2 .todo-completed-date {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  width: 7.5em;
+  justify-content: flex-end;
+  font-size: 11px;
+}
+
+.mobile-shell .todo-date-icon {
+  flex-shrink: 0;
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+
+.mobile-shell .todo-date-text {
+  display: inline-block;
+  width: 3.2em;
+  text-align: left;
 }
 
 .mobile-shell .todo-line2 {
@@ -652,10 +666,8 @@
 .mobile-shell .todo-line2 .todo-row2 {
   flex: 1;
   min-width: 0;
-}
-
-.mobile-shell .todo-line2 .todo-completed-date {
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .mobile-shell .todo-row2 {
@@ -666,8 +678,41 @@
   font-size: 11px;
 }
 
-.mobile-shell .todo-meta-tag {
+.mobile-shell .todo-id-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(74, 111, 165, 0.1);
+  color: #4a6fa5;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mobile-shell .todo-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(100, 220, 210, 0.12);
+  color: #1a7f72;
+  font-size: 11px;
+  font-weight: 600;
   max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-shell .todo-attach-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(192, 125, 58, 0.1);
+  color: #c07d3a;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* ── Swipe to Delete ── */

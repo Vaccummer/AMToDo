@@ -67,7 +67,7 @@ function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t:
 }
 
 function dueLabel(epoch: number | null, timezone?: string): string {
-  return epoch != null ? formatDateShort(epoch, timezone) : "--";
+  return epoch != null ? formatDateShort(epoch, timezone) : "--/--";
 }
 
 function completedLabel(epoch: number | null, timezone?: string): string {
@@ -464,22 +464,33 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                       <div className="todo-line1">
                         <span className="todo-label">{todo.title}</span>
                         <span className={`todo-due${todo.due_at != null && !todo.completed && todo.due_at < Math.floor(Date.now() / 1000) ? " overdue" : ""}`}>
-                          {dueLabel(todo.due_at)}
+                          <svg width="14" height="14" viewBox="0 0 1024 1024" fill="currentColor" className="todo-date-icon">
+                            <path d="M931.7 63.87c20.6 0 37.32 16.57 37.47 37.17 0.12 20.4-16.32 37.05-36.72 37.17h-75.38v102.11c0 118.75-74.64 220.34-182.87 271.39 108.23 50.53 182.87 152.64 182.87 271.39v102.11h74.64c20.53 0 37.17 16.64 37.17 37.17s-16.64 37.17-37.17 37.17H110.5l-6.72-0.6c-20.25-3.1-34.16-22.03-31.06-42.28 2.84-18.58 19.14-32.1 37.93-31.47h75.24V783.11c0-118.75 74.57-220.34 182.87-271.39-108.3-50.53-182.87-152.64-182.87-271.39V138.21h-75.24c-20.53 0-37.17-16.64-37.17-37.17s16.64-37.17 37.17-37.17H931.7z m-149.29 74.34H260.3V239.8c0 88.45 55.76 169.81 141.59 210.71 25.98 13.66 40.83 37.47 40.83 61.21 0.75 27-15.62 51.53-40.83 61.21-85.31 40.9-141.59 122.26-141.52 210.71V886.2h41.57v-43.29c0-79.87 29.41-167.42 120.62-220.64l14.93-8.14c34.04-14.7 61.95-45.83 83.67-93.3 17.17 43.96 46.28 75.09 87.48 93.3 111.96 57.85 129.65 144.8 129.65 228.77v43.29h44.11V784.15c0-88.45-55.68-169.81-141.52-210.79-25.97-13.66-40.83-37.4-40.83-61.21 0-27.24 14.85-50.98 40.83-61.13 85.31-40.83 141.52-122.19 141.52-210.71v-102.1z m-51.87 149.58c0 48.52-59.71 102.86-115.39 125.92-33.29 13.81-64.64 39.78-93.97 77.93-27.77-38.14-58.22-64.12-91.14-77.92-59.49-24.93-110.39-74.86-110.39-125.92h410.89z" />
+                          </svg>
+                          <span className="todo-date-text">{dueLabel(todo.due_at)}</span>
                         </span>
                       </div>
                       <div className="todo-line2">
                         <div className="todo-row2">
-                          <span className="todo-meta-item">🆔 {todo.id}</span>
-                          <span className="todo-meta-sep">·</span>
-                          <span className="todo-meta-item">🔗 {todo.attachment_count ?? 0}</span>
+                          <span className="todo-meta-item todo-attach-pill">🔗 {todo.attachment_count ?? 0}</span>
                           {todo.tag ? (
-                            <>
-                              <span className="todo-meta-sep">·</span>
-                              <span className="todo-meta-item todo-meta-tag">🏷 {todo.tag}</span>
-                            </>
+                            <span className="todo-meta-item todo-tag-pill">
+                              <svg width="12" height="12" viewBox="0 0 1024 1024" fill="currentColor" style={{ verticalAlign: "-1px", marginRight: 2 }}>
+                                <path d="M745.0624 123.1872H252.928a108.8512 108.8512 0 0 0-108.8512 108.8512v612.3008a83.456 83.456 0 0 0 131.6352 68.1472L445.44 792.6272a108.8 108.8 0 0 1 128.3072 1.8944l146.7904 110.4896a83.456 83.456 0 0 0 133.632-66.56V232.0384a108.8512 108.8512 0 0 0-109.1072-108.8512z m-118.6304 169.984H371.5584a30.72 30.72 0 0 1 0-61.44h254.8736a30.72 30.72 0 0 1 0 61.44z" />
+                              </svg>
+                              {todo.tag}
+                            </span>
                           ) : null}
                         </div>
-                        <span className="todo-completed-date">{completedLabel(todo.completed_at)}</span>
+                        {completedLabel(todo.completed_at) ? (
+                          <span className="todo-completed-date">
+                            <svg width="14" height="14" viewBox="0 0 1024 1024" fill="currentColor" className="todo-date-icon">
+                              <path d="M729.55904 123.28448V56.8576H293.2736v66.42688H56.8576v758.57408c0 46.99136 38.29248 85.27872 85.28384 85.27872h739.71712c46.99136 0 85.27872-38.29248 85.27872-85.27872V123.28448h-237.57824z m-379.42784-9.5744h322.28864v94.85824H350.1312V113.71008z m560.15872 768.14848a28.48256 28.48256 0 0 1-28.43136 28.43136H142.14144a28.47744 28.47744 0 0 1-28.43136-28.43136V180.14208H293.2736v85.28384h436.28544V180.14208h180.73088v701.71648z" />
+                              <path d="M236.70784 726.94784h550.00064v56.8576H236.70784v-56.8576z m479.80032-292.68992l-63.24224-70.49216-176.95232 158.67392-103.84384-102.97856-66.71872 67.3024 167.08608 165.92896 243.67104-218.43456z" />
+                            </svg>
+                            <span className="todo-date-text">{completedLabel(todo.completed_at)}</span>
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>

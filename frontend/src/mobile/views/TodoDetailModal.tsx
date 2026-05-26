@@ -293,7 +293,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     <div className="modal-backdrop" onClick={handleBackdrop} onKeyDown={handleKeyDown}>
       <div className="modal-card" role="dialog" aria-label={t("todo.detail")}>
         <div className="modal-header">
-          <h2 className="modal-title">{t("todo.detail")}<span className="modal-id-badge">#{todo.id}</span></h2>
+          <h2 className="modal-title">{t("todo.detail")}<span className="modal-id-badge">No.{todo.id}</span></h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label={t("common.close")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
