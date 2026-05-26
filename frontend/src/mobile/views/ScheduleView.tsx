@@ -1198,7 +1198,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               <div className="ts-banner-icon">
                 {summaryState.kind === "ongoing" && <svg width="18" height="18" viewBox="0 0 24 24" fill="#1a7f72"><polygon points="6,3 20,12 6,21"/></svg>}
                 {summaryState.kind === "next-schedule" && "→"}
-                {summaryState.kind === "next-notify" && "🔔"}
+                {summaryState.kind === "next-notify" && <svg width="18" height="18" viewBox="0 0 1024 1024" fill="none"><path d="M512 170C382 170 288 264 288 392V560C288 620 266 677 226 722L186 768C176 780 172 795 178 808C184 821 197 830 212 830H812C827 830 840 821 846 808C852 795 848 780 838 768L798 722C758 677 736 620 736 560V392C736 264 642 170 512 170Z" fill="#FFC670"/><path d="M512 170C402 170 320 252 320 366V520C320 580 300 635 264 676L240 704H738L714 676C678 635 658 580 658 520V366C658 252 594 170 512 170Z" fill="#FFE88A"/><path d="M736 392V560C736 620 758 677 798 722L838 768C848 780 852 795 846 808C840 821 827 830 812 830H650C710 800 748 737 748 668C748 632 737 597 716 568L662 494C642 466 632 433 632 398C632 313 582 234 512 196C625 196 736 282 736 392Z" fill="#FF9A42"/><circle cx="512" cy="742" r="78" fill="#FFC670"/><path d="M448 150C448 115 476 88 512 88C548 88 576 115 576 150V184H448V150Z" fill="#FFC670"/><path d="M512 170C382 170 288 264 288 392V560C288 620 266 677 226 722L186 768C176 780 172 795 178 808C184 821 197 830 212 830H812C827 830 840 821 846 808C852 795 848 780 838 768L798 722C758 677 736 620 736 560V392C736 264 642 170 512 170Z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round"/><path d="M448 150C448 115 476 88 512 88C548 88 576 115 576 150V184H448V150Z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round"/><path d="M320 830C320 936 406 968 512 968C618 968 704 936 704 830" stroke="#3D3D63" strokeWidth="34" strokeLinecap="round"/><circle cx="512" cy="742" r="78" stroke="#3D3D63" strokeWidth="34" fill="none"/></svg>}
                 {summaryState.kind === "empty" && "✓"}
               </div>
               <div className="ts-banner-body">
@@ -1219,7 +1219,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
                           {(summaryState.item as ScheduleItem).category ? <span className="ts-banner-cat-icon"><svg width="14" height="14" viewBox="0 0 1024 1024"><path d="M745.062 123.187H252.928a108.851 108.851 0 00-108.851 108.851v612.301a83.456 83.456 0 00131.635 68.147l169.728-119.872a108.8 108.8 0 01128.307 1.894l146.791 110.49a83.456 83.456 0 00133.632-66.56V232.038a108.851 108.851 0 00-109.107-108.851zm-118.63 169.984H371.558a30.72 30.72 0 010-61.44h254.874a30.72 30.72 0 010 61.44z" fill="#505587"/></svg>{(summaryState.item as ScheduleItem).category}</span> : null}
                         </>
                       ) : (
-                        <span>🔔 {formatTimeShort((summaryState.item as NotificationItem).trigger_at)}</span>
+                        <span>🕐 {formatTimeShort((summaryState.item as NotificationItem).trigger_at)}</span>
                       )}
                     </div>
                   </>
