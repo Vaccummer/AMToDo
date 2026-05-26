@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../../api/client";
+import type { HealthResponse } from "../../api/client";
 import type { ConnectionStatusSnapshot } from "../../api/connection-status";
 import { FingerprintMismatchError, fingerprintPublicKey, importP256PublicKey, verifyOrEnrollKey } from "../../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../../lib/attachmentCache";
@@ -55,6 +56,28 @@ const MOB = {
   fetch: "获取",
   fetching: "获取中...",
   serverUrl: "服务器地址",
+  serverInfo: "服务器",
+  serverInfoUnavailable: "无法获取服务器信息",
+  serverPending: "待检测",
+  configureConnection: "连接配置",
+  connect: "连接",
+  disconnect: "断开连接",
+  reconnectNow: "立即重连",
+  connecting: "连接中...",
+  interrupted: "连接中途断开",
+  interruptedDesc: "保留上次验证信息，正在自动重连",
+  address: "地址",
+  userCreated: "用户创建",
+  publicKeyFingerprint: "公钥指纹",
+  copy: "复制",
+  copied: "已复制",
+  unknownUser: "已验证用户",
+  unverified: "未验证",
+  retryState: "重连状态",
+  currentStep: "当前步骤",
+  unavailable: "不可用",
+  tokenStep: "验证 Token",
+  fingerprintActionDesc: "服务器公钥指纹与本地记录不一致。请确认这是可信服务器后再信任新指纹。",
   check: "检测",
   checking: "检测中...",
   accessToken: "访问令牌",
@@ -121,6 +144,12 @@ const WARN_ICON = (
   </svg>
 );
 
+const COPY_ICON = (
+  <svg viewBox="0 0 1024 1024" aria-hidden="true">
+    <path d="M731.68184 676.057473 731.68184 183.323259c0-30.233582-24.512277-54.745858-54.747905-54.745858L184.216093 128.577401c-30.233582 0-54.746882 24.512277-54.746882 54.745858l0 492.734214c0 30.207999 24.5133 54.746882 54.746882 54.746882l492.717841 0C707.16854 730.804355 731.68184 706.265472 731.68184 676.057473zM622.1891 676.057473 238.962975 676.057473c-30.233582 0-54.746882-24.538883-54.746882-54.745858L184.216093 238.07014c0-30.233582 24.5133-54.746882 54.746882-54.746882l383.226125 0c30.233582 0 54.744835 24.512277 54.744835 54.746882l0 383.242498C676.933935 651.51859 652.421658 676.057473 622.1891 676.057473zM841.17458 292.817022l-54.745858 0 0 54.746882c30.232558 0 54.745858 24.5133 54.745858 54.759161l0 383.228171c0 30.206976-24.5133 54.745858-54.745858 54.745858L403.201573 840.297095c-30.233582 0-54.746882-24.538883-54.746882-54.745858l-54.746882 0 0 54.745858c0 30.207999 24.5133 54.747905 54.746882 54.747905l492.719888 0c30.234605 0 54.747905-24.539906 54.747905-54.747905L895.922485 347.563904C895.922485 317.329299 871.408161 292.817022 841.17458 292.817022z" fill="currentColor" />
+  </svg>
+);
+
 const CHEVRON = (
   <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6" />
@@ -148,13 +177,23 @@ const SCHEDULE_END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
 // ── Types ──
 
 type UrlCheckResult =
-  | { kind: "ok"; version: string; name?: string; publicKey?: string }
+  | {
+      kind: "ok";
+      version: string;
+      name?: string;
+      publicKey?: string;
+      publicKeyFingerprint?: string;
+      ipv4?: string;
+      ipv6?: string;
+      bind?: string[];
+      maxAttachmentSizeBytes?: number;
+    }
   | { kind: "unreachable"; message: string }
   | { kind: "invalid"; message: string }
   | { kind: "fingerprint"; old: string; new: string };
 
 type TokenResult =
-  | { ok: true; userName: string }
+  | { ok: true; userId: number; userName: string; createdAt: number }
   | { ok: false; message: string };
 
 type Props = {
@@ -182,6 +221,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [scheduleEndHour, setScheduleEndHour] = useState(String(initial.scheduler_end_hour));
   const [slotMinutes, setSlotMinutes] = useState(String(initial.scheduler_slot_minutes));
   const [showToken, setShowToken] = useState(false);
+  const [connectionPage, setConnectionPage] = useState<"overview" | "config">("overview");
+  const [connDescExpanded, setConnDescExpanded] = useState(false);
+  const connectionPageRef = useRef<"overview" | "config">("overview");
 
   // Connection
   const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
@@ -196,6 +238,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [urlCheckResult, setUrlCheckResult] = useState<UrlCheckResult | null>(null);
   const storedPublicKeyRef = useRef<string | null>(null);
   const validatedFingerprintRef = useRef<string | null>(null);
+  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
 
   // Token verify
   const [tokenVerifying, setTokenVerifying] = useState(false);
@@ -249,6 +292,10 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
 
+  useEffect(() => {
+    connectionPageRef.current = connectionPage;
+  }, [connectionPage]);
+
   // Auto-revert wsEnabled if connection fails after user toggle
   useEffect(() => {
     if (!userToggledWsRef.current) return;
@@ -267,7 +314,14 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   useEffect(() => {
     // Push a history entry so Android back gesture/button closes the modal
     history.pushState({ settingsModal: true }, "");
-    const handlePopState = () => { onClose(); };
+    const handlePopState = () => {
+      if (connectionPageRef.current === "config") {
+        setConnectionPage("overview");
+        history.pushState({ settingsModal: true }, "");
+        return;
+      }
+      onClose();
+    };
     window.addEventListener("popstate", handlePopState);
 
     // Match status bar to settings background
@@ -302,7 +356,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       onSaveConnection?.({ server_url: serverUrl });
 
       const api = new AMToDoApi(serverUrl, null);
-      const result = await api.health();
+      const result: HealthResponse = await api.health();
 
       if (!result || typeof result.version !== "string") {
         setUrlCheckResult({ kind: "invalid", message: MOB.responseFormatError });
@@ -329,7 +383,17 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         onSaveConnection?.({ known_key_fingerprint: fp });
       }
 
-      setUrlCheckResult({ kind: "ok", version: result.version, name: result.name, publicKey: result.public_key });
+      setUrlCheckResult({
+        kind: "ok",
+        version: result.version,
+        name: result.name,
+        publicKey: result.public_key,
+        publicKeyFingerprint: result.public_key_fingerprint,
+        ipv4: result.ipv4,
+        ipv6: result.ipv6,
+        bind: result.bind,
+        maxAttachmentSizeBytes: result.limits?.max_attachment_size_bytes,
+      });
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : MOB.connFailed;
@@ -378,7 +442,12 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       }
       const result = await api.verifyTokenHttp();
       if (result.ok) {
-        setTokenResult({ ok: true, userName: result.user.name });
+        setTokenResult({
+          ok: true,
+          userId: result.user.id,
+          userName: result.user.name,
+          createdAt: result.user.created_at,
+        });
         return true;
       } else {
         setTokenResult({ ok: false, message: MOB.tokenInvalid });
@@ -674,6 +743,377 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     );
   }
 
+  function formatUserCreated(ts?: number): string {
+    if (!ts) return MOB.serverPending;
+    return new Date(ts * 1000).toLocaleDateString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  async function handleCopyFingerprint(fingerprint: string) {
+    try {
+      await navigator.clipboard?.writeText(fingerprint);
+      setCopiedFingerprint(true);
+      setTimeout(() => setCopiedFingerprint(false), 1200);
+    } catch {
+      setCopiedFingerprint(false);
+    }
+  }
+
+  type ConnectionViewState = "online" | "connecting" | "interrupted" | "error" | "idle" | "fingerprint";
+
+  function getConnectionViewState(): ConnectionViewState {
+    if (urlCheckResult?.kind === "fingerprint") return "fingerprint";
+    if (urlChecking || tokenVerifying) return "connecting";
+
+    switch (connectionStatus?.status) {
+      case "online":
+        return "online";
+      case "checking":
+        return "connecting";
+      case "reconnecting":
+        return tokenResult?.ok || connectionStatus.serverName ? "interrupted" : "connecting";
+      case "idle":
+        return "idle";
+      case "offline":
+        return wsEnabled && (tokenResult?.ok || connectionStatus.serverName) ? "interrupted" : "error";
+      case "fingerprint":
+        return "fingerprint";
+      case "key-mismatch":
+      case "token-error":
+      case "replay-detected":
+        return "error";
+      default:
+        if (urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" || tokenResult?.ok === false) return "error";
+        if (wsEnabled) return "connecting";
+        return "idle";
+    }
+  }
+
+  const serverOk = urlCheckResult?.kind === "ok" ? urlCheckResult : null;
+  const serverName = serverOk?.name || connectionStatus?.serverName || MOB.serverInfoUnavailable;
+  const serverVersion = serverOk?.version || connectionStatus?.serverVersion || MOB.serverPending;
+  const serverTitle = serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion
+    ? `${serverName} · v${serverVersion}`
+    : MOB.serverInfoUnavailable;
+  const currentFingerprint = serverOk?.publicKeyFingerprint || validatedFingerprintRef.current || initial.known_key_fingerprint || "";
+  const hasReliableServerInfo = Boolean(serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion);
+  const userText = tokenResult?.ok ? `${tokenResult.userName} · #${tokenResult.userId}` : (connectionStatus?.status === "online" ? MOB.unknownUser : MOB.unverified);
+  const userCreatedText = tokenResult?.ok ? formatUserCreated(tokenResult.createdAt) : MOB.serverPending;
+  const viewState = getConnectionViewState();
+  const isWorking = viewState === "connecting";
+  const canStartConnection = !isWorking && viewState !== "fingerprint";
+
+  function primaryConnectionLabel(): string {
+    if (isWorking) return MOB.connecting;
+    if (viewState === "online" && wsEnabled) return MOB.disconnect;
+    if (viewState === "interrupted") return MOB.reconnectNow;
+    return MOB.connect;
+  }
+
+  function handlePrimaryConnectionAction() {
+    if (viewState === "interrupted" && wsEnabled) {
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+      window.setTimeout(() => {
+        setWsEnabled(true);
+        userToggledWsRef.current = true;
+        onSaveConnection?.({ ws_enabled: true });
+        onConnectionToggle?.(true);
+      }, 0);
+      return;
+    }
+    handleWsToggle();
+  }
+
+  function renderConnectionIcon() {
+    if (viewState === "online") return CHECK_ICON;
+    if (viewState === "fingerprint" || viewState === "interrupted") return WARN_ICON;
+    if (viewState === "error") return CROSS_ICON;
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+        <path d="M21 12a9 9 0 0 1-9 9m0-18a9 9 0 0 1 9 9" />
+        <path d="M3 12a9 9 0 0 1 9-9m0 18a9 9 0 0 1-9-9" />
+      </svg>
+    );
+  }
+
+  function connectionTitle(): string {
+    if (viewState === "online") return MOB.connConnected;
+    if (viewState === "connecting") return MOB.connecting;
+    if (viewState === "interrupted") return MOB.interrupted;
+    if (viewState === "fingerprint") return MOB.fpMismatch;
+    if (viewState === "idle") return MOB.connDisconnected;
+    return MOB.connFailed;
+  }
+
+  function connectionDescription(): string {
+    if (viewState === "online") return "HTTP 健康检查通过，WebSocket 实时通道在线";
+    if (viewState === "connecting") {
+      if (!hasReliableServerInfo) return "正在检测服务器，服务器信息暂不可用";
+      return tokenVerifying ? "服务器已响应，正在验证访问令牌" : "正在建立实时连接";
+    }
+    if (viewState === "interrupted") return MOB.interruptedDesc;
+    if (viewState === "fingerprint") return MOB.fingerprintActionDesc;
+    if (viewState === "idle") return "连接未启用，点击连接开始验证服务器和令牌";
+    return connectionStatus?.errorMessage || (tokenResult?.ok === false ? tokenResult.message : MOB.connFailedDesc);
+  }
+
+  function renderFingerprintConflict() {
+    if (urlCheckResult?.kind !== "fingerprint") return null;
+    return (
+      <div className="settings-conn-fingerprint">
+        <div className="settings-conn-fp-row">
+          <span>{MOB.localRecord}</span>
+          <code>{urlCheckResult.old}</code>
+        </div>
+        <div className="settings-conn-fp-row">
+          <span>{MOB.serverFp}</span>
+          <code>{urlCheckResult.new}</code>
+        </div>
+        <div className="settings-conn-actions">
+          <button type="button" className="settings-conn-primary" onClick={handleAcceptFingerprint}>
+            {MOB.trustFp}
+          </button>
+          <button type="button" className="settings-conn-secondary" onClick={handleRejectFingerprint}>
+            {MOB.reject}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderConnectionOverview() {
+    const desc = connectionDescription();
+    return (
+      <div className={`settings-conn-result state-${viewState}`}>
+        <div className="settings-conn-head">
+          <div className="settings-conn-mark">{renderConnectionIcon()}</div>
+          <div className="settings-conn-main">
+            <div className="settings-conn-title-row">
+              <span className="settings-conn-dot" />
+              <span className="settings-conn-title">{connectionTitle()}</span>
+            </div>
+            <button
+              type="button"
+              className={`settings-conn-desc${connDescExpanded ? " expanded" : ""}`}
+              onClick={() => setConnDescExpanded((v) => !v)}
+              title={desc}
+              aria-expanded={connDescExpanded}
+            >
+              <span>{desc}</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className="settings-conn-config-btn"
+            onClick={() => setConnectionPage("config")}
+            aria-label={MOB.configureConnection}
+          >
+            {CHEVRON}
+          </button>
+        </div>
+
+        {connDescExpanded ? (
+          <div className="settings-conn-desc-full">
+            {desc}
+          </div>
+        ) : null}
+
+        <div className="settings-conn-grid">
+          <div className="settings-conn-tile wide">
+            <span>{MOB.serverInfo}</span>
+            <strong>{hasReliableServerInfo ? serverTitle : MOB.serverInfoUnavailable}</strong>
+          </div>
+          <div className="settings-conn-tile">
+            <span>{MOB.userLabel.replace(/[:：]\s*$/, "")}</span>
+            <strong>{userText}</strong>
+          </div>
+          <div className="settings-conn-tile">
+            <span>{MOB.userCreated}</span>
+            <strong>{userCreatedText}</strong>
+          </div>
+          <div className="settings-conn-tile wide">
+            <span>{MOB.address}</span>
+            <strong className="mono">{serverUrl || MOB.serverPending}</strong>
+          </div>
+        </div>
+
+        <div className="settings-conn-meta">
+          <div className="settings-conn-meta-row">
+            <span>{MOB.publicKeyFingerprint}</span>
+            <strong className="mono">{currentFingerprint || MOB.serverPending}</strong>
+            <button
+              type="button"
+              className="settings-conn-copy"
+              onClick={() => currentFingerprint && handleCopyFingerprint(currentFingerprint)}
+              disabled={!currentFingerprint}
+              aria-label={MOB.copy}
+            >
+              {COPY_ICON}
+            </button>
+          </div>
+          <div className="settings-conn-meta-row">
+            <span>{MOB.attachmentCache}</span>
+            <strong>{serverOk?.maxAttachmentSizeBytes ? formatSize(serverOk.maxAttachmentSizeBytes) : MOB.serverPending}</strong>
+          </div>
+          <div className="settings-conn-meta-row">
+            <span>{MOB.retryState}</span>
+            <strong>{viewState === "interrupted" ? `${reconnectMaxAttempts} max` : (viewState === "online" ? "实时通道在线" : MOB.serverPending)}</strong>
+          </div>
+        </div>
+
+        {copiedFingerprint ? <div className="settings-conn-toast">{MOB.copied}</div> : null}
+        {renderFingerprintConflict()}
+
+        <div className="settings-conn-actions">
+          <button
+            type="button"
+            className="settings-conn-primary"
+            onClick={handlePrimaryConnectionAction}
+            disabled={!canStartConnection}
+          >
+            {primaryConnectionLabel()}
+          </button>
+          <button type="button" className="settings-conn-secondary" onClick={() => setConnectionPage("config")}>
+            {MOB.configureConnection}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderConnectionConfig() {
+    return (
+      <div className={`settings-group conn-group${connLocked ? " conn-locked" : ""}`}>
+        <div className="settings-inline-field">
+          <div className="settings-inline-label">{MOB.lanAddress}</div>
+          <div className="settings-inline-row">
+            <input
+              type="text"
+              className="settings-inline-input"
+              value={lanAddress}
+              onChange={(e) => setLanAddress(e.target.value)}
+              onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
+              placeholder="http://192.168.x.x:8000"
+              disabled={connLocked}
+            />
+            <button
+              type="button"
+              className="settings-inline-btn"
+              onClick={handleLanFetch}
+              disabled={connLocked || !lanAddress || lanLoading}
+            >
+              {lanLoading ? MOB.fetching : MOB.fetch}
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-inline-field">
+          <div className="settings-inline-label">{MOB.serverUrl}</div>
+          <div className="settings-inline-row">
+            <input
+              type="text"
+              className={urlInputClass}
+              value={serverUrl}
+              onChange={handleUrlChange}
+              onBlur={() => onUpdateField?.({ server_url: serverUrl })}
+              disabled={connLocked}
+              placeholder="http://127.0.0.1:8000"
+            />
+            <button
+              type="button"
+              className="settings-inline-btn"
+              onClick={() => checkUrl()}
+              disabled={connLocked || !serverUrl || urlChecking}
+            >
+              {urlChecking ? MOB.checking : MOB.check}
+            </button>
+          </div>
+          {renderUrlStatus()}
+        </div>
+
+        <div className="settings-inline-field">
+          <div className="settings-inline-label">{MOB.accessToken}</div>
+          <div className="settings-inline-row">
+            <div className="settings-inline-input-wrap">
+              <input
+                type={showToken ? "text" : "password"}
+                className={tokenInputClass}
+                value={accessToken}
+                onChange={handleTokenChange}
+                onBlur={() => onUpdateField?.({ access_token: accessToken })}
+                disabled={!tokenEditable}
+                placeholder={!tokenEditable ? MOB.checkServerFirst : MOB.enterToken}
+              />
+              <button
+                type="button"
+                className="settings-inline-eye"
+                onClick={() => setShowToken((v) => !v)}
+                disabled={!tokenEditable}
+              >
+                {showToken ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <button
+              type="button"
+              className="settings-inline-btn"
+              onClick={() => verifyToken()}
+              disabled={!tokenEditable || !accessToken || tokenVerifying}
+            >
+              {tokenVerifying ? MOB.verifying : MOB.verify}
+            </button>
+          </div>
+          {renderTokenStatus()}
+        </div>
+
+        <div className="settings-divider" />
+
+        <div className="settings-row">
+          <span className="settings-row-label">{MOB.disconnectNotify}</span>
+          <button
+            type="button"
+            className={`settings-sw${notifyOnDisconnect ? " on" : ""}`}
+            onClick={handleNotifyDisconnectToggle}
+            role="switch"
+            aria-checked={notifyOnDisconnect}
+          >
+            <span className="settings-sw-knob" />
+          </button>
+        </div>
+
+        <div className="settings-row">
+          <span className="settings-row-label">{MOB.maxReconnect}</span>
+          <div className="settings-row-right">
+            <input
+              type="number"
+              className="settings-inline-number"
+              value={reconnectMaxAttempts}
+              min={0}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
+              }}
+              onBlur={handleReconnectBlur}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── JSX ──
 
   return (
@@ -682,8 +1122,15 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         {/* Header */}
         <div className="settings-modal-header">
           <div className="settings-modal-header-left">
+            {connectionPage === "config" ? (
+              <button type="button" className="settings-modal-back" onClick={() => setConnectionPage("overview")} aria-label="返回">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+            ) : null}
             <div className="settings-modal-dot" />
-            <h2 className="settings-modal-title">{MOB.title}</h2>
+            <h2 className="settings-modal-title">{connectionPage === "config" ? MOB.configureConnection : MOB.title}</h2>
           </div>
           <button type="button" className="settings-modal-close" onClick={onClose} aria-label="关闭">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -697,154 +1144,10 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-modal-body">
 
           {/* Connection */}
-          <div className={`settings-group conn-group${connLocked ? " conn-locked" : ""}`}>
-            <div className="settings-row">
-              <span className="settings-row-label">{MOB.tabConnection}</span>
-              <button
-                type="button"
-                className={`settings-sw${wsEnabled ? " on" : ""}`}
-                onClick={handleWsToggle}
-                role="switch"
-                aria-checked={wsEnabled}
-                aria-label={MOB.connToggle}
-              >
-                <span className="settings-sw-knob" />
-              </button>
-            </div>
-
-            {/* LAN Address */}
-            <div className="settings-inline-field">
-              <div className="settings-inline-label">{MOB.lanAddress}</div>
-              <div className="settings-inline-row">
-                <input
-                  type="text"
-                  className="settings-inline-input"
-                  value={lanAddress}
-                  onChange={(e) => setLanAddress(e.target.value)}
-                  onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
-                  placeholder="http://192.168.x.x:8000"
-                  disabled={connLocked}
-                />
-                <button
-                  type="button"
-                  className="settings-inline-btn"
-                  onClick={handleLanFetch}
-                  disabled={connLocked || !lanAddress || lanLoading}
-                >
-                  {lanLoading ? MOB.fetching : MOB.fetch}
-                </button>
-              </div>
-            </div>
-
-            {/* Server URL */}
-            <div className="settings-inline-field">
-              <div className="settings-inline-label">{MOB.serverUrl}</div>
-              <div className="settings-inline-row">
-                <input
-                  type="text"
-                  className={urlInputClass}
-                  value={serverUrl}
-                  onChange={handleUrlChange}
-                  onBlur={() => onUpdateField?.({ server_url: serverUrl })}
-                  disabled={connLocked}
-                  placeholder="http://127.0.0.1:8000"
-                />
-                <button
-                  type="button"
-                  className="settings-inline-btn"
-                  onClick={() => checkUrl()}
-                  disabled={connLocked || !serverUrl || urlChecking}
-                >
-                  {urlChecking ? MOB.checking : MOB.check}
-                </button>
-              </div>
-              {renderUrlStatus()}
-            </div>
-
-            {/* Access Token */}
-            <div className="settings-inline-field">
-              <div className="settings-inline-label">{MOB.accessToken}</div>
-              <div className="settings-inline-row">
-                <div className="settings-inline-input-wrap">
-                  <input
-                    type={showToken ? "text" : "password"}
-                    className={tokenInputClass}
-                    value={accessToken}
-                    onChange={handleTokenChange}
-                    onBlur={() => onUpdateField?.({ access_token: accessToken })}
-                    disabled={!tokenEditable}
-                    placeholder={!tokenEditable ? MOB.checkServerFirst : MOB.enterToken}
-                  />
-                  <button
-                    type="button"
-                    className="settings-inline-eye"
-                    onClick={() => setShowToken((v) => !v)}
-                    disabled={!tokenEditable}
-                  >
-                    {showToken ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="settings-inline-btn"
-                  onClick={() => verifyToken()}
-                  disabled={!tokenEditable || !accessToken || tokenVerifying}
-                >
-                  {tokenVerifying ? MOB.verifying : MOB.verify}
-                </button>
-              </div>
-              {renderTokenStatus()}
-            </div>
-
-            <div className="settings-divider" />
-
-            {/* Disconnect notify */}
-            <div className="settings-row">
-              <span className="settings-row-label">{MOB.disconnectNotify}</span>
-              <button
-                type="button"
-                className={`settings-sw${notifyOnDisconnect ? " on" : ""}`}
-                onClick={handleNotifyDisconnectToggle}
-                disabled={false}
-                role="switch"
-                aria-checked={notifyOnDisconnect}
-              >
-                <span className="settings-sw-knob" />
-              </button>
-            </div>
-
-            {/* Max reconnect */}
-            <div className="settings-row">
-              <span className="settings-row-label">{MOB.maxReconnect}</span>
-              <div className="settings-row-right">
-                <input
-                  type="number"
-                  className="settings-inline-number"
-                  value={reconnectMaxAttempts}
-                  min={0}
-                  disabled={false}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "" || /^\d+$/.test(v)) setReconnectMaxAttempts(v);
-                  }}
-                  onBlur={handleReconnectBlur}
-                />
-              </div>
-            </div>
-          </div>
+          {connectionPage === "overview" ? renderConnectionOverview() : renderConnectionConfig()}
 
           {/* General + Notification */}
-          <div className="settings-group">
+          {connectionPage === "overview" ? <div className="settings-group">
             <div className="settings-row">
               <span className="settings-row-label">{MOB.theme}</span>
               <div className="settings-row-right">
@@ -908,7 +1211,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 </button>
               </div>
             </div>
-          </div>
+          </div> : null}
 
         </div>
       </div>
