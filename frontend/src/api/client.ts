@@ -328,6 +328,8 @@ export type ScheduleCreateParams = {
   extra_fields?: Record<string, string> | null;
 };
 
+type AttachmentOwnerType = "todo" | "schedule";
+
 export type ScheduleUpdateRequest = {
   title?: string;
   start_at?: number | null;
@@ -666,19 +668,7 @@ export class AMToDoApi {
   }
 
   async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<AttachmentResponse> {
-    await this.ensureConnected();
-    const plainSize = file.size;
-
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_upload",
-      {
-        owner_type: "todo",
-        owner_id: todoId,
-        filename: file.name,
-        mime_type: file.type || null,
-        plain_size: plainSize,
-      },
-    );
+    const token = await this.initAttachmentUpload("todo", todoId, file);
 
     return uploadWithProgress<AttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
@@ -690,11 +680,7 @@ export class AMToDoApi {
   }
 
   async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    await this.ensureConnected();
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_download",
-      { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
-    );
+    const token = await this.initAttachmentDownload("todo", todoId, attachmentId);
 
     return downloadWithProgress(
       `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
@@ -704,11 +690,7 @@ export class AMToDoApi {
   }
 
   async getTodoAttachmentDownloadUrl(todoId: number, attachmentId: number): Promise<string> {
-    await this.ensureConnected();
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_download",
-      { owner_type: "todo", owner_id: todoId, attachment_id: attachmentId },
-    );
+    const token = await this.initAttachmentDownload("todo", todoId, attachmentId);
     return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
   }
 
@@ -743,19 +725,7 @@ export class AMToDoApi {
   }
 
   async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<ScheduleAttachmentResponse> {
-    await this.ensureConnected();
-    const plainSize = file.size;
-
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_upload",
-      {
-        owner_type: "schedule",
-        owner_id: scheduleId,
-        filename: file.name,
-        mime_type: file.type || null,
-        plain_size: plainSize,
-      },
-    );
+    const token = await this.initAttachmentUpload("schedule", scheduleId, file);
 
     return uploadWithProgress<ScheduleAttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
@@ -767,11 +737,7 @@ export class AMToDoApi {
   }
 
   async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    await this.ensureConnected();
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_download",
-      { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
-    );
+    const token = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
 
     return downloadWithProgress(
       `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
@@ -781,11 +747,7 @@ export class AMToDoApi {
   }
 
   async getScheduleAttachmentDownloadUrl(scheduleId: number, attachmentId: number): Promise<string> {
-    await this.ensureConnected();
-    const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
-      "attachment.init_download",
-      { owner_type: "schedule", owner_id: scheduleId, attachment_id: attachmentId },
-    );
+    const token = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
     return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
   }
 
@@ -1065,6 +1027,72 @@ export class AMToDoApi {
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return bytes.buffer;
+  }
+
+  private async initAttachmentUpload(
+    ownerType: AttachmentOwnerType,
+    ownerId: number,
+    file: File,
+  ): Promise<string> {
+    const payload = {
+      owner_type: ownerType,
+      owner_id: ownerId,
+      filename: file.name,
+      mime_type: file.type || null,
+      plain_size: file.size,
+    };
+    return this.initAttachmentToken("attachment.init_upload", "/api/v1/attachment/init-upload", payload);
+  }
+
+  private async initAttachmentDownload(
+    ownerType: AttachmentOwnerType,
+    ownerId: number,
+    attachmentId: number,
+  ): Promise<string> {
+    const payload = {
+      owner_type: ownerType,
+      owner_id: ownerId,
+      attachment_id: attachmentId,
+    };
+    return this.initAttachmentToken("attachment.init_download", "/api/v1/attachment/init-download", payload);
+  }
+
+  private async initAttachmentToken(
+    wsType: string,
+    httpPath: string,
+    payload: Record<string, unknown>,
+  ): Promise<string> {
+    if (this.wsClient) {
+      try {
+        await this.ensureConnected();
+        const result = await this.wsClient.send<{ ok: boolean; token: string }>(wsType, payload);
+        return result.token;
+      } catch {
+        // Fall back to the Bearer REST token endpoint. Attachment bytes are
+        // transferred over HTTPS either way.
+      }
+    }
+    const result = await this.postHttp<{ ok: boolean; token: string }>(httpPath, payload);
+    return result.token;
+  }
+
+  private async postHttp<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+    if (this.token) {
+      headers.set("Authorization", `Bearer ${this.token}`);
+    }
+
+    const response = await fetchWithNetworkStatus(`${this.baseUrl}${path}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers,
+    });
+    const responsePayload = await response.json();
+    if (!response.ok || responsePayload.ok === false) {
+      throw new Error(responsePayload?.error?.message ?? responsePayload?.detail ?? response.statusText);
+    }
+    return responsePayload as T;
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
