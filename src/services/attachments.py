@@ -1,4 +1,4 @@
-"""Encrypted attachment service boundaries."""
+"""Attachment service boundaries."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ if TYPE_CHECKING:
         TodoRepository,
     )
 
-ENCRYPTION_ALG = "AES-128-CTR-HMAC-SHA256"
+ENCRYPTION_ALG = "none"
 
 
 class AttachmentService:
-    """Coordinates encrypted attachment use cases for todos and schedules."""
+    """Coordinates attachment use cases for todos and schedules."""
 
     def __init__(
         self,
@@ -48,22 +48,19 @@ class AttachmentService:
         self._owner_type = owner_type
         self._changelog = changelog_service
 
-    def create_from_cipher(
+    def create_from_upload(
         self,
         owner_id: int,
-        cipher_path: Path,
-        cipher_size: int,
+        upload_path: Path,
+        content_size: int,
         filename: str,
         mime_type: str | None,
-        file_key: str,
-        hmac_key: str,
-        nonce: str,
-        plain_size: int,
+        plain_sha256: str | None = None,
     ) -> object:
-        """Create attachment from pre-encrypted cipher file (client-side encryption).
+        """Create attachment metadata and move an uploaded file into storage.
 
         Phase 1: create metadata row and flush to obtain attachment.id.
-        Phase 2: generate storage path from id, move cipher file, update storage_path.
+        Phase 2: generate storage path from id, move uploaded file, update storage_path.
         """
 
         # 1. Validate owner exists
@@ -78,14 +75,14 @@ class AttachmentService:
         )
         preview_kind = _preview_kind(resolved_mime)
 
-        # 3. Compute cipher_sha256 by streaming hash over cipher_path
-        cipher_sha256 = _sha256_hex_file(cipher_path)
+        # 3. Compute content_sha256 by streaming hash over upload_path
+        content_sha256 = _sha256_hex_file(upload_path)
 
         # 4. Get next_file_index
         file_index = self._repository.next_file_index(owner_id)
         now = self._clock.now_epoch()
 
-        # 5. Insert metadata row with client-provided encryption params
+        # 5. Insert metadata row
         owner_field = f"{self._owner_type}_id"
         attachment = self._model(
             **{
@@ -94,12 +91,12 @@ class AttachmentService:
                 "filename": clean_name,
                 "mime_type": resolved_mime,
                 "preview_kind": preview_kind,
-                "plain_size_bytes": plain_size,
-                "cipher_size_bytes": cipher_size,
-                "plain_sha256": "",  # server doesn't know plaintext
-                "cipher_sha256": cipher_sha256,
-                "file_key": file_key,
-                "nonce": nonce,
+                "plain_size_bytes": content_size,
+                "cipher_size_bytes": content_size,
+                "plain_sha256": plain_sha256 or content_sha256,
+                "cipher_sha256": content_sha256,
+                "file_key": "",
+                "nonce": "",
                 "encryption_alg": ENCRYPTION_ALG,
                 "storage_path": "",
                 "created_at": now,
@@ -111,7 +108,7 @@ class AttachmentService:
         attachment = self._repository.add(attachment)
         self._repository.flush()
 
-        # 7. Move cipher file to final storage location
+        # 7. Move uploaded file to final storage location
         relative_path = (
             Path(self._owner_type)
             / str(self._user_id)
@@ -120,7 +117,7 @@ class AttachmentService:
         )
         absolute_path = self._storage_root / relative_path
         absolute_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(cipher_path), str(absolute_path))
+        shutil.move(str(upload_path), str(absolute_path))
 
         # 8. Update storage_path, touch owner's updated_at
         attachment.storage_path = str(relative_path)
@@ -153,22 +150,22 @@ class AttachmentService:
         if attachment is None or getattr(attachment, owner_field) != owner_id:
             raise NotFoundError(f"attachment #{attachment_id} was not found")
         if attachment.is_orphaned is False:
-            path = self.encrypted_path(attachment)
+            path = self.storage_path(attachment)
             if not path.is_file():
                 attachment.is_orphaned = True
                 self._repository.update(attachment)
         return attachment
 
-    def encrypted_path(self, attachment: object) -> Path:
-        """Return the absolute ciphertext path for an attachment."""
+    def storage_path(self, attachment: object) -> Path:
+        """Return the absolute stored file path for an attachment."""
 
         return self._storage_root / Path(attachment.storage_path)
 
-    def read_cipher(self, owner_id: int, attachment_id: int) -> bytes:
-        """Return encrypted attachment bytes."""
+    def read_content(self, owner_id: int, attachment_id: int) -> bytes:
+        """Return stored attachment bytes."""
 
         attachment = self.show(owner_id, attachment_id)
-        path = self.encrypted_path(attachment)
+        path = self.storage_path(attachment)
         if not path.is_file():
             attachment.is_orphaned = True
             self._repository.update(attachment)
@@ -176,7 +173,7 @@ class AttachmentService:
         return path.read_bytes()
 
     def remove(self, owner_id: int, attachment_id: int) -> object:
-        """Remove attachment metadata and encrypted file from storage.
+        """Remove attachment metadata and stored file.
 
         File deletion failures are logged but do not prevent DB metadata removal.
         """
@@ -189,7 +186,7 @@ class AttachmentService:
             else:
                 meta = schedule_attachment_to_dict(attachment, self._user_id)
             self._changelog.record_attachment_remove(owner_id, meta)
-        path = self.encrypted_path(attachment)
+        path = self.storage_path(attachment)
         try:
             if path.exists():
                 path.unlink()

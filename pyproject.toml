@@ -10,7 +10,6 @@ authors = [
 ]
 dependencies = [
   "alembic>=1.14",
-  "cryptography>=42.0",
   "fastapi>=0.115",
   "hypercorn>=0.17",
   "httpx>=0.28",

@@ -2,7 +2,7 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   percent: number;
-  phase?: "encrypting" | "uploading";
+  phase?: "uploading";
 }
 
 export interface UploadResult<T = unknown> {
@@ -11,10 +11,9 @@ export interface UploadResult<T = unknown> {
 }
 
 /**
- * Encrypt + upload with progress.
- * Encryption phase uses constant memory (1MB chunks via ReadableStream).
- * Upload phase accumulates cipher into a Blob, then sends via XHR.
- * Peak memory ≈ file_size (cipher) + 1MB (encrypt chunk) — not 3× as before.
+ * Upload a ReadableStream with progress.
+ * The stream is accumulated into an ArrayBuffer because XHR upload progress
+ * events are still more widely supported than fetch upload progress.
  */
 export async function streamingUpload<T = unknown>(
   url: string,
@@ -22,7 +21,7 @@ export async function streamingUpload<T = unknown>(
   onProgress?: (progress: UploadProgress) => void,
   abortSignal?: AbortSignal,
 ): Promise<UploadResult<T>> {
-  // Accumulate cipher chunks from the encrypt stream
+  // Accumulate chunks from the stream.
   const chunks: Uint8Array[] = [];
   let total = 0;
   const reader = body.getReader();
@@ -37,18 +36,17 @@ export async function streamingUpload<T = unknown>(
     total += value.length;
   }
 
-  // Build a single Uint8Array
-  const cipher = new Uint8Array(total);
+  const content = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {
-    cipher.set(chunk, offset);
+    content.set(chunk, offset);
     offset += chunk.length;
   }
 
   // Upload via XHR (supports progress events, unlike fetch)
   return uploadWithProgress<T>(
     url,
-    cipher.buffer,
+    content.buffer,
     { "Content-Type": "application/octet-stream" },
     onProgress,
     abortSignal,
@@ -56,12 +54,11 @@ export async function streamingUpload<T = unknown>(
 }
 
 /**
- * Legacy XHR-based upload for pre-encrypted ArrayBuffer.
- * Used as fallback when ReadableStream body is not supported.
+ * XHR-based upload for an ArrayBuffer.
  */
 export function uploadWithProgress<T = unknown>(
   url: string,
-  cipher: ArrayBuffer,
+  content: ArrayBuffer,
   headers: Record<string, string>,
   onProgress?: (progress: UploadProgress) => void,
   abortSignal?: AbortSignal,
@@ -103,6 +100,6 @@ export function uploadWithProgress<T = unknown>(
 
     xhr.responseType = "text";
     xhr.timeout = 600_000; // 10 min — large files on slow mobile networks
-    xhr.send(cipher);
+    xhr.send(content);
   });
 }

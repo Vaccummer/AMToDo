@@ -98,7 +98,6 @@ export const zhCN: Record<string, string> = {
   "common.cancelUpload": "取消上传",
   "common.cancelDownload": "取消下载",
   "common.uploadingPercent": "上传中 {{percent}}%",
-  "common.encryptingPercent": "加密中 {{percent}}%",
   "common.downloadingPercent": "下载中 {{percent}}%",
   "common.attachmentCount": "{{count}} 个附件",
   "common.photoCaptureFailed": "拍照失败",
@@ -265,10 +264,6 @@ export const zhCN: Record<string, string> = {
   "connection.fingerprintMismatch": "公钥指纹不匹配",
   "connection.fingerprintMismatchDesc": "服务器公钥已变更，可能是重新部署",
   "connection.viewDetails": "查看详情",
-  "connection.keyMismatch": "密钥不匹配",
-  "connection.keyMismatchDesc": "服务端解密失败，客户端密钥与服务器不一致",
-  "connection.replayDetected": "重放攻击检测",
-  "connection.replayDetectedDesc": "服务器检测到重复请求，连接已拒绝",
 
   // Todo
   "todo.todayTasks": "今日任务",
@@ -424,10 +419,8 @@ export const zhCN: Record<string, string> = {
 
   // WS close reasons
   "ws.connectionTimeout": "连接超时",
-  "ws.keyMismatch": "服务端解密失败，密钥不匹配",
   "ws.missingFields": "请求字段缺失",
   "ws.invalidToken": "访问令牌无效",
-  "ws.replayDetected": "重放攻击检测",
   "ws.reconnectFailed": "重连失败，请检查连接设置",
 
   // Client

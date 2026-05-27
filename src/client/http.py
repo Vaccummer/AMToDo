@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import base64
+import hashlib
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,9 @@ class AMTodoClient:
         return self._get("/api/v1/agent-guide")
 
     # ── admin (admin_token) ──
+
+    def admin_config(self) -> dict[str, Any]:
+        return self._admin_post("/api/v1/admin/config")
 
     # ── user ──
 
@@ -270,15 +274,7 @@ class AMTodoClient:
         return self._user_post("/api/v1/todos/changelog", body)
 
     def todo_attachment_upload(self, todo_id: int, file_path: Path) -> dict[str, Any]:
-        content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
-        return self._user_post(
-            "/api/v1/attachment/upload",
-            {
-                "todo_id": todo_id,
-                "filename": file_path.name,
-                "content_base64": content_base64,
-            },
-        )
+        return self._attachment_upload("todo", todo_id, file_path)
 
     def todo_attachment_list(self, todo_id: int) -> dict[str, Any]:
         return self._user_post("/api/v1/attachment/list", {"todo_id": todo_id})
@@ -302,13 +298,7 @@ class AMTodoClient:
         )
 
     def todo_attachment_download(self, todo_id: int, attachment_id: int) -> bytes:
-        response = self._client.post(
-            "/api/v1/attachment/download",
-            json={"todo_id": todo_id, "attachment_id": attachment_id},
-            headers=self._user_headers(),
-        )
-        response.raise_for_status()
-        return response.content
+        return self._attachment_download("todo", todo_id, attachment_id)
 
     def todo_attachment_remove_orphaned(self, todo_id: int) -> dict[str, Any]:
         return self._user_post("/api/v1/attachment/remove-orphaned", {"todo_id": todo_id})
@@ -465,24 +455,10 @@ class AMTodoClient:
         )
 
     def schedule_attachment_upload(self, schedule_id: int, file_path: Path) -> dict[str, Any]:
-        content_base64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
-        return self._user_post(
-            "/api/v1/attachment/upload",
-            {
-                "schedule_id": schedule_id,
-                "filename": file_path.name,
-                "content_base64": content_base64,
-            },
-        )
+        return self._attachment_upload("schedule", schedule_id, file_path)
 
     def schedule_attachment_download(self, schedule_id: int, attachment_id: int) -> bytes:
-        response = self._client.post(
-            "/api/v1/attachment/download",
-            json={"schedule_id": schedule_id, "attachment_id": attachment_id},
-            headers=self._user_headers(),
-        )
-        response.raise_for_status()
-        return response.content
+        return self._attachment_download("schedule", schedule_id, attachment_id)
 
     def schedule_attachment_remove(self, schedule_id: int, attachment_id: int) -> dict[str, Any]:
         return self._user_post(
@@ -598,6 +574,54 @@ class AMTodoClient:
             return _error_from_response(exc)
         except httpx.RequestError as exc:
             return {"ok": False, "error": {"type": "ConnectionError", "message": str(exc)}}
+
+    def _attachment_upload(self, owner_type: str, owner_id: int, file_path: Path) -> dict[str, Any]:
+        content = file_path.read_bytes()
+        init = self._user_post(
+            "/api/v1/attachment/init-upload",
+            {
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "filename": file_path.name,
+                "mime_type": mimetypes.guess_type(file_path.name)[0],
+                "plain_size": len(content),
+                "plain_sha256": hashlib.sha256(content).hexdigest(),
+            },
+        )
+        if not init.get("ok"):
+            return init
+        try:
+            response = self._client.put(
+                "/api/v1/attachment/upload",
+                params={"token": init["token"]},
+                content=content,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            return _error_from_response(exc)
+        except httpx.RequestError as exc:
+            return {"ok": False, "error": {"type": "ConnectionError", "message": str(exc)}}
+
+    def _attachment_download(self, owner_type: str, owner_id: int, attachment_id: int) -> bytes:
+        init = self._user_post(
+            "/api/v1/attachment/init-download",
+            {
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "attachment_id": attachment_id,
+            },
+        )
+        if not init.get("ok"):
+            msg = init.get("error", {}).get("message") if isinstance(init.get("error"), dict) else init
+            raise httpx.HTTPError(str(msg))
+        response = self._client.get(
+            f"/api/v1/attachment/{attachment_id}/download",
+            params={"token": init["token"]},
+        )
+        response.raise_for_status()
+        return response.content
 
     def _admin_headers(self) -> dict[str, str]:
         return _bearer_headers(self._admin_token)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import shutil
@@ -10,11 +9,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
 
 class AttachmentCache:
-    """Cache decrypted attachments after metadata/version verification."""
+    """Cache downloaded attachments after metadata/version verification."""
 
     def __init__(self, root: Path) -> None:
         self._root = root / "cache" / "attachments"
@@ -22,28 +19,26 @@ class AttachmentCache:
     def get_or_download(
         self,
         metadata: dict[str, Any],
-        download_cipher: Callable[[], bytes],
+        download_content: Callable[[], bytes],
     ) -> dict[str, object]:
-        """Return a cached plaintext path, downloading and decrypting when stale."""
+        """Return a cached local path, downloading when stale."""
 
         item_dir = self._item_dir(metadata)
         meta_path = item_dir / "metadata.json"
-        cipher_path = item_dir / "cipher.bin"
+        content_path = item_dir / "content.bin"
         plain_path = item_dir / _safe_filename(str(metadata["filename"]))
 
         if self._matches(meta_path, metadata) and plain_path.is_file():
             return {"cache_hit": True, "path": str(plain_path)}
 
         item_dir.mkdir(parents=True, exist_ok=True)
-        if self._matches(meta_path, metadata) and cipher_path.is_file():
-            cipher = cipher_path.read_bytes()
+        if self._matches(meta_path, metadata) and content_path.is_file():
+            plain = content_path.read_bytes()
         else:
-            cipher = download_cipher()
-            _validate_hash(cipher, str(metadata["cipher_sha256"]), "cipher_sha256")
-            cipher_path.write_bytes(cipher)
+            plain = download_content()
+            _validate_hash(plain, str(metadata["plain_sha256"]), "plain_sha256")
+            content_path.write_bytes(plain)
 
-        plain = _decrypt(cipher, metadata)
-        _validate_hash(plain, str(metadata["plain_sha256"]), "plain_sha256")
         plain_path.write_bytes(plain)
         meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         return {"cache_hit": False, "path": str(plain_path)}
@@ -76,18 +71,8 @@ class AttachmentCache:
             "updated_at",
             "plain_size_bytes",
             "plain_sha256",
-            "cipher_size_bytes",
-            "cipher_sha256",
-            "file_key",
-            "nonce",
         )
         return all(cached.get(key) == metadata.get(key) for key in keys)
-
-
-def _decrypt(cipher: bytes, metadata: dict[str, Any]) -> bytes:
-    key = base64.b64decode(str(metadata["file_key"]))
-    nonce = base64.b64decode(str(metadata["nonce"]))
-    return AESGCM(key).decrypt(nonce, cipher, None)
 
 
 def _validate_hash(content: bytes, expected: str, name: str) -> None:

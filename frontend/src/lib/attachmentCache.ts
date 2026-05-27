@@ -1,6 +1,5 @@
 import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
 import type { DownloadProgress } from "./chunked-download";
-import { decryptBuffer } from "./stream-crypto";
 
 type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
 
@@ -33,13 +32,10 @@ export async function getAttachmentBlob(
 
   let plain: ArrayBuffer;
   try {
-    const cipher = await downloadFn(onProgress, abortSignal);
-    plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
+    plain = await downloadFn(onProgress, abortSignal);
   } catch (err) {
-    // Retry once on truncation or HMAC errors (likely transient mobile network issue)
-    if (err instanceof Error && (err.message.includes("incomplete") || err.message.includes("HMAC"))) {
-      const cipher = await downloadFn(onProgress, abortSignal);
-      plain = await decryptBuffer(cipher, metadata.file_key, metadata.nonce);
+    if (err instanceof Error && err.message.includes("incomplete")) {
+      plain = await downloadFn(onProgress, abortSignal);
     } else {
       throw err;
     }
@@ -85,8 +81,7 @@ function metadataMatches(a: CacheableMeta, b: CacheableMeta): boolean {
   return (
     a.updated_at === b.updated_at &&
     a.plain_size_bytes === b.plain_size_bytes &&
-    a.file_key === b.file_key &&
-    a.nonce === b.nonce
+    a.plain_sha256 === b.plain_sha256
   );
 }
 
@@ -125,4 +120,3 @@ function txDone(tx: IDBTransaction): Promise<void> {
     tx.onabort = () => reject(tx.error);
   });
 }
-

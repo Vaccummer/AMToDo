@@ -98,7 +98,6 @@ export const en: Record<string, string> = {
   "common.cancelUpload": "Cancel Upload",
   "common.cancelDownload": "Cancel Download",
   "common.uploadingPercent": "Uploading {{percent}}%",
-  "common.encryptingPercent": "Encrypting {{percent}}%",
   "common.downloadingPercent": "Downloading {{percent}}%",
   "common.attachmentCount": "{{count}} attachments",
   "common.photoCaptureFailed": "Failed to capture photo",
@@ -265,10 +264,6 @@ export const en: Record<string, string> = {
   "connection.fingerprintMismatch": "Public Key Fingerprint Mismatch",
   "connection.fingerprintMismatchDesc": "Server public key has changed, possibly due to redeployment",
   "connection.viewDetails": "View Details",
-  "connection.keyMismatch": "Key Mismatch",
-  "connection.keyMismatchDesc": "Server decryption failed, client key does not match the server",
-  "connection.replayDetected": "Replay Attack Detected",
-  "connection.replayDetectedDesc": "Server detected a duplicate request, connection refused",
 
   // Todo
   "todo.todayTasks": "Today's Tasks",
@@ -423,10 +418,8 @@ export const en: Record<string, string> = {
 
   // WS close reasons
   "ws.connectionTimeout": "Connection timeout",
-  "ws.keyMismatch": "Server decryption failed, key mismatch",
   "ws.missingFields": "Missing required fields",
   "ws.invalidToken": "Access token invalid",
-  "ws.replayDetected": "Replay attack detected",
   "ws.reconnectFailed": "Reconnection failed, please check connection settings",
 
   // Client

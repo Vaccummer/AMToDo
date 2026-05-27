@@ -30,10 +30,3 @@ class WsPush(BaseModel):
 
     type: str
     payload: Any | None = None
-
-
-class WsAuth(BaseModel):
-    """Client → Server auth message (P-256 envelope)."""
-
-    type: str  # must be "auth"
-    envelope: dict[str, Any]
