@@ -130,8 +130,11 @@ function pollNotifications(serverUrl, accessToken, queryWindow) {
 
   fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ after, access_token: accessToken }),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ after }),
   })
     .then((res) => res.json())
     .then((data) => {
@@ -326,7 +329,6 @@ function writeUiToml(settings) {
     "ws_reconnect_retries", "reconnect_max_attempts",
     "ws_enabled", "notify_on_disconnect",
     "ws_reconnect_interval_ms",
-    "known_key_fingerprint"
   ];
   lines.push("# AMToDo UI configuration (non-visual parameters).");
   for (const key of keys) {

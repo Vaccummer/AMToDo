@@ -1236,67 +1236,6 @@ def _resolve_download_path(
     return dest.resolve()
 
 
-@app.command("gen-keys")
-def gen_keys(
-    output_dir: Annotated[
-        Path,
-        typer.Argument(
-            file_okay=False,
-            dir_okay=True,
-            writable=True,
-            help="Directory to write generated key pair into.",
-        ),
-    ] = ...,
-) -> None:
-    """Generate a P-256 key pair for request encryption."""
-    from amtodo_crypto import generate_keypair
-
-    keys_dir = output_dir.resolve()
-    keys_dir.mkdir(parents=True, exist_ok=True)
-
-    private_pem, public_pem = generate_keypair()
-    (keys_dir / "server_private.pem").write_bytes(private_pem)
-    (keys_dir / "server_public.pem").write_bytes(public_pem)
-
-    _echo_json({
-        "ok": True,
-        "private_key": str(keys_dir / "server_private.pem"),
-        "public_key": str(keys_dir / "server_public.pem"),
-        "message": (
-            "Keep the private key on the server. Distribute the public key to clients. "
-            "Algorithm: P-256 + AES-256-GCM."
-        ),
-    })
-
-
-@app.command("fingerprint")
-def fingerprint(
-    public_key_path: Annotated[
-        Path,
-        typer.Argument(
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            help="Path to a P-256 public key PEM file.",
-        ),
-    ] = ...,
-) -> None:
-    """Compute SHA-256 fingerprint of a P-256 public key (same algorithm as the UI)."""
-    import hashlib
-    from amtodo_crypto.keys import public_key_spki
-
-    pem_bytes = public_key_path.read_bytes()
-    der_bytes = public_key_spki(pem_bytes)
-    digest = hashlib.sha256(der_bytes).hexdigest()
-    fingerprint_str = f"sha256:{digest}"
-
-    _echo_json({
-        "ok": True,
-        "fingerprint": fingerprint_str,
-        "public_key": str(public_key_path.resolve()),
-    })
-
-
 # ── attachment commands (unified) ──
 
 

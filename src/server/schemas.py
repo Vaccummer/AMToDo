@@ -1,9 +1,4 @@
-"""Pydantic request models for FastAPI endpoints.
-
-All POST request bodies include an auth field:
-  - Admin endpoints: ``admin_token``
-  - User endpoints:  ``access_token``
-"""
+"""Pydantic request models for FastAPI endpoints."""
 
 from __future__ import annotations
 
@@ -11,71 +6,61 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-# ── Auth mixins ──
-
-class AdminAuthMixin(BaseModel):
-    admin_token: str
-
-
-class UserAuthMixin(BaseModel):
-    access_token: str
-
-
 # ── Admin ──
 
-class AdminInitDbRequest(AdminAuthMixin):
+class AdminInitDbRequest(BaseModel):
     pass
 
 
-class AdminConfigRequest(AdminAuthMixin):
+class AdminConfigRequest(BaseModel):
     pass
 
 
-class AdminUserCreateRequest(AdminAuthMixin):
+class AdminUserCreateRequest(BaseModel):
     name: str
 
 
-class AdminUserListRequest(AdminAuthMixin):
+class AdminUserListRequest(BaseModel):
     pass
 
 
-class AdminUserDeleteRequest(AdminAuthMixin):
+class AdminUserDeleteRequest(BaseModel):
     user_id: int
 
 
-class AdminUserUpdateRequest(AdminAuthMixin):
+class AdminUserUpdateRequest(BaseModel):
     user_id: int
     name: str
 
 
-class AdminUserRegenTokenRequest(AdminAuthMixin):
+class AdminUserRegenTokenRequest(BaseModel):
     user_id: int
 
 
 # ── User ──
 
-class UserMeRequest(UserAuthMixin):
+class UserMeRequest(BaseModel):
     pass
 
 
-class UserTokenRegenerateRequest(UserAuthMixin):
+class UserTokenRegenerateRequest(BaseModel):
     pass
 
 
-class UserUpdateRequest(UserAuthMixin):
+class UserUpdateRequest(BaseModel):
     name: str
 
 
 # ── ToDo ──
 
-class TodoListRequest(UserAuthMixin):
+class TodoListRequest(BaseModel):
     start_at: int | None = None
     end_at: int | None = None
     open_only: bool = False
     completed_only: bool = False
 
 
-class TodoSearchRequest(UserAuthMixin):
+class TodoSearchRequest(BaseModel):
     query: str = ""
     use_regex: bool = False
     ignore_case: bool = True
@@ -102,12 +87,12 @@ class TodoSearchRequest(UserAuthMixin):
     after_id: int | None = None
 
 
-class TodoStatsRequest(UserAuthMixin):
+class TodoStatsRequest(BaseModel):
     start_at: int | None = None
     end_at: int | None = None
 
 
-class TodoCreateRequest(UserAuthMixin):
+class TodoCreateRequest(BaseModel):
     title: str
     planned_at: int | None = None
     due_at: int | None = None
@@ -117,11 +102,11 @@ class TodoCreateRequest(UserAuthMixin):
     extra_fields: str = "{}"
 
 
-class TodoGetRequest(UserAuthMixin):
+class TodoGetRequest(BaseModel):
     todo_id: int
 
 
-class TodoUpdateRequest(UserAuthMixin):
+class TodoUpdateRequest(BaseModel):
     todo_id: int
     title: str | None = None
     planned_at: int | None = None
@@ -132,7 +117,7 @@ class TodoUpdateRequest(UserAuthMixin):
     extra_fields: str | None = None
 
 
-class TodoTargetsRequest(UserAuthMixin):
+class TodoTargetsRequest(BaseModel):
     targets: list[int]
 
 
@@ -149,7 +134,7 @@ class TodoCreateFields(BaseModel):
     extra_fields: str = "{}"
 
 
-class TodoBatchCreateRequest(UserAuthMixin):
+class TodoBatchCreateRequest(BaseModel):
     items: list[TodoCreateFields]
 
 
@@ -165,11 +150,11 @@ class TodoBatchUpdateItem(BaseModel):
     extra_fields: str | None = None
 
 
-class TodoBatchUpdateRequest(UserAuthMixin):
+class TodoBatchUpdateRequest(BaseModel):
     items: list[TodoBatchUpdateItem]
 
 
-class AttachmentInitUploadRequest(UserAuthMixin):
+class AttachmentInitUploadRequest(BaseModel):
     owner_type: Literal["todo", "schedule"]
     owner_id: int
     filename: str
@@ -180,7 +165,7 @@ class AttachmentInitUploadRequest(UserAuthMixin):
     plain_size: int
 
 
-class AttachmentInitDownloadRequest(UserAuthMixin):
+class AttachmentInitDownloadRequest(BaseModel):
     owner_type: Literal["todo", "schedule"]
     owner_id: int
     attachment_id: int
@@ -188,7 +173,7 @@ class AttachmentInitDownloadRequest(UserAuthMixin):
 
 # ── Unified Attachments ──
 
-class AttachmentListRequest(UserAuthMixin):
+class AttachmentListRequest(BaseModel):
     """List attachments. Exactly one of todo_id or schedule_id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -200,7 +185,7 @@ class AttachmentListRequest(UserAuthMixin):
         return self
 
 
-class AttachmentGetRequest(UserAuthMixin):
+class AttachmentGetRequest(BaseModel):
     """Get attachment metadata. Exactly one of todo_id or schedule_id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -213,7 +198,7 @@ class AttachmentGetRequest(UserAuthMixin):
         return self
 
 
-class AttachmentRemoveRequest(UserAuthMixin):
+class AttachmentRemoveRequest(BaseModel):
     """Remove an attachment. Exactly one of todo_id or schedule_id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -226,7 +211,7 @@ class AttachmentRemoveRequest(UserAuthMixin):
         return self
 
 
-class AttachmentRenameRequest(UserAuthMixin):
+class AttachmentRenameRequest(BaseModel):
     """Rename an attachment. Exactly one of todo_id or schedule_id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -240,7 +225,7 @@ class AttachmentRenameRequest(UserAuthMixin):
         return self
 
 
-class AttachmentRemoveOrphanedRequest(UserAuthMixin):
+class AttachmentRemoveOrphanedRequest(BaseModel):
     """Remove orphaned attachments. Exactly one of todo_id or schedule_id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -254,12 +239,12 @@ class AttachmentRemoveOrphanedRequest(UserAuthMixin):
 
 # ── Schedule ──
 
-class ScheduleListRequest(UserAuthMixin):
+class ScheduleListRequest(BaseModel):
     start_at: int | None = None
     end_at: int | None = None
 
 
-class ScheduleSearchRequest(UserAuthMixin):
+class ScheduleSearchRequest(BaseModel):
     query: str = ""
     use_regex: bool = False
     ignore_case: bool = True
@@ -280,18 +265,18 @@ class ScheduleSearchRequest(UserAuthMixin):
     after_id: int | None = None
 
 
-class ScheduleStatsRequest(UserAuthMixin):
+class ScheduleStatsRequest(BaseModel):
     start_at: int | None = None
     end_at: int | None = None
 
 
-class ScheduleConflictsRequest(UserAuthMixin):
+class ScheduleConflictsRequest(BaseModel):
     start_at: int
     end_at: int
     exclude_id: int | None = None
 
 
-class ScheduleCreateRequest(UserAuthMixin):
+class ScheduleCreateRequest(BaseModel):
     title: str
     start_at: int
     end_at: int
@@ -301,11 +286,11 @@ class ScheduleCreateRequest(UserAuthMixin):
     extra_fields: str = "{}"
 
 
-class ScheduleGetRequest(UserAuthMixin):
+class ScheduleGetRequest(BaseModel):
     schedule_id: int
 
 
-class ScheduleUpdateRequest(UserAuthMixin):
+class ScheduleUpdateRequest(BaseModel):
     schedule_id: int
     title: str | None = None
     start_at: int | None = None
@@ -316,7 +301,7 @@ class ScheduleUpdateRequest(UserAuthMixin):
     extra_fields: str | None = None
 
 
-class ScheduleTargetsRequest(UserAuthMixin):
+class ScheduleTargetsRequest(BaseModel):
     targets: list[int]
 
 
@@ -331,7 +316,7 @@ class ScheduleCreateFields(BaseModel):
     extra_fields: str = "{}"
 
 
-class ScheduleBatchCreateRequest(UserAuthMixin):
+class ScheduleBatchCreateRequest(BaseModel):
     items: list[ScheduleCreateFields]
 
 
@@ -347,13 +332,13 @@ class ScheduleBatchUpdateItem(BaseModel):
     extra_fields: str | None = None
 
 
-class ScheduleBatchUpdateRequest(UserAuthMixin):
+class ScheduleBatchUpdateRequest(BaseModel):
     items: list[ScheduleBatchUpdateItem]
 
 
 # ── Changelog ──
 
-class TodoChangelogQueryRequest(UserAuthMixin):
+class TodoChangelogQueryRequest(BaseModel):
     entity_id: int | None = None
     action: str | None = None
     start_at: int | None = None
@@ -362,7 +347,7 @@ class TodoChangelogQueryRequest(UserAuthMixin):
     after_id: int | None = None
 
 
-class ScheduleChangelogQueryRequest(UserAuthMixin):
+class ScheduleChangelogQueryRequest(BaseModel):
     entity_id: int | None = None
     action: str | None = None
     start_at: int | None = None
@@ -371,7 +356,7 @@ class ScheduleChangelogQueryRequest(UserAuthMixin):
     after_id: int | None = None
 
 
-class NotificationChangelogQueryRequest(UserAuthMixin):
+class NotificationChangelogQueryRequest(BaseModel):
     entity_id: int | None = None
     action: str | None = None
     start_at: int | None = None
@@ -387,7 +372,7 @@ class NotificationMentionInput(BaseModel):
     target_id: int
 
 
-class NotificationCreateRequest(UserAuthMixin):
+class NotificationCreateRequest(BaseModel):
     title: str
     trigger_at: int
     description: str | None = None
@@ -395,11 +380,11 @@ class NotificationCreateRequest(UserAuthMixin):
     mentions: list[NotificationMentionInput] = Field(default_factory=list)
 
 
-class NotificationGetRequest(UserAuthMixin):
+class NotificationGetRequest(BaseModel):
     notification_id: int
 
 
-class NotificationUpdateRequest(UserAuthMixin):
+class NotificationUpdateRequest(BaseModel):
     notification_id: int
     title: str | None = None
     description: str | None = None
@@ -408,22 +393,22 @@ class NotificationUpdateRequest(UserAuthMixin):
     mentions: list[NotificationMentionInput] | None = None
 
 
-class NotificationRemoveRequest(UserAuthMixin):
+class NotificationRemoveRequest(BaseModel):
     notification_id: int
 
 
-class NotificationListRequest(UserAuthMixin):
+class NotificationListRequest(BaseModel):
     start_at: int | None = None
     end_at: int | None = None
 
 
-class NotificationListTriggeredRequest(UserAuthMixin):
+class NotificationListTriggeredRequest(BaseModel):
     after: int
 
 
 # ── Unified Trash ──
 
-class TrashGetRequest(UserAuthMixin):
+class TrashGetRequest(BaseModel):
     """Get a single trashed item. Exactly one id must be provided."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -437,7 +422,7 @@ class TrashGetRequest(UserAuthMixin):
         return self
 
 
-class TrashUpdateRequest(UserAuthMixin):
+class TrashUpdateRequest(BaseModel):
     """Update a trashed item. Exactly one id must be provided, fields must match entity type."""
     todo_id: int | None = None
     schedule_id: int | None = None
@@ -468,7 +453,7 @@ class TrashUpdateRequest(UserAuthMixin):
         return self
 
 
-class TrashListRequest(UserAuthMixin):
+class TrashListRequest(BaseModel):
     """List trashed items of a specific entity type."""
     entity_type: Literal["todo", "schedule", "notification"]
     # Shared search fields
@@ -500,7 +485,7 @@ class TrashListRequest(UserAuthMixin):
     fields: list[str] = Field(default_factory=lambda: ["title", "description"])
 
 
-class TrashRestoreRequest(UserAuthMixin):
+class TrashRestoreRequest(BaseModel):
     """Restore trashed items. Either targets (batch) or notification_id (single)."""
     targets: list[int] | None = None
     notification_id: int | None = None
@@ -514,7 +499,7 @@ class TrashRestoreRequest(UserAuthMixin):
         return self
 
 
-class TrashDeleteRequest(UserAuthMixin):
+class TrashDeleteRequest(BaseModel):
     """Permanently delete trashed items. Either targets (batch) or notification_id (single)."""
     targets: list[int] | None = None
     notification_id: int | None = None

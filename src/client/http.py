@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from config import AppSettings, cli_root
+from config import AppSettings
 
 
 class AMTodoClient:
@@ -23,14 +23,6 @@ class AMTodoClient:
             timeout=30.0,
             http2=True,
         )
-        self._public_key_pem: bytes | None = None
-        self._public_key_path = settings.server_public_key_path
-        if self._public_key_path:
-            key_path = Path(self._public_key_path)
-            if not key_path.is_absolute():
-                key_path = cli_root() / self._public_key_path
-            if key_path.is_file():
-                self._public_key_pem = key_path.read_bytes()
 
     def close(self) -> None:
         self._client.close()
@@ -310,17 +302,10 @@ class AMTodoClient:
         )
 
     def todo_attachment_download(self, todo_id: int, attachment_id: int) -> bytes:
-        data_key: bytes | None = None
-        body: dict[str, Any] = {"access_token": self._access_token, "todo_id": todo_id, "attachment_id": attachment_id}
-        if self._public_key_pem:
-            from amtodo_crypto import seal
-
-            envelope, data_key = seal(body, self._public_key_pem, "server-key-v1")
-            body = envelope
-
         response = self._client.post(
             "/api/v1/attachment/download",
-            json=body,
+            json={"todo_id": todo_id, "attachment_id": attachment_id},
+            headers=self._user_headers(),
         )
         response.raise_for_status()
         return response.content
@@ -491,17 +476,10 @@ class AMTodoClient:
         )
 
     def schedule_attachment_download(self, schedule_id: int, attachment_id: int) -> bytes:
-        data_key: bytes | None = None
-        body: dict[str, Any] = {"access_token": self._access_token, "schedule_id": schedule_id, "attachment_id": attachment_id}
-        if self._public_key_pem:
-            from amtodo_crypto import seal
-
-            envelope, data_key = seal(body, self._public_key_pem, "server-key-v1")
-            body = envelope
-
         response = self._client.post(
             "/api/v1/attachment/download",
-            json=body,
+            json={"schedule_id": schedule_id, "attachment_id": attachment_id},
+            headers=self._user_headers(),
         )
         response.raise_for_status()
         return response.content
@@ -601,68 +579,51 @@ class AMTodoClient:
 
     def _admin_post(self, path: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {}
-        if self._admin_token:
-            body["admin_token"] = self._admin_token
         if extra:
             body.update(extra)
-        return self._post(path, body)
+        return self._post(path, body, self._admin_headers())
 
     def _user_post(self, path: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {}
-        if self._access_token:
-            body["access_token"] = self._access_token
         if extra:
             body.update(extra)
-        return self._post(path, body)
+        return self._post(path, body, self._user_headers())
 
-    def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        data_key: bytes | None = None
-        if self._public_key_pem:
-            from amtodo_crypto import seal
-
-            envelope, data_key = seal(body, self._public_key_pem, "server-key-v1")
-            body = envelope
-
+    def _post(self, path: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
         try:
-            response = self._client.post(path, json=body)
+            response = self._client.post(path, json=body, headers=headers)
             response.raise_for_status()
-            resp_body = response.json()
-            return _decrypt_response(resp_body, data_key)
+            return response.json()
         except httpx.HTTPStatusError as exc:
-            return _error_from_response(exc, data_key)
+            return _error_from_response(exc)
         except httpx.RequestError as exc:
             return {"ok": False, "error": {"type": "ConnectionError", "message": str(exc)}}
 
+    def _admin_headers(self) -> dict[str, str]:
+        return _bearer_headers(self._admin_token)
 
-def _error_from_response(
-    exc: httpx.HTTPStatusError,
-    data_key: bytes | None = None,
-) -> dict[str, Any]:
+    def _user_headers(self) -> dict[str, str]:
+        return _bearer_headers(self._access_token)
+
+
+def _error_from_response(exc: httpx.HTTPStatusError) -> dict[str, Any]:
     try:
         body = exc.response.json()
-        decrypted = _decrypt_response(body, data_key)
-        if isinstance(decrypted, dict) and "detail" in decrypted and "error" not in decrypted:
+        if isinstance(body, dict) and "detail" in body and "error" not in body:
             return {
                 "ok": False,
                 "error": {
                     "type": "HTTPError",
-                    "message": str(decrypted["detail"]),
+                    "message": str(body["detail"]),
                     "status_code": exc.response.status_code,
                 },
             }
-        return decrypted
+        return body
     except Exception:
         return {"ok": False, "error": {"type": "HTTPError", "message": str(exc)}}
 
 
-def _decrypt_response(body: dict[str, Any], data_key: bytes | None) -> dict[str, Any]:
-    if data_key is None:
-        return body
-    from amtodo_crypto import is_response_envelope, open_response
-
-    if is_response_envelope(body):
-        try:
-            return open_response(body, data_key)
-        except Exception:
-            return body
-    return body
+def _bearer_headers(token: str) -> dict[str, str]:
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}

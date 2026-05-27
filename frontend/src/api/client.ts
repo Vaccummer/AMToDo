@@ -12,8 +12,6 @@ export type HealthResponse = {
   name?: string;
   public_url?: string;
   scheme?: "http" | "https";
-  public_key?: string;
-  public_key_fingerprint?: string;
   ipv4?: string;
   ipv6?: string;
   bind?: string[];
@@ -352,7 +350,6 @@ export type ScheduleUpdateRequest = {
 };
 
 const DEFAULT_BASE_URL = SERVER_URL;
-const KEY_ID = "server-key-v1";
 export const API_NETWORK_STATUS_EVENT = "amtodo:api-network-status";
 
 /** Convert REST path like "/api/v1/todos/list" to WS message type like "todo.list". */
@@ -414,20 +411,17 @@ function parseExtraFields<T extends { extra_fields?: unknown }>(item: T): T {
 export class AMToDoApi {
   private readonly baseUrl: string;
   private readonly token: string | null;
-  private readonly p256PublicKey: CryptoKey | null;
   private readonly wsClient: UiWsClient | null;
   maxAttachmentSize: number;
 
   constructor(
     baseUrl = DEFAULT_BASE_URL,
     token: string | null = null,
-    p256PublicKey: CryptoKey | null = null,
     maxAttachmentSize = 20 * 1024 * 1024,
     wsClient: UiWsClient | null = null,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
-    this.p256PublicKey = p256PublicKey;
     this.maxAttachmentSize = maxAttachmentSize;
     this.wsClient = wsClient;
   }
@@ -467,40 +461,19 @@ export class AMToDoApi {
 
   /** Verify token via HTTP (used by settings modal before WS is connected). */
   async verifyTokenHttp(): Promise<UserResponse> {
-    const body: Record<string, unknown> = {};
-    if (this.token) {
-      body["access_token"] = this.token;
-    }
-
-    let bodyStr: string;
-    let aesKey: CryptoKey | null = null;
-
-    if (this.p256PublicKey) {
-      const { seal } = await import("../crypto/envelope");
-      const result = await seal(body, this.p256PublicKey, KEY_ID);
-      bodyStr = JSON.stringify(result.envelope);
-      aesKey = result.aesKey;
-    } else {
-      bodyStr = JSON.stringify(body);
-    }
-
     const headers = new Headers();
     headers.set("Content-Type", "application/json");
+    if (this.token) {
+      headers.set("Authorization", `Bearer ${this.token}`);
+    }
 
     const response = await fetchWithNetworkStatus(`${this.baseUrl}/api/v1/user`, {
       method: "POST",
-      body: bodyStr,
+      body: JSON.stringify({}),
       headers,
     });
 
-    let responsePayload = await response.json();
-
-    if (aesKey) {
-      const { isResponseEnvelope, openResponse } = await import("../crypto/envelope");
-      if (isResponseEnvelope(responsePayload)) {
-        responsePayload = await openResponse(responsePayload as Record<string, unknown>, aesKey);
-      }
-    }
+    const responsePayload = await response.json();
 
     if (!response.ok || responsePayload.ok === false) {
       throw new Error(responsePayload?.error?.message ?? response.statusText);

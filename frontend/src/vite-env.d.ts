@@ -27,7 +27,6 @@ interface SettingsData {
   ws_enabled?: string;
   notify_on_disconnect?: string;
   ws_reconnect_interval_ms?: string;
-  known_key_fingerprint?: string;
 }
 
 

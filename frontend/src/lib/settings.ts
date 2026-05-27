@@ -25,8 +25,6 @@ export interface UISettings {
   reconnect_max_attempts: number;
   notify_on_disconnect: boolean;
   ws_reconnect_interval_ms: number;
-  /** TOFU: SHA-256 fingerprint of the server's P-256 public key. Empty = accept first key. */
-  known_key_fingerprint: string;
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -56,7 +54,6 @@ export const DEFAULT_SETTINGS: UISettings = {
   reconnect_max_attempts: 3,
   notify_on_disconnect: true,
   ws_reconnect_interval_ms: 3000,
-  known_key_fingerprint: "",
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
@@ -107,7 +104,6 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     ),
     notify_on_disconnect: raw.notify_on_disconnect !== "false",
     ws_reconnect_interval_ms: parseNumberSetting(raw.ws_reconnect_interval_ms, DEFAULT_SETTINGS.ws_reconnect_interval_ms),
-    known_key_fingerprint: raw.known_key_fingerprint ?? DEFAULT_SETTINGS.known_key_fingerprint,
   };
 }
 

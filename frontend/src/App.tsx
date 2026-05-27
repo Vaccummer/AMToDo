@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AMToDoApi, type HealthResponse, type TodoItem } from "./api/client";
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "./api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "./api/connection-status";
-import { FingerprintMismatchError } from "./crypto/envelope";
 import { ACCESS_TOKEN, SERVER_URL } from "./config";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "./lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "./lib/time";
@@ -115,7 +114,7 @@ export function App() {
       if (!hasBeenOnline) return;
       if (snap.status === "offline") {
         fireDisconnectNotice(t("disconnect.interrupted"), snap.errorMessage ? t(snap.errorMessage) || snap.errorMessage : t("common.connectionFailed"));
-      } else if (snap.status === "token-error" || snap.status === "key-mismatch" || snap.status === "fingerprint" || snap.status === "replay-detected") {
+      } else if (snap.status === "token-error") {
         fireDisconnectNotice(t("disconnect.authError"), snap.errorMessage ? t(snap.errorMessage) || snap.errorMessage : t("disconnect.authErrorDesc"));
       }
     });
@@ -311,17 +310,6 @@ export function App() {
       setHealth(result);
       mgr.reportHealthOk(result.version, result.name);
 
-      // TOFU: verify server public key fingerprint from health response
-      let currentFingerprint = settings.known_key_fingerprint;
-      if (result.public_key) {
-        const { verifyOrEnrollKey } = await import("./crypto/envelope");
-        currentFingerprint = await verifyOrEnrollKey(result.public_key, currentFingerprint);
-        if (currentFingerprint !== settings.known_key_fingerprint) {
-          setSettings((prev) => ({ ...prev, known_key_fingerprint: currentFingerprint }));
-          shell.writeSettings({ known_key_fingerprint: currentFingerprint }).catch(() => {});
-        }
-      }
-
       const limits = result.limits;
 
       // Phase 2: Connect UI WebSocket
@@ -329,11 +317,6 @@ export function App() {
         settings.server_url,
         settings.access_token,
         settings.ws_reconnect_interval_ms,
-        currentFingerprint,
-        (enrolledFp: string) => {
-          setSettings((prev) => ({ ...prev, known_key_fingerprint: enrolledFp }));
-          shell.writeSettings({ known_key_fingerprint: enrolledFp }).catch(() => {});
-        },
         settings.reconnect_max_attempts
       );
 
@@ -374,7 +357,6 @@ export function App() {
       const readyApi = new AMToDoApi(
         settings.server_url,
         settings.access_token,
-        null,
         limits.max_attachment_size_bytes,
         wsClient
       );
@@ -400,16 +382,10 @@ export function App() {
         if (cancelled) return;
         setHealth(null);
         const mgr = connectionManagerRef.current;
-        const message = error instanceof FingerprintMismatchError
-          ? error.messageKey
-          : error instanceof Error ? error.message : "common.connectionFailed";
-        if (error instanceof FingerprintMismatchError) {
-          mgr.reportFingerprintMismatch(message);
-        } else {
-          const kind = error instanceof TypeError ? "network" : "token";
-          mgr.reportHealthError(kind, message);
-        }
-        if (!(error instanceof FingerprintMismatchError)) scheduleRetry();
+        const message = error instanceof Error ? error.message : "common.connectionFailed";
+        const kind = error instanceof TypeError ? "network" : "token";
+        mgr.reportHealthError(kind, message);
+        scheduleRetry();
       }
     };
 
@@ -544,8 +520,6 @@ export function App() {
 
   const dotClass = connStatus.status === "online" ? " ok"
     : connStatus.status === "token-error" ? " token-error"
-    : connStatus.status === "fingerprint" ? " token-error"
-    : connStatus.status === "key-mismatch" ? " token-error"
     : connStatus.status === "checking" ? ""
     : connStatus.status === "idle" ? " idle"
     : " network-error";
@@ -562,9 +536,6 @@ export function App() {
     ? (connStatus.serverVersion ? `API ${connStatus.serverVersion}` : `API ${tApp("settings.connectionSuccess")}`)
     : connStatus.status === "checking" ? `API ${tApp("settings.checking")}`
     : connStatus.status === "token-error" ? tApp("settings.tokenInvalid")
-    : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatch")
-    : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatch")
-    : connStatus.status === "replay-detected" ? tApp("connection.replayDetected")
     : connStatus.status === "idle" ? tApp("disconnect.disconnected")
     : `API ${tApp("common.networkError")}`;
 
@@ -639,9 +610,6 @@ export function App() {
                 {connStatus.status === "reconnecting" ? tApp("connection.reconnectingDesc")
                   : connStatus.status === "idle" ? tApp("disconnect.disconnected")
                   : connStatus.status === "token-error" ? tApp("connection.authFailed")
-                  : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatch")
-                  : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatch")
-                  : connStatus.status === "replay-detected" ? tApp("connection.replayDetected")
                   : connStatus.status === "offline" ? tApp("connection.cannotConnect")
                   : tApp("disconnect.disconnected")}
               </span>
@@ -726,7 +694,7 @@ export function App() {
               />
             </div>
           )}
-          {(connStatus.status === "idle" || connStatus.status === "offline" || connStatus.status === "token-error" || connStatus.status === "fingerprint" || connStatus.status === "key-mismatch" || connStatus.status === "replay-detected") && (
+          {(connStatus.status === "idle" || connStatus.status === "offline" || connStatus.status === "token-error") && (
             <div className={`signal-overlay${connStatus.status !== "idle" ? " signal-overlay-warn" : ""}`}>
               <div className="signal-overlay-icon">
                 <div className="signal-overlay-wave" />
@@ -748,9 +716,6 @@ export function App() {
               <span className="signal-overlay-sub">
                 {connStatus.status === "idle" ? tApp("connection.reconnectingDesc")
                   : connStatus.status === "token-error" ? tApp("connection.authFailedDesc")
-                  : connStatus.status === "fingerprint" ? tApp("connection.fingerprintMismatchDesc")
-                  : connStatus.status === "key-mismatch" ? tApp("connection.keyMismatchDesc")
-                  : connStatus.status === "replay-detected" ? tApp("connection.replayDetectedDesc")
                   : tApp("connection.cannotConnectDesc")}
               </span>
             </div>
@@ -788,9 +753,6 @@ export function App() {
           }}
           focusTarget={settingsFocusTarget}
           connectionStatus={connStatus}
-          onAcceptFingerprint={(fingerprint) => {
-            setSettings((prev) => ({ ...prev, known_key_fingerprint: fingerprint }));
-          }}
         />
       ) : null}
 

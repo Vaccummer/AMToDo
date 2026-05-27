@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../api/client";
 import type { ConnectionStatusSnapshot } from "../api/connection-status";
 import { useI18n } from "../i18n";
-import { FingerprintMismatchError, fingerprintPublicKey, importP256PublicKey, verifyOrEnrollKey } from "../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
 import type { UISettings } from "../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../themes";
@@ -30,10 +29,9 @@ const SCHEDULE_END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
 // ── Types ──
 
 type UrlCheckResult =
-  | { kind: "ok"; version: string; name?: string; publicKey?: string }
+  | { kind: "ok"; version: string; name?: string }
   | { kind: "unreachable"; message: string }
-  | { kind: "invalid"; message: string }
-  | { kind: "fingerprint"; old: string; new: string };
+  | { kind: "invalid"; message: string };
 
 type TokenResult =
   | { ok: true; userName: string }
@@ -47,7 +45,6 @@ type Props = {
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionToggle?: (enabled: boolean) => void;
-  onAcceptFingerprint?: (fingerprint: string) => void;
 };
 
 // ── Helpers ──
@@ -66,17 +63,9 @@ const CROSS_ICON = (
   </svg>
 );
 
-const WARN_ICON = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -101,8 +90,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // URL check
   const [urlChecking, setUrlChecking] = useState(false);
   const [urlCheckResult, setUrlCheckResult] = useState<UrlCheckResult | null>(null);
-  const storedPublicKeyRef = useRef<string | null>(null);
-  const validatedFingerprintRef = useRef<string | null>(null);
 
   // Token verify
   const [tokenVerifying, setTokenVerifying] = useState(false);
@@ -164,7 +151,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (!userToggledWsRef.current) return;
     if (!wsEnabled) return;
     const s = connectionStatus?.status;
-    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
+    if (s === "token-error" || s === "offline") {
       userToggledWsRef.current = false;
       setWsEnabled(false);
       onConnectionToggle?.(false);
@@ -178,13 +165,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   async function checkUrl(): Promise<boolean> {
     if (!serverUrl) {
       setUrlCheckResult(null);
-      storedPublicKeyRef.current = null;
       return false;
     }
     setUrlChecking(true);
     setUrlCheckResult(null);
     setTokenResult(null);
-    storedPublicKeyRef.current = null;
     try {
       onSaveConnection?.({ server_url: serverUrl });
 
@@ -197,29 +182,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         return false;
       }
 
-      // Check public key fingerprint
-      if (result.public_key) {
-        const storedFp = serverUrl === initial.server_url ? initial.known_key_fingerprint : "";
-        try {
-          await verifyOrEnrollKey(result.public_key, storedFp);
-          storedPublicKeyRef.current = result.public_key;
-        } catch (e) {
-          if (e instanceof FingerprintMismatchError) {
-            setUrlCheckResult({ kind: "fingerprint", old: e.expected, new: e.actual });
-            return false;
-          }
-          throw e;
-        }
-      }
-
-      // Save fingerprint on success
-      if (result.public_key) {
-        const fp = await fingerprintPublicKey(result.public_key);
-        validatedFingerprintRef.current = fp;
-        onSaveConnection?.({ known_key_fingerprint: fp });
-      }
-
-      setUrlCheckResult({ kind: "ok", version: result.version, name: result.name, publicKey: result.public_key });
+      setUrlCheckResult({ kind: "ok", version: result.version, name: result.name });
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t("settings.connectionFailed");
@@ -235,8 +198,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     setServerUrl(value);
     if (urlCheckResult) {
       setUrlCheckResult(null);
-      storedPublicKeyRef.current = null;
-      validatedFingerprintRef.current = null;
       setTokenResult(null);
     }
   }
@@ -250,14 +211,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     setTokenVerifying(true);
     setTokenResult(null);
     try {
-      const pubKey = storedPublicKeyRef.current;
-      let api: AMToDoApi;
-      if (pubKey) {
-        const p256Key = await importP256PublicKey(pubKey);
-        api = new AMToDoApi(serverUrl, accessToken, p256Key);
-      } else {
-        api = new AMToDoApi(serverUrl, accessToken);
-      }
+      const api = new AMToDoApi(serverUrl, accessToken);
       const result = await api.verifyTokenHttp();
       if (result.ok) {
         setTokenResult({ ok: true, userName: result.user.name });
@@ -361,20 +315,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     }
   }
 
-  // Fingerprint accept/reject (from connectionStatus prop)
-  function handleAcceptFingerprint() {
-    if (urlCheckResult?.kind === "fingerprint") {
-      onSaveConnection?.({ known_key_fingerprint: urlCheckResult.new });
-      onAcceptFingerprint?.(urlCheckResult.new);
-      setTimeout(() => checkUrl(), 100);
-    }
-  }
-
-  function handleRejectFingerprint() {
-    setUrlCheckResult(null);
-    storedPublicKeyRef.current = null;
-  }
-
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
   // Connection section state
@@ -387,7 +327,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     "settings-modal-input",
     urlCheckResult?.kind === "ok" ? "url-ok" : "",
     urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" ? "url-err" : "",
-    urlCheckResult?.kind === "fingerprint" ? "url-warn" : "",
   ].filter(Boolean).join(" ");
 
   const tokenInputClass = [
@@ -521,39 +460,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className="settings-conn-status-inline err">
               {CROSS_ICON}
               {urlCheckResult.message}
-            </div>
-          </div>
-        );
-      case "fingerprint":
-        return (
-          <div className="settings-conn-status">
-            <div className="settings-conn-status-inline warn">
-              {WARN_ICON}
-              {t("settings.fingerprintMismatch")}
-            </div>
-            <div className="settings-conn-fp-inline" style={{ marginTop: 6 }}>
-              <div className="settings-conn-fp-title">
-                {WARN_ICON}
-                {t("settings.fingerprintChanged")}
-              </div>
-              <div className="settings-conn-fp-hashes">
-                <div className="settings-conn-fp-hash-row">
-                  <span className="settings-conn-fp-hash-label">{t("settings.localRecord")}</span>
-                  <code className="settings-conn-fp-hash old">{urlCheckResult.old}</code>
-                </div>
-                <div className="settings-conn-fp-hash-row">
-                  <span className="settings-conn-fp-hash-label">{t("settings.serverNewFingerprint")}</span>
-                  <code className="settings-conn-fp-hash new">{urlCheckResult.new}</code>
-                </div>
-              </div>
-              <div className="settings-conn-fp-actions">
-                <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-accept" onClick={handleAcceptFingerprint}>
-                  {t("settings.trustNewFingerprint")}
-                </button>
-                <button type="button" className="settings-conn-fp-btn settings-conn-fp-btn-reject" onClick={handleRejectFingerprint}>
-                  {t("settings.reject")}
-                </button>
-              </div>
             </div>
           </div>
         );

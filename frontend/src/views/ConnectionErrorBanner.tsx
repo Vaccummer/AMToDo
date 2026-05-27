@@ -50,30 +50,6 @@ function resolve(status: UnifiedStatus, t: (key: string, params?: Record<string,
         btnLabel: t("connection.updateToken"),
         focusTarget: "token" as const,
       };
-    case "fingerprint":
-      return {
-        color: "fp" as const,
-        title: t("connection.fingerprintMismatch"),
-        desc: t("connection.fingerprintMismatchDesc"),
-        btnLabel: t("connection.viewDetails"),
-        focusTarget: "url" as const,
-      };
-    case "key-mismatch":
-      return {
-        color: "fp" as const,
-        title: t("connection.keyMismatch"),
-        desc: t("connection.keyMismatchDesc"),
-        btnLabel: t("connection.checkSettings"),
-        focusTarget: "url" as const,
-      };
-    case "replay-detected":
-      return {
-        color: "net" as const,
-        title: t("connection.replayDetected"),
-        desc: t("connection.replayDetectedDesc"),
-        btnLabel: t("connection.checkSettings"),
-        focusTarget: "url" as const,
-      };
     default:
       return null;
   }
