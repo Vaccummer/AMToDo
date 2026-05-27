@@ -111,6 +111,11 @@ def _get_client_ip(scope: Scope) -> str:
     read from that header after verifying the proxy strips untrusted
     forwarding headers.
     """
+    state = scope.get("state") or {}
+    forwarded_ip = state.get("client_ip")
+    if isinstance(forwarded_ip, str) and forwarded_ip:
+        return forwarded_ip
+
     client = scope.get("client")
     if client:
         return client[0]

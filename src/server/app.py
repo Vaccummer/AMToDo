@@ -25,6 +25,7 @@ from serialization import error_to_dict
 from server.admin import router as admin_router
 from server.attachment_routes import router as attachment_router
 from server.notifications import router as notification_router
+from server.proxy import ForwardedHeadersMiddleware, SecurityHeadersMiddleware
 from server.notification_ws import router as ws_router
 from server.rate_limit import RateLimitMiddleware, RateLimiter
 from server.schedules import router as schedule_router
@@ -342,6 +343,24 @@ def _setup_rate_limit_middleware(app: FastAPI, settings: AppSettings) -> None:
     app.add_middleware(RateLimitMiddleware, limiter=limiter, public_paths=public_paths)
 
 
+def _as_str_tuple(value: object, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return tuple(part.strip() for part in value.split(",") if part.strip())
+    if isinstance(value, list | tuple):
+        return tuple(str(part).strip() for part in value if str(part).strip())
+    return default
+
+
+def _as_bool(value: object, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
 def create_app(settings: AppSettings) -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(
@@ -350,11 +369,18 @@ def create_app(settings: AppSettings) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Allow cross-origin requests from the Capacitor WebView on mobile
+    if settings.security_headers_enabled:
+        app.add_middleware(
+            SecurityHeadersMiddleware,
+            hsts_enabled=settings.hsts_enabled,
+            hsts_max_age_seconds=settings.hsts_max_age_seconds,
+        )
+
+    # Allow configured cross-origin requests from desktop/mobile shells.
     from starlette.middleware.cors import CORSMiddleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=list(settings.cors_allow_origins),
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -384,6 +410,12 @@ def create_app(settings: AppSettings) -> FastAPI:
 
     if settings.rate_limit_requests > 0:
         _setup_rate_limit_middleware(app, settings)
+
+    if settings.trusted_proxy_ips:
+        app.add_middleware(
+            ForwardedHeadersMiddleware,
+            trusted_proxy_ips=settings.trusted_proxy_ips,
+        )
 
     @app.exception_handler(ValidationError)
     async def handle_validation(request, exc):
@@ -439,6 +471,9 @@ def main() -> None:
     encryption_cfg = raw.get("encryption", {})
     rate_limit_cfg = raw.get("rate_limit", {})
     health_cfg = raw.get("health", {})
+    proxy_cfg = raw.get("proxy", {})
+    cors_cfg = raw.get("cors", {})
+    security_headers_cfg = raw.get("security_headers", {})
 
     log_file = log_cfg.get("file", "log/server.log")
     database_url = database_cfg.get("url", "sqlite:///db/amtodo.sqlite3")
@@ -447,6 +482,7 @@ def main() -> None:
         host = None
     port = server.get("port", 8000)
     server_name = server.get("name", "")
+    public_url = server.get("public_url", "")
     admin_token = auth.get("admin_token", "")
     attachment_root = storage_cfg.get("attachment_root", "")
     max_attachment_size_bytes = storage_cfg.get(
@@ -458,6 +494,11 @@ def main() -> None:
     rate_limit_requests = rate_limit_cfg.get("requests", DEFAULT_RATE_LIMIT_REQUESTS)
     rate_limit_window_seconds = rate_limit_cfg.get("window_seconds", DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
     ip_cache_ttl = health_cfg.get("ip_cache_ttl", DEFAULT_IP_CACHE_TTL_SECONDS)
+    trusted_proxy_ips = _as_str_tuple(proxy_cfg.get("trusted_ips"))
+    cors_allow_origins = _as_str_tuple(cors_cfg.get("allow_origins"), ("*",))
+    security_headers_enabled = _as_bool(security_headers_cfg.get("enabled"), True)
+    hsts_enabled = _as_bool(security_headers_cfg.get("hsts_enabled"), False)
+    hsts_max_age_seconds = int(security_headers_cfg.get("hsts_max_age_seconds", 15_552_000))
 
     if not admin_token:
         print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
@@ -474,6 +515,10 @@ def main() -> None:
     print(f"  Database:  {database_url}")
     listen_display = f"[::]:{port} (dual-stack)" if host is None else f"{host}:{port}"
     print(f"  Listen:    {listen_display}")
+    if public_url:
+        print(f"  Public URL: {public_url}")
+    if trusted_proxy_ips:
+        print(f"  Trusted proxies: {', '.join(trusted_proxy_ips)}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
     print(f"  Rate limit: {rate_limit_requests} req / {rate_limit_window_seconds}s per IP (public endpoints)")
 
@@ -483,6 +528,7 @@ def main() -> None:
         server_host=host,
         server_port=port,
         server_name=server_name,
+        public_url=public_url,
         server_private_key_path=private_key_path,
         server_public_key_path=public_key_path,
         request_timestamp_tolerance_seconds=tolerance,
@@ -491,6 +537,11 @@ def main() -> None:
         rate_limit_requests=rate_limit_requests,
         rate_limit_window_seconds=rate_limit_window_seconds,
         ip_cache_ttl_seconds=ip_cache_ttl,
+        trusted_proxy_ips=trusted_proxy_ips,
+        cors_allow_origins=cors_allow_origins,
+        security_headers_enabled=security_headers_enabled,
+        hsts_enabled=hsts_enabled,
+        hsts_max_age_seconds=hsts_max_age_seconds,
     )
     app = create_app(settings)
 

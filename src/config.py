@@ -33,6 +33,7 @@ class AppSettings:
     language: str = DEFAULT_LANGUAGE
     timezone: str = DEFAULT_TIMEZONE
     server_url: str = ""
+    public_url: str = ""
     access_token: str = ""
     server_host: str | None = "0.0.0.0"
     server_port: int = 8000
@@ -46,6 +47,11 @@ class AppSettings:
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
     rate_limit_window_seconds: int = DEFAULT_RATE_LIMIT_WINDOW_SECONDS
     ip_cache_ttl_seconds: int = DEFAULT_IP_CACHE_TTL_SECONDS
+    trusted_proxy_ips: tuple[str, ...] = ()
+    cors_allow_origins: tuple[str, ...] = ("*",)
+    security_headers_enabled: bool = True
+    hsts_enabled: bool = False
+    hsts_max_age_seconds: int = 15_552_000
 
 
 def _resolve_root(
