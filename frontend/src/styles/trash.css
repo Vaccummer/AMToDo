@@ -462,6 +462,10 @@
   opacity: 0.7;
 }
 
+.ft-count-placeholder {
+  visibility: hidden;
+}
+
 .timeline-chevron {
   margin-left: auto;
   color: var(--global-text-muted);
@@ -509,16 +513,11 @@
 
 .swipe-action-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   width: 72px;
   border: 0;
   color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  font-family: inherit;
   cursor: pointer;
   padding: 0;
   transition: filter var(--duration-fast);
@@ -526,8 +525,8 @@
 }
 
 .swipe-action-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
 }
 
 .swipe-action-btn.restore {
@@ -664,6 +663,260 @@
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.02em;
+}
+
+/* ── Mobile trash todo item: aligned with mobile search todo cards ── */
+.mobile-shell .swipe-content.trash-todo-content {
+  min-height: 70px;
+  padding: 12px 12px;
+}
+
+.mobile-shell .swipe-content.trash-todo-content[data-status="pending"] {
+  background: #fff;
+}
+
+.mobile-shell .swipe-content.trash-todo-content[data-status="overdue"] {
+  background: #fef2f2;
+}
+
+.mobile-shell .swipe-content.trash-todo-content[data-status="done"] {
+  background: #f0fdf4;
+}
+
+.mobile-shell .swipe-content.trash-todo-content[data-status="late-done"] {
+  background: #fffbeb;
+}
+
+.mobile-shell .trash-todo-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.mobile-shell .trash-todo-main {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  min-width: 0;
+}
+
+.mobile-shell .trash-todo-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--global-text-primary, #342f2a);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-shell .trash-todo-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.mobile-shell .trash-todo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  min-width: 0;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mobile-shell .trash-todo-id {
+  background: rgba(74, 111, 165, 0.1);
+  color: #4a6fa5;
+  flex-shrink: 0;
+}
+
+.mobile-shell .trash-todo-attach {
+  background: rgba(192, 125, 58, 0.1);
+  color: #c07d3a;
+  flex-shrink: 0;
+}
+
+.mobile-shell .trash-todo-tag {
+  max-width: 120px;
+  overflow: hidden;
+  background: rgba(100, 220, 210, 0.12);
+  color: #1a7f72;
+  text-overflow: ellipsis;
+}
+
+.mobile-shell .trash-todo-tag svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.mobile-shell .trash-todo-tag span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-shell .trash-todo-side {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 74px;
+}
+
+.mobile-shell .trash-todo-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mobile-shell .trash-todo-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.mobile-shell .trash-todo-status.pending {
+  color: #7c3aed;
+}
+
+.mobile-shell .trash-todo-status.overdue {
+  color: #dc2626;
+}
+
+.mobile-shell .trash-todo-status.done {
+  color: #16a34a;
+}
+
+.mobile-shell .trash-todo-status.late-done {
+  color: #d97706;
+}
+
+.mobile-shell .trash-todo-deleted {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(74, 111, 165, 0.1);
+  color: #4a6fa5;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ── Mobile trash schedule item: mirrors mobile search schedule cards ── */
+.mobile-shell .swipe-content.trash-schedule-content {
+  display: block;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: #fff;
+}
+
+.mobile-shell .swipe-content.trash-schedule-content[data-status] {
+  background: #fff;
+}
+
+.mobile-shell .trash-schedule-card {
+  width: 100%;
+  min-width: 0;
+}
+
+.mobile-shell .trash-schedule-deleted {
+  color: #4a6fa5;
+  background: rgba(74, 111, 165, 0.1);
+}
+
+.mobile-shell .trash-schedule-footer-id {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+}
+
+.mobile-shell .trash-schedule-card .ms-card-schedule-footer {
+  align-items: center;
+}
+
+.mobile-shell .trash-schedule-card .ms-card-schedule-chip svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Mobile trash notification item: based on schedule notification cards ── */
+.mobile-shell .swipe-content.trash-notify-content {
+  display: block;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: #fff;
+}
+
+.mobile-shell .swipe-content.trash-notify-content[data-status] {
+  background: #fff;
+}
+
+.mobile-shell .trash-notify-card {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.mobile-shell .trash-notify-card:active {
+  transform: none;
+}
+
+.mobile-shell .trash-notify-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.mobile-shell .trash-notify-card .notify-card-title {
+  min-width: 0;
+}
+
+.mobile-shell .trash-notify-deleted {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(74, 111, 165, 0.1);
+  color: #4a6fa5;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ── Legacy row classes (kept for desktop) ── */

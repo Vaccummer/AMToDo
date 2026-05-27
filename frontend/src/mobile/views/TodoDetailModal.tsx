@@ -307,6 +307,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           {/* Editable fields */}
           <div className="modal-section-label">{t("common.editableFields")}</div>
 
+          {!trashMode && (
           <div className="modal-field">
             <label className="modal-field-label">{t("common.completedStatus")}</label>
             <button
@@ -327,6 +328,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
               </span>
             </button>
           </div>
+          )}
 
           <div className="modal-field">
             <label className="modal-field-label" htmlFor="md-title">{t("common.title")}</label>

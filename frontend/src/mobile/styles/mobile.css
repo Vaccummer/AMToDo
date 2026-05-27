@@ -647,7 +647,7 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  min-width: 5.6em;
+  min-width: 8.4em;
   justify-content: flex-end;
   font-size: 11px;
 }
@@ -672,6 +672,11 @@
   font-weight: 600;
 }
 
+.mobile-shell .todo-line1 .todo-due-placeholder {
+  color: #b5aea5;
+  font-weight: 600;
+}
+
 .mobile-shell .todo-date-icon {
   flex-shrink: 0;
   vertical-align: -2px;
@@ -680,7 +685,7 @@
 
 .mobile-shell .todo-date-text {
   display: inline-block;
-  width: 3.2em;
+  width: 6.2em;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }

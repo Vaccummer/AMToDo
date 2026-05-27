@@ -362,7 +362,7 @@ export const zhCN: Record<string, string> = {
   "trash.purgeFailed": "永久删除失败",
   "trash.purged": "已永久删除",
   "trash.purgeConfirm": "永久删除后无法恢复，相关附件也会被清除。",
-  "trash.purgeFilterConfirm": "即将永久删除 {{list}}，共 {{count}} 项。此操作不可撤销，相关附件也会被清除。",
+  "trash.purgeFilterConfirm": "即将永久删除 {{list}}。此操作不可撤销，相关附件也会被清除。",
   "trash.purgeFilterTitle": "永久删除筛选结果",
   "trash.purgedCount": "已永久删除 {{count}} 项",
   "trash.searchTrash": "搜索回收站...",

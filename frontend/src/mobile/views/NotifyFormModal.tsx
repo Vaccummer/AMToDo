@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AMToDoApi } from "../../api/client";
+import type { AMToDoApi, NotificationItem } from "../../api/client";
 import { datetimeLocalFromEpoch, epochFromDatetimeLocal } from "../../lib/time";
 import { DatePicker } from "./DatePicker";
 import { Dropdown } from "./Dropdown";
@@ -21,6 +21,8 @@ type Props = {
   onClose: () => void;
   onNavigate?: (type: "todo" | "schedule", id: number, action: "jump" | "edit") => void;
   onOpenScheduleDetail?: (id: number) => void;
+  onUpdate?: (notification: NotificationItem) => void;
+  trashMode?: boolean;
 };
 
 const MENTION_TYPE_OPTIONS = [
@@ -37,7 +39,7 @@ function timeKeyValid(key: string) {
   return /^\d{2}:\d{2}(:\d{2})?$/.test(key);
 }
 
-export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavigate, onOpenScheduleDetail }: Props) {
+export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavigate, onOpenScheduleDetail, onUpdate, trashMode }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [triggerDate, setTriggerDate] = useState("");
@@ -78,7 +80,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
     if (!editId) return;
     let cancelled = false;
     api
-      .getNotification(editId)
+      .getNotification(editId, trashMode)
       .then((res) => {
         if (cancelled) return;
         const n = res.notification;
@@ -104,7 +106,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
     return () => {
       cancelled = true;
     };
-  }, [api, editId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api, editId, trashMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editId || !initialTriggerAt) return;
@@ -147,13 +149,14 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
       const extraFieldsStr = JSON.stringify(extraFields);
 
       if (isEdit && editId !== null) {
-        await api.updateNotification(editId, {
+        const result = await api.updateNotification(editId, {
           title: title.trim(),
           description: description.trim() || null,
           trigger_at: triggerAt,
           mentions: mentionPayload,
           extra_fields: extraFieldsStr,
-        });
+        }, trashMode);
+        onUpdate?.(result.notification);
       } else {
         await api.createNotification({
           title: title.trim(),
@@ -430,7 +433,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
             </div>
           </div>
 
-          {isEdit && editId !== null && (
+          {isEdit && editId !== null && !trashMode && (
             <>
               <div className="schedule-modal-divider" />
               <div className="schedule-modal-section-label">{t("common.history")}</div>
@@ -450,7 +453,7 @@ export function NotifyFormModal({ api, editId, initialTriggerAt, onClose, onNavi
           >
             {saving ? t("common.saving") : isEdit ? t("common.save") : t("notify.createNotification")}
           </button>
-          {isEdit ? (
+          {isEdit && !trashMode ? (
             <button
               type="button"
               className="schedule-modal-btn schedule-modal-btn-delete"

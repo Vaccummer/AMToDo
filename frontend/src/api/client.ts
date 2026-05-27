@@ -1040,9 +1040,11 @@ export class AMToDoApi {
       trigger_at?: number;
       mentions?: { target_type: string; target_id: number }[] | null;
       extra_fields?: string | null;
-    }
+    },
+    trashMode?: boolean
   ): Promise<NotificationResponse> {
-    const res = await this.post<NotificationResponse>("/api/v1/notifications/update", {
+    const path = trashMode ? "/api/v1/trash/update" : "/api/v1/notifications/update";
+    const res = await this.post<NotificationResponse>(path, {
       notification_id: notificationId,
       ...fields,
     });
