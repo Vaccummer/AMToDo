@@ -103,11 +103,22 @@ function SearchIcon() {
 /* ── Status helpers ── */
 
 type StatusTag = { label: string; className: string };
+type TodoTrashStatus = "pending" | "overdue" | "late-done" | "done";
 
 function getTodoStatus(item: TodoItem, t: (key: string) => string): StatusTag {
-  if (item.completed) return { label: t("common.done"), className: "status-done" };
-  if (item.priority >= 2) return { label: t("common.highPriority"), className: "status-high" };
-  return { label: t("common.pending"), className: "status-pending" };
+  const status = getTodoTrashStatus(item);
+  if (status === "overdue") return { label: "逾期", className: "status-overdue" };
+  if (status === "late-done") return { label: "逾期完成", className: "status-late-done" };
+  if (status === "done") return { label: "完成", className: "status-done" };
+  return { label: "未完成", className: "status-pending" };
+}
+
+function getTodoTrashStatus(item: TodoItem): TodoTrashStatus {
+  const lateDone = Boolean(item.completed && item.due_at !== null && item.completed_at !== null && item.completed_at > item.due_at);
+  if (!item.completed && item.due_at !== null && item.due_at < Math.floor(Date.now() / 1000)) return "overdue";
+  if (lateDone) return "late-done";
+  if (item.completed) return "done";
+  return "pending";
 }
 
 function getScheduleStatus(item: ScheduleItem, t: (key: string) => string): StatusTag {
@@ -131,8 +142,9 @@ function getStatus(entry: TrashResult, t: (key: string) => string): StatusTag {
 
 /* ── Swipeable Row ── */
 
-const SWIPE_THRESHOLD = 60;
+const SWIPE_THRESHOLD = 96;
 const SWIPE_MAX = 144;
+const SWIPE_DRAG_RESISTANCE = 0.72;
 const TAP_THRESHOLD = 8;
 
 type SwipeRowProps = {
@@ -212,7 +224,8 @@ function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, ind
     if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) moved.current = true;
     currentX.current = dx;
     const base = revealed ? -SWIPE_MAX : 0;
-    const x = Math.max(-SWIPE_MAX, Math.min(0, base + dx));
+    const resistedDx = revealed ? dx : dx * SWIPE_DRAG_RESISTANCE;
+    const x = Math.max(-SWIPE_MAX, Math.min(0, base + resistedDx));
     applyTransform(x);
   }, [revealed, applyTransform]);
 
@@ -241,7 +254,8 @@ function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, ind
       if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) moved.current = true;
       currentX.current = dx;
       const base = revealed ? -SWIPE_MAX : 0;
-      const x = Math.max(-SWIPE_MAX, Math.min(0, base + dx));
+      const resistedDx = revealed ? dx : dx * SWIPE_DRAG_RESISTANCE;
+      const x = Math.max(-SWIPE_MAX, Math.min(0, base + resistedDx));
       applyTransform(x);
     };
     const onMouseUp = () => {
@@ -270,7 +284,10 @@ function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, ind
     setRevealed(false);
   }
 
-  const statusClass = `row-status-tag ${status.className}`;
+  const isTodoEntry = entry.type === "todo";
+  const isScheduleEntry = entry.type === "schedule";
+  const isNotifyEntry = entry.type === "notify";
+  const todoStatus = isTodoEntry ? getTodoTrashStatus(entry.item as TodoItem) : null;
 
   return (
     <div className="trash-row-swipe" style={{ animationDelay: `${index * 0.04}s` }}>
@@ -280,40 +297,188 @@ function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, ind
           className="swipe-action-btn restore"
           disabled={busy}
           onClick={handleRestoreClick}
+          aria-label={t("common.restore")}
+          title={t("common.restore")}
         >
           <RestoreIcon />
-          {t("common.restore")}
         </button>
         <button
           type="button"
           className="swipe-action-btn purge"
           disabled={busy}
           onClick={handlePurgeClick}
+          aria-label={t("common.purge")}
+          title={t("common.purge")}
         >
           <PurgeIcon />
-          {t("common.purge")}
         </button>
       </div>
       <div
-        className="swipe-content"
-        data-status={status.className.replace("status-", "")}
+        className={`swipe-content${isTodoEntry ? " trash-todo-content" : ""}${isScheduleEntry ? " trash-schedule-content" : ""}${isNotifyEntry ? " trash-notify-content" : ""}`}
+        data-status={isTodoEntry ? todoStatus ?? "" : status.className.replace("status-", "")}
         ref={contentRef}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onMouseDown={onMouseDown}
       >
-        <div className="row-content">
-          <div className="row-title">{entry.item.title}</div>
-          <div className="row-meta">
-            <span className={statusClass}>{status.label}</span>
-            <span className="row-id">#{entry.item.id}</span>
-            {renderMeta(entry, t)}
+        {isTodoEntry ? (
+          <TodoTrashContent todo={entry.item as TodoItem} status={todoStatus ?? "pending"} label={status.label} />
+        ) : isScheduleEntry ? (
+          <ScheduleTrashContent schedule={entry.item as ScheduleItem} />
+        ) : (
+          <NotifyTrashContent notification={entry.item as NotificationItem} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotifyTrashContent({ notification }: { notification: NotificationItem }) {
+  return (
+    <div className="schedule-agenda-card notify-card trash-notify-card">
+      <NotifyBellIcon />
+      <span className="notify-card-time">{formatNotifyTrashTime(notification.trigger_at)}</span>
+      <div className="notify-card-title">{notification.title}</div>
+      <span className="trash-notify-deleted">{formatDeletedAgo(notification.deleted_at)}</span>
+    </div>
+  );
+}
+
+function ScheduleTrashContent({ schedule }: { schedule: ScheduleItem }) {
+  return (
+    <div className="ms-card ms-card--schedule trash-schedule-card">
+      <div className="ms-card-schedule-timeline">
+        <div className="ms-card-schedule-dots">
+          <span className="ms-card-schedule-dot ms-card-schedule-dot--start"></span>
+          <span className="ms-card-schedule-line"></span>
+          <span className="ms-card-schedule-dot ms-card-schedule-dot--end"></span>
+        </div>
+        <div className="ms-card-schedule-body">
+          <div className="ms-card-schedule-header">
+            <div className="ms-card-title">{schedule.title}</div>
+            <span className="ms-card-schedule-id trash-schedule-deleted">{formatDeletedAgo(schedule.deleted_at)}</span>
+          </div>
+          <div className="ms-card-schedule-time-row">
+            <span className="ms-card-schedule-time-label">起</span>
+            <span className="ms-card-schedule-time-value">{formatScheduleTrashDate(schedule.start_at)}</span>
+          </div>
+          <div className="ms-card-schedule-time-row">
+            <span className="ms-card-schedule-time-label">止</span>
+            <span className="ms-card-schedule-time-value">{formatScheduleTrashDate(schedule.end_at)}</span>
+          </div>
+          <div className="ms-card-schedule-footer">
+            <span className="ms-card-schedule-id trash-schedule-footer-id">No.{schedule.id}</span>
+            {schedule.location ? (
+              <span className="ms-card-schedule-chip ms-card-schedule-chip--loc">
+                <LocationIcon />
+                {schedule.location}
+              </span>
+            ) : null}
+            {(schedule.attachment_count ?? 0) > 0 ? (
+              <span className="ms-card-schedule-chip ms-card-schedule-chip--attach">🔗 {schedule.attachment_count}</span>
+            ) : null}
+            {schedule.category ? (
+              <span className="ms-card-schedule-chip ms-card-schedule-chip--cat">
+                <TagIcon />
+                {schedule.category}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function TodoTrashContent({ todo, status, label }: { todo: TodoItem; status: TodoTrashStatus; label: string }) {
+  return (
+    <div className="trash-todo-card">
+      <div className="trash-todo-main">
+        <div className="trash-todo-title">{todo.title}</div>
+        <div className="trash-todo-tags">
+          <span className="trash-todo-pill trash-todo-id">No.{todo.id}</span>
+          {(todo.attachment_count ?? 0) > 0 ? (
+            <span className="trash-todo-pill trash-todo-attach">🔗 {todo.attachment_count}</span>
+          ) : null}
+          {todo.tag ? (
+            <span className="trash-todo-pill trash-todo-tag">
+              <TagIcon />
+              <span>{todo.tag}</span>
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="trash-todo-side">
+        <span className="trash-todo-deleted">{formatDeletedAgo(todo.deleted_at)}</span>
+        {status !== "pending" ? (
+          <span className={`trash-todo-status ${status}`}>
+            <span className="trash-todo-status-dot" />
+            {label}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function NotifyBellIcon() {
+  return (
+    <svg className="notify-bell-icon trash-notify-icon" viewBox="0 0 1024 1024" fill="none" aria-hidden="true">
+      <path d="M512 170C382 170 288 264 288 392v168c0 60-22 117-62 162l-40 46c-10 12-14 27-8 40s19 22 34 22h596c15 0 28-9 34-22s2-28-8-40l-40-46c-40-45-62-102-62-162V392c0-128-94-222-224-222z" fill="#FFC670" />
+      <path d="M512 170c-110 0-192 82-192 196v154c0 60-20 115-56 156l-24 28h498l-24-28c-36-41-56-96-56-156V366c0-114-64-196-146-196z" fill="#FFE88A" />
+      <path d="M736 392v168c0 60 22 117 62 162l40 46c10 12 14 27 8 40s-19 22-34 22H662c60-30 98-93 98-162 0-36-11-71-32-100l-54-74c-20-28-30-61-30-96 0-85-50-164-132-202 113 0 224 86 224 196z" fill="#FF9A42" />
+      <circle cx="512" cy="742" r="78" fill="#FFC670" />
+      <path d="M448 150c0-35 28-62 64-62s64 27 64 62v34H448v-34z" fill="#FFC670" />
+      <path d="M512 170C382 170 288 264 288 392v168c0 60-22 117-62 162l-40 46c-10 12-14 27-8 40s19 22 34 22h596c15 0 28-9 34-22s2-28-8-40l-40-46c-40-45-62-102-62-162V392c0-128-94-222-224-222z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round" />
+      <path d="M448 150c0-35 28-62 64-62s64 27 64 62v34H448v-34z" stroke="#3D3D63" strokeWidth="34" strokeLinejoin="round" />
+      <path d="M320 830c0 106 86 138 192 138s192-32 192-138" stroke="#3D3D63" strokeWidth="34" strokeLinecap="round" />
+      <circle cx="512" cy="742" r="78" stroke="#3D3D63" strokeWidth="34" fill="none" />
+    </svg>
+  );
+}
+
+function LocationIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+      <path d="M511.744 68.267c-173.517 0-314.027 136.311-314.778 305.937 0 60.911 18.125 118.903 51.763 168.465l3.294 4.693 1.911 3.174 1.57 2.39c1.058 1.553 2.185 3.038 3.448 4.506l.785.853 200.175 232.823a68.267 68.267 0 00103.646-.17L762.641 558.08l-1.314 1.451a50.347 50.347 0 005.342-6.622l1.536-2.355c.631-.99 1.86-3.072 1.826-3.004 35.294-49.323 55.091-109.431 55.825-172.783C825.856 204.954 684.971 68.267 511.744 68.267zm0 68.267c135.97 0 245.845 106.598 245.845 237.824a235.4 235.4 0 01-43.981 134.775l-2.953 4.676-198.997 232.79-200.192-232.824-1.929-3.191-.99-1.451a230.23 230.23 0 01-43.315-134.775C265.83 242.859 375.415 136.533 511.744 136.533z" />
+      <path d="M783.804 714.735a34.133 34.133 0 0145.244 10.018l1.434 2.253 73.387 125.73a68.267 68.267 0 01-54.784 102.554l-4.557.12-666.044-3.636a68.267 68.267 0 01-60.655-98.85l2.133-3.943 69.94-119.262a34.133 34.133 0 0160.16 32.171l-1.263 2.355-69.94 119.262 666.044 3.635-73.387-125.73a34.133 34.133 0 0112.288-46.677z" />
+      <path d="M512 243.951a136.533 136.533 0 100 273.067 136.533 136.533 0 000-273.067zm0 68.267a68.267 68.267 0 110 136.533 68.267 68.267 0 010-136.533z" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+      <path d="M745.0624 123.1872H252.928a108.8512 108.8512 0 0 0-108.8512 108.8512v612.3008a83.456 83.456 0 0 0 131.6352 68.1472L445.44 792.6272a108.8 108.8 0 0 1 128.3072 1.8944l146.7904 110.4896a83.456 83.456 0 0 0 133.632-66.56V232.0384a108.8512 108.8512 0 0 0-109.1072-108.8512z m-118.6304 169.984H371.5584a30.72 30.72 0 0 1 0-61.44h254.8736a30.72 30.72 0 0 1 0 61.44z" />
+    </svg>
+  );
+}
+
+function formatDeletedAgo(epoch: number | null | undefined): string {
+  if (!epoch) return "-";
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - epoch);
+  const days = Math.floor(seconds / 86400);
+  if (days > 0) return `${days} 天前`;
+  const hours = Math.floor(seconds / 3600);
+  if (hours > 0) return `${hours} 小时前`;
+  const minutes = Math.max(1, Math.floor(seconds / 60));
+  return `${minutes} 分钟前`;
+}
+
+function formatNotifyTrashTime(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatScheduleTrashDate(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hour = String(d.getHours()).padStart(2, "0");
+  const minute = String(d.getMinutes()).padStart(2, "0");
+  return `${month}/${day} ${hour}:${minute}`;
 }
 
 export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionError, onItemClick }: Props) {
@@ -508,7 +673,7 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
             >
               {tab.dotClass && <span className={`ft-dot ${tab.dotClass}`} />}
               {tab.label}
-              <span className="ft-count">
+              <span className={`ft-count${mode === tab.value ? "" : " ft-count-placeholder"}`}>
                 {countByType[tab.value]}
               </span>
             </button>

@@ -15,7 +15,7 @@ import { TodoView } from "./views/TodoView";
 import { TrashView } from "./views/TrashView";
 import { TodoDetailModal } from "./views/TodoDetailModal";
 import { ScheduleDetailModal } from "./views/ScheduleDetailModal";
-import { NotifyDetailModal } from "./views/NotifyDetailModal";
+import { NotifyFormModal } from "./views/NotifyFormModal";
 import { TrashStyleDemo } from "./views/TrashStyleDemo";
 import gearIcon from "../assets/gear.svg";
 import todoIcon from "../assets/todo.svg";
@@ -68,6 +68,11 @@ export function App() {
     type: "todo" | "schedule" | "notify";
     item: TodoItem | ScheduleItem | NotificationItem;
   } | null>(null);
+
+  function handleTrashItemUpdated(type: "todo" | "schedule" | "notify", item: TodoItem | ScheduleItem | NotificationItem) {
+    setEditingTrashItem({ type, item });
+    setTrashKey((k) => k + 1);
+  }
 
   const [settings, setSettings] = useState<UISettings>(() => ({
     ...DEFAULT_SETTINGS,
@@ -154,16 +159,17 @@ export function App() {
   useEffect(() => {
     const el = document.querySelector<HTMLElement>(".mobile-shell");
     if (!el) return;
+    const shellEl = el;
     const h = window.innerHeight;
-    el.style.height = `${h}px`;
-    el.style.maxHeight = `${h}px`;
+    shellEl.style.height = `${h}px`;
+    shellEl.style.maxHeight = `${h}px`;
 
     // Counteract viewport resize (e.g. keyboard opening)
     const vv = window.visualViewport;
     if (!vv) return;
     function onResize() {
-      el.style.height = `${h}px`;
-      el.style.maxHeight = `${h}px`;
+      shellEl.style.height = `${h}px`;
+      shellEl.style.maxHeight = `${h}px`;
     }
     vv.addEventListener("resize", onResize);
     return () => vv.removeEventListener("resize", onResize);
@@ -517,7 +523,7 @@ export function App() {
           trashMode
           onClose={() => setEditingTrashItem(null)}
           onDelete={() => setEditingTrashItem(null)}
-          onUpdate={(updated) => setEditingTrashItem((prev) => prev ? { ...prev, item: updated } : null)}
+          onUpdate={(updated) => handleTrashItemUpdated("todo", updated)}
         />
       )}
       {editingTrashItem && editingTrashItem.type === "schedule" && (
@@ -527,17 +533,16 @@ export function App() {
           trashMode
           onClose={() => setEditingTrashItem(null)}
           onDelete={() => setEditingTrashItem(null)}
-          onUpdate={(updated) => setEditingTrashItem((prev) => prev ? { ...prev, item: updated } : null)}
+          onUpdate={(updated) => handleTrashItemUpdated("schedule", updated)}
         />
       )}
       {editingTrashItem && editingTrashItem.type === "notify" && (
-        <NotifyDetailModal
-          notificationId={editingTrashItem.item.id}
+        <NotifyFormModal
+          editId={editingTrashItem.item.id}
           api={api}
-          settings={settings}
           trashMode
+          onUpdate={(updated) => handleTrashItemUpdated("notify", updated)}
           onClose={() => setEditingTrashItem(null)}
-          onEdit={() => {}}
         />
       )}
     </div>

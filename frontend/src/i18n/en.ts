@@ -361,7 +361,7 @@ export const en: Record<string, string> = {
   "trash.purgeFailed": "Permanent delete failed",
   "trash.purged": "Permanently deleted",
   "trash.purgeConfirm": "Permanently deleted items cannot be recovered. Related attachments will also be removed.",
-  "trash.purgeFilterConfirm": "About to permanently delete {{list}}, {{count}} items total. This cannot be undone. Related attachments will also be removed.",
+  "trash.purgeFilterConfirm": "About to permanently delete {{list}}. This cannot be undone. Related attachments will also be removed.",
   "trash.purgeFilterTitle": "Permanently Delete Filtered Results",
   "trash.purgedCount": "Permanently deleted {{count}} items",
   "trash.searchTrash": "Search trash...",
