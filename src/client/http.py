@@ -21,6 +21,7 @@ class AMTodoClient:
         self._client = httpx.Client(
             base_url=self._base,
             timeout=30.0,
+            http2=True,
         )
         self._public_key_pem: bytes | None = None
         self._public_key_path = settings.server_public_key_path
@@ -639,7 +640,17 @@ def _error_from_response(
 ) -> dict[str, Any]:
     try:
         body = exc.response.json()
-        return _decrypt_response(body, data_key)
+        decrypted = _decrypt_response(body, data_key)
+        if isinstance(decrypted, dict) and "detail" in decrypted and "error" not in decrypted:
+            return {
+                "ok": False,
+                "error": {
+                    "type": "HTTPError",
+                    "message": str(decrypted["detail"]),
+                    "status_code": exc.response.status_code,
+                },
+            }
+        return decrypted
     except Exception:
         return {"ok": False, "error": {"type": "HTTPError", "message": str(exc)}}
 

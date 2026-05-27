@@ -25,6 +25,13 @@ HTTPS/WSS entry point:
 client -> https://your-domain -> reverse proxy -> http://127.0.0.1:8000
 ```
 
+The server entry point uses Hypercorn and is HTTP/2-capable. The unified
+WebSocket endpoint is:
+
+```text
+wss://your-domain/api/v1/ws
+```
+
 Use a local-only backend listener in `config/server.toml`:
 
 ```toml

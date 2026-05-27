@@ -1,5 +1,5 @@
 # AMToDo UI configuration (non-visual parameters).
-server_url = "http://10.18.9.134:8000"
+server_url = "https://www.vaccummer.asia:1984"
 lan_address = ""
 access_token = "UsKLFcbMTsqbGjPI_z3-dR0afo9O9PdYp_IQLbeYyTU"
 admin_token = "123456"

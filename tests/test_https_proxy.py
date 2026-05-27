@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from config import AppSettings
 from server.app import create_app
@@ -63,3 +64,18 @@ def test_forwarded_proto_enables_hsts_for_https_requests(tmp_path: Path) -> None
     assert response.status_code == 200
     assert response.headers["strict-transport-security"] == "max-age=15552000"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_unified_websocket_route_is_registered(tmp_path: Path) -> None:
+    settings = AppSettings(
+        database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}",
+        admin_token="admin-secret",
+    )
+    app = create_app(settings)
+
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        try:
+            with client.websocket_connect("/api/v1/ws"):
+                pass
+        except WebSocketDisconnect as exc:
+            assert exc.code == 1011
