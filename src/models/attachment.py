@@ -1,4 +1,4 @@
-"""Encrypted ToDo attachment persistence model."""
+"""ToDo attachment persistence model."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from db.base import Base, EpochAuditMixin
 
 
 class TodoAttachment(EpochAuditMixin, Base):
-    """A metadata row for an encrypted attachment stored on disk."""
+    """A metadata row for an attachment stored on disk."""
 
     __abstract__ = True
 

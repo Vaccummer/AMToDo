@@ -1,10 +1,9 @@
 import { SERVER_URL } from "../config";
 import type { UiWsClient } from "./ws-client";
 import type { UploadProgress } from "../lib/chunked-upload";
-import { streamingUpload } from "../lib/chunked-upload";
+import { uploadWithProgress } from "../lib/chunked-upload";
 import type { DownloadProgress } from "../lib/chunked-download";
 import { downloadWithProgress } from "../lib/chunked-download";
-import { generateFileKeys, createEncryptStream } from "../lib/stream-crypto";
 
 export type HealthResponse = {
   status: string;
@@ -109,12 +108,7 @@ export type AttachmentMetadata = {
   mime_type: string;
   preview_kind: "image" | "video" | "none";
   plain_size_bytes: number;
-  cipher_size_bytes: number;
   plain_sha256: string;
-  cipher_sha256: string;
-  file_key: string;
-  nonce: string;
-  encryption_alg: string;
   storage_path: string;
   is_orphaned: boolean;
   created_at: number;
@@ -141,12 +135,7 @@ export type ScheduleAttachmentMetadata = {
   mime_type: string;
   preview_kind: "image" | "video" | "none";
   plain_size_bytes: number;
-  cipher_size_bytes: number;
   plain_sha256: string;
-  cipher_sha256: string;
-  file_key: string;
-  nonce: string;
-  encryption_alg: string;
   storage_path: string;
   is_orphaned: boolean;
   created_at: number;
@@ -678,10 +667,8 @@ export class AMToDoApi {
 
   async uploadTodoAttachment(todoId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<AttachmentResponse> {
     await this.ensureConnected();
-    const keys = generateFileKeys();
     const plainSize = file.size;
 
-    // WS: init upload → get token
     const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_upload",
       {
@@ -689,20 +676,14 @@ export class AMToDoApi {
         owner_id: todoId,
         filename: file.name,
         mime_type: file.type || null,
-        file_key: keys.fileKey,
-        hmac_key: keys.hmacKey,
-        nonce: keys.nonce,
         plain_size: plainSize,
       },
     );
 
-    // Encrypt in constant memory (1MB chunks), then upload via XHR
-    const body = createEncryptStream(file, keys.fileKey, keys.nonce, (loaded, total) => {
-      onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
-    }, abortSignal);
-    return streamingUpload<AttachmentMetadata>(
+    return uploadWithProgress<AttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
-      body,
+      await file.arrayBuffer(),
+      { "Content-Type": file.type || "application/octet-stream" },
       onProgress,
       abortSignal,
     ) as unknown as Promise<AttachmentResponse>;
@@ -763,10 +744,8 @@ export class AMToDoApi {
 
   async uploadScheduleAttachment(scheduleId: number, file: File, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<ScheduleAttachmentResponse> {
     await this.ensureConnected();
-    const keys = generateFileKeys();
     const plainSize = file.size;
 
-    // WS: init upload → get token
     const { token } = await this.wsClient!.send<{ ok: boolean; token: string }>(
       "attachment.init_upload",
       {
@@ -774,20 +753,14 @@ export class AMToDoApi {
         owner_id: scheduleId,
         filename: file.name,
         mime_type: file.type || null,
-        file_key: keys.fileKey,
-        hmac_key: keys.hmacKey,
-        nonce: keys.nonce,
         plain_size: plainSize,
       },
     );
 
-    // Encrypt in constant memory (1MB chunks), then upload via XHR
-    const body = createEncryptStream(file, keys.fileKey, keys.nonce, (loaded, total) => {
-      onProgress?.({ loaded, total, percent: Math.round(loaded / total * 100), phase: "encrypting" });
-    }, abortSignal);
-    return streamingUpload<ScheduleAttachmentMetadata>(
+    return uploadWithProgress<ScheduleAttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
-      body,
+      await file.arrayBuffer(),
+      { "Content-Type": file.type || "application/octet-stream" },
       onProgress,
       abortSignal,
     ) as unknown as Promise<ScheduleAttachmentResponse>;

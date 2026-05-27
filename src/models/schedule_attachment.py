@@ -1,4 +1,4 @@
-"""Encrypted Schedule attachment persistence model."""
+"""Schedule attachment persistence model."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from db.base import Base, EpochAuditMixin
 
 
 class ScheduleAttachment(EpochAuditMixin, Base):
-    """A metadata row for an encrypted schedule attachment stored on disk."""
+    """A metadata row for a schedule attachment stored on disk."""
 
     __abstract__ = True
 

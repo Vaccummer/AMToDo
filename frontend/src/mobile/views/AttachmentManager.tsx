@@ -226,7 +226,7 @@ export function AttachmentManager({
     try {
       for (const file of selected) {
         const key = `${file.name}-${file.size}`;
-        setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total: file.size, percent: 0, phase: "encrypting" } }));
+        setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total: file.size, percent: 0, phase: "uploading" } }));
         try {
           await uploadFile(file, (progress) => {
             setUploadProgress((prev) => ({ ...prev, [key]: progress }));
@@ -686,7 +686,7 @@ export function AttachmentManager({
           </div>
           <div className="attach-row-info">
             <span className="attach-row-name">{key.split("-")[0]}</span>
-            <span className="attach-row-size uploading">{progress.phase === "encrypting" ? t("common.encryptingPercent", { percent: progress.percent }) : t("common.uploadingPercent", { percent: progress.percent })}</span>
+            <span className="attach-row-size uploading">{t("common.uploadingPercent", { percent: progress.percent })}</span>
           </div>
         </div>
       ))}

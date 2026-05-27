@@ -159,10 +159,8 @@ class AttachmentInitUploadRequest(BaseModel):
     owner_id: int
     filename: str
     mime_type: str | None = None
-    file_key: str             # base64
-    hmac_key: str             # base64
-    nonce: str                # base64
     plain_size: int
+    plain_sha256: str | None = None
 
 
 class AttachmentInitDownloadRequest(BaseModel):

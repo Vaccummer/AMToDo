@@ -6,7 +6,7 @@ import json
 import secrets
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from sqlalchemy import delete, select
@@ -35,6 +35,7 @@ from services.uow import UnitOfWork
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from client.http import AMTodoClient
     from models import Schedule, Todo
 
 app = typer.Typer(invoke_without_command=True, no_args_is_help=True)
@@ -872,7 +873,7 @@ def user_regen_token() -> None:
 
 
 def _fetch_admin_config() -> tuple[str, Path]:
-    """Fetch database_url and attachment_root from the server via encrypted HTTP."""
+    """Fetch database_url and attachment_root from the server."""
     from client.http import AMTodoClient
 
     settings = load_cli_settings()
@@ -960,7 +961,6 @@ def _admin_user_delete_direct(user_id: int) -> dict[str, object]:
         if user is None:
             raise NotFoundError(f"user {user_id} not found")
 
-        token = user.token
         name = user.name
 
         (
@@ -1245,9 +1245,11 @@ def _make_attachment_service_for(uow: UnitOfWork, clock: Clock, owner_type: str)
     if owner_type == "todo":
         return AttachmentService(
             uow.attachments, uow.todos, clock, uow.attachment_model, _cli_root(), uow.user_id,
+            owner_type="todo",
         )
     return AttachmentService(
         uow.schedule_attachments, uow.schedules, clock, uow.schedule_attachment_model, _cli_root(), uow.user_id,
+        owner_type="schedule",
     )
 
 
@@ -1287,7 +1289,7 @@ def attachment_get(
     attachment_id: int = typer.Argument(..., help="Attachment id."),
     owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
 ) -> None:
-    """Fetch an attachment into the local decrypted cache."""
+    """Fetch an attachment into the local cache."""
 
     settings = load_cli_settings()
     root = cli_root()
@@ -1325,8 +1327,8 @@ def attachment_get(
             service = _make_attachment_service_for(uow, context.clock, owner_type)
             attachment = service.show(owner_id, attachment_id)
             metadata = attachment_to_dict(attachment, uow.user_id)
-            cipher = service.read_cipher(owner_id, attachment_id)
-        cache_result = cache.get_or_download(metadata, lambda: cipher)
+            content = service.read_content(owner_id, attachment_id)
+        cache_result = cache.get_or_download(metadata, lambda: content)
         _echo_json({"ok": True, "attachment": metadata, "cache": cache_result})
     except (AMToDoError, ValueError) as exc:
         _exit_with_error(ValidationError(str(exc)) if isinstance(exc, ValueError) else exc)
@@ -1354,7 +1356,17 @@ def attachment_upload(
     try:
         with UnitOfWork(context.database) as uow:
             service = _make_attachment_service_for(uow, context.clock, owner_type)
-            attachment = service.create(owner_id, AttachmentDraft(filename=file.name, content=file.read_bytes()))
+            content = file.read_bytes()
+            temp_path = cli_root() / "cache" / "upload.tmp"
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_bytes(content)
+            attachment = service.create_from_upload(
+                owner_id,
+                temp_path,
+                len(content),
+                file.name,
+                None,
+            )
             uow.session.flush()
             _echo_json({"ok": True, "attachment": attachment_to_dict(attachment, uow.user_id)})
     except AMToDoError as exc:
@@ -1368,7 +1380,7 @@ def attachment_download(
     owner_type: str = typer.Option(..., "--type", help="Owner type: todo or schedule."),
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file path.")] = None,
 ) -> None:
-    """Download and decrypt an attachment to a local file."""
+    """Download an attachment to a local file."""
 
     settings = load_cli_settings()
     root = cli_root()
@@ -1407,8 +1419,8 @@ def attachment_download(
             service = _make_attachment_service_for(uow, context.clock, owner_type)
             attachment = service.show(owner_id, attachment_id)
             metadata = attachment_to_dict(attachment, uow.user_id)
-            cipher = service.read_cipher(owner_id, attachment_id)
-        cache_result = cache.get_or_download(metadata, lambda: cipher)
+            content = service.read_content(owner_id, attachment_id)
+        cache_result = cache.get_or_download(metadata, lambda: content)
         dest = _resolve_download_path(output, str(metadata["filename"]), cache_result)
         _echo_json({"ok": True, "path": str(dest)})
     except (AMToDoError, ValueError) as exc:
@@ -1718,7 +1730,7 @@ def trash_update(
 
 @trash_app.command("restore")
 def trash_restore(
-    entity_ids: list[int] = typer.Argument(help="Entity IDs to restore."),
+    entity_ids: Annotated[list[int], typer.Argument(help="Entity IDs to restore.")],
     entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
 ) -> None:
     """Restore trashed items."""
@@ -1764,7 +1776,7 @@ def trash_restore(
 
 @trash_app.command("purge")
 def trash_purge(
-    entity_ids: list[int] = typer.Argument(help="Entity IDs to permanently delete."),
+    entity_ids: Annotated[list[int], typer.Argument(help="Entity IDs to permanently delete.")],
     entity_type: str = typer.Option(..., "--type", help="Entity type: todo, schedule, or notification."),
 ) -> None:
     """Permanently delete trashed items."""

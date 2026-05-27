@@ -99,40 +99,35 @@ def _setup_user_and_todo(app, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Full round-trip: init upload token -> PUT cipher bytes -> verify metadata
+    """Full round-trip: init upload token -> PUT file bytes -> verify metadata
     -> init download token -> GET download -> verify bytes match."""
     app = _make_app(tmp_path, monkeypatch)
     token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
 
-    # Simulate client-side encryption: just use random bytes as "cipher"
     plain_content = b"Hello, this is plaintext content for testing"
-    cipher_content = b"CIPHER:" + plain_content  # fake cipher
-    hmac_tag = hashlib.sha256(cipher_content).digest()  # fake HMAC tag
-    full_cipher = cipher_content + hmac_tag  # cipher + 32-byte tag
-
-    file_key_b64 = secrets.token_urlsafe(32)
-    hmac_key_b64 = secrets.token_urlsafe(16)
-    nonce_b64 = secrets.token_urlsafe(12)
+    plain_sha256 = hashlib.sha256(plain_content).hexdigest()
 
     with TestClient(app) as client:
-        # Step 1: Init upload via WS (simulate via direct handler call)
-        upload_store = app.state.upload_token_store
-        upload_token = upload_store.create(
-            owner_type="todo",
-            owner_id=todo_id,
-            user_id=user_id,
-            filename="test.txt",
-            mime_type="text/plain",
-            file_key=file_key_b64,
-            hmac_key=hmac_key_b64,
-            nonce=nonce_b64,
-            plain_size=len(plain_content),
+        # Step 1: Init upload
+        init_response = client.post(
+            "/api/v1/attachment/init-upload",
+            json={
+                "owner_type": "todo",
+                "owner_id": todo_id,
+                "filename": "test.txt",
+                "mime_type": "text/plain",
+                "plain_size": len(plain_content),
+                "plain_sha256": plain_sha256,
+            },
+            headers={"Authorization": f"Bearer {token}"},
         )
+        assert init_response.status_code == 200
+        upload_token = init_response.json()["token"]
 
-        # Step 2: PUT cipher bytes
+        # Step 2: PUT file bytes
         upload_response = client.put(
             f"/api/v1/attachment/upload?token={upload_token}",
-            content=full_cipher,
+            content=plain_content,
             headers={"Content-Type": "application/octet-stream"},
         )
         assert upload_response.status_code == 200
@@ -141,11 +136,8 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         attachment = result["attachment"]
         assert attachment["filename"] == "test.txt"
         assert attachment["mime_type"] == "text/plain"
-        assert attachment["encryption_alg"] == "AES-128-CTR-HMAC-SHA256"
-        assert attachment["file_key"] == file_key_b64
-        assert attachment["nonce"] == nonce_b64
-        assert attachment["cipher_size_bytes"] == len(full_cipher)
         assert attachment["plain_size_bytes"] == len(plain_content)
+        assert attachment["plain_sha256"] == plain_sha256
 
         # Step 3: Verify metadata via list
         list_response = client.post(
@@ -156,21 +148,21 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert list_response.json()["count"] == 1
 
         # Step 4: Init download token
-        download_store = app.state.download_token_store
-        download_token = download_store.create(
-            owner_type="todo",
-            owner_id=todo_id,
-            user_id=user_id,
-            attachment_id=attachment["id"],
+        download_init_response = client.post(
+            "/api/v1/attachment/init-download",
+            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
+            headers={"Authorization": f"Bearer {token}"},
         )
+        assert download_init_response.status_code == 200
+        download_token = download_init_response.json()["token"]
 
         # Step 5: GET download
         download_response = client.get(
             f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
         )
         assert download_response.status_code == 200
-        assert download_response.content == full_cipher
-        assert "X-AMToDo-Cipher-SHA256" in download_response.headers
+        assert download_response.content == plain_content
+        assert "X-AMToDo-Content-SHA256" in download_response.headers
 
 
 def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -187,9 +179,6 @@ def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         user_id=user_id,
         filename="test.txt",
         mime_type="text/plain",
-        file_key="key",
-        hmac_key="hmac",
-        nonce="nonce",
         plain_size=10,
     )
 
@@ -225,9 +214,6 @@ def test_upload_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
         user_id=user_id,
         filename="big.bin",
         mime_type="application/octet-stream",
-        file_key="key",
-        hmac_key="hmac",
-        nonce="nonce",
         plain_size=1000,
     )
 
@@ -265,9 +251,6 @@ def test_upload_interruption_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyP
         user_id=user_id,
         filename="test.txt",
         mime_type="text/plain",
-        file_key="key",
-        hmac_key="hmac",
-        nonce="nonce",
         plain_size=10,
     )
 

@@ -20,6 +20,8 @@ from server.attachment_helpers import make_attachment_service
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     AttachmentGetRequest,
+    AttachmentInitDownloadRequest,
+    AttachmentInitUploadRequest,
     AttachmentListRequest,
     AttachmentRemoveOrphanedRequest,
     AttachmentRemoveRequest,
@@ -48,6 +50,49 @@ def _dict_fn(owner_type: str):
     return attachment_to_dict if owner_type == "todo" else schedule_attachment_to_dict
 
 
+@router.post("/attachment/init-upload")
+def init_upload_attachment(
+    body: AttachmentInitUploadRequest,
+    request: Request,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Create a one-time token for an authenticated attachment upload."""
+    service = make_attachment_service(uow, clock, request, body.owner_type)
+    service.list_for_owner(body.owner_id)
+    upload_token_store = request.app.state.upload_token_store
+    token = upload_token_store.create(
+        owner_type=body.owner_type,
+        owner_id=body.owner_id,
+        user_id=uow.user_id,
+        filename=body.filename,
+        mime_type=body.mime_type,
+        plain_size=body.plain_size,
+        plain_sha256=body.plain_sha256,
+    )
+    return {"ok": True, "token": token}
+
+
+@router.post("/attachment/init-download")
+def init_download_attachment(
+    body: AttachmentInitDownloadRequest,
+    request: Request,
+    uow: UowDep,
+    clock: ClockDep,
+) -> dict[str, object]:
+    """Create a one-time token for an authenticated attachment download."""
+    service = make_attachment_service(uow, clock, request, body.owner_type)
+    service.show(body.owner_id, body.attachment_id)
+    download_token_store = request.app.state.download_token_store
+    token = download_token_store.create(
+        owner_type=body.owner_type,
+        owner_id=body.owner_id,
+        user_id=uow.user_id,
+        attachment_id=body.attachment_id,
+    )
+    return {"ok": True, "token": token}
+
+
 @router.post("/attachment/list")
 def list_attachments(
     body: AttachmentListRequest,
@@ -55,7 +100,7 @@ def list_attachments(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    """List encrypted attachment metadata for a ToDo or Schedule."""
+    """List attachment metadata for a ToDo or Schedule."""
     owner_type, owner_id = _resolve_owner(body)
     service = make_attachment_service(uow, clock, request, owner_type, changelog_service=_changelog_service(uow, owner_type))
     attachments = service.list_for_owner(owner_id)
@@ -74,7 +119,7 @@ def show_attachment(
     uow: UowDep,
     clock: ClockDep,
 ) -> dict[str, object]:
-    """Return encrypted attachment metadata."""
+    """Return attachment metadata."""
     owner_type, owner_id = _resolve_owner(body)
     service = make_attachment_service(uow, clock, request, owner_type, changelog_service=_changelog_service(uow, owner_type))
     attachment = service.show(owner_id, body.attachment_id)
@@ -125,7 +170,7 @@ def remove_orphaned_attachments(
 
 @router.put("/attachment/upload")
 async def stream_upload_attachment(request: Request, token: str):
-    """Stream-upload a pre-encrypted cipher file using a one-time upload token."""
+    """Stream-upload an attachment file using a one-time upload token."""
     upload_token_store = request.app.state.upload_token_store
     settings_obj = request.app.state.settings
 
@@ -136,7 +181,7 @@ async def stream_upload_attachment(request: Request, token: str):
 
     # 2. Check Content-Length header (fast reject)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > settings_obj.max_attachment_size_bytes + 32:
+    if content_length and int(content_length) > settings_obj.max_attachment_size_bytes:
         upload_token_store.pop(token)
         raise HTTPException(413, "File too large")
 
@@ -147,7 +192,7 @@ async def stream_upload_attachment(request: Request, token: str):
         with open(temp_path, "wb") as f:
             async for chunk in request.stream():
                 total += len(chunk)
-                if total > settings_obj.max_attachment_size_bytes + 32:
+                if total > settings_obj.max_attachment_size_bytes:
                     raise HTTPException(413, "File too large")
                 f.write(chunk)
     except HTTPException:
@@ -173,16 +218,13 @@ async def stream_upload_attachment(request: Request, token: str):
 
     with UnitOfWork(db, tok_final.user_id) as uow:
         svc = make_attachment_service(uow, clock, request, tok_final.owner_type)
-        attachment = svc.create_from_cipher(
+        attachment = svc.create_from_upload(
             owner_id=tok_final.owner_id,
-            cipher_path=temp_path,
-            cipher_size=total,
+            upload_path=temp_path,
+            content_size=total,
             filename=tok_final.filename,
             mime_type=tok_final.mime_type,
-            file_key=tok_final.file_key,
-            hmac_key=tok_final.hmac_key,
-            nonce=tok_final.nonce,
-            plain_size=tok_final.plain_size,
+            plain_sha256=tok_final.plain_sha256,
         )
         uow.session.flush()
         dict_fn = _dict_fn(tok_final.owner_type)
@@ -197,7 +239,7 @@ async def stream_download_attachment(
     token: str,
     request: Request,
 ):
-    """Stream-download an encrypted attachment using a one-time download token."""
+    """Stream-download an attachment using a one-time download token."""
     download_token_store = request.app.state.download_token_store
 
     # 1. Validate token
@@ -214,21 +256,21 @@ async def stream_download_attachment(
     with UnitOfWork(db, tok.user_id) as uow:
         svc = make_attachment_service(uow, clock, request, tok.owner_type)
         attachment = svc.show(tok.owner_id, tok.attachment_id)
-        cipher_path = svc.encrypted_path(attachment)
+        content_path = svc.storage_path(attachment)
 
-    if not cipher_path.exists():
+    if not content_path.exists():
         raise HTTPException(404, "File not found")
 
-    # 3. Stream cipher file back
+    # 3. Stream file back
     safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
 
     return StreamingResponse(
-        _file_iterator(cipher_path),
+        _file_iterator(content_path),
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}.enc"',
-            "Content-Length": str(attachment.cipher_size_bytes),
-            "X-AMToDo-Cipher-SHA256": attachment.cipher_sha256,
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Length": str(attachment.plain_size_bytes),
+            "X-AMToDo-Content-SHA256": attachment.plain_sha256,
             "X-AMToDo-Updated-At": str(attachment.updated_at),
         },
     )

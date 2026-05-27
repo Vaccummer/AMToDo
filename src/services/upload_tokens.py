@@ -16,10 +16,8 @@ class UploadToken:
     user_id: int
     filename: str
     mime_type: str | None
-    file_key: str             # base64
-    hmac_key: str             # base64
-    nonce: str                # base64
-    plain_size: int           # declared by client
+    plain_size: int
+    plain_sha256: str | None
     created_at: float
     temp_path: Path
 
@@ -49,10 +47,8 @@ class UploadTokenStore:
         user_id: int,
         filename: str,
         mime_type: str | None,
-        file_key: str,
-        hmac_key: str,
-        nonce: str,
         plain_size: int,
+        plain_sha256: str | None = None,
     ) -> str:
         self._evict_expired()
         token = secrets.token_urlsafe(32)
@@ -64,10 +60,8 @@ class UploadTokenStore:
             user_id=user_id,
             filename=filename,
             mime_type=mime_type,
-            file_key=file_key,
-            hmac_key=hmac_key,
-            nonce=nonce,
             plain_size=plain_size,
+            plain_sha256=plain_sha256,
             created_at=time.time(),
             temp_path=temp_path,
         )

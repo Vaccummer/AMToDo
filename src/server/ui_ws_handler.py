@@ -927,10 +927,8 @@ class UiMessageRouter:
             user_id=self.user_id,
             filename=p["filename"],
             mime_type=p.get("mime_type"),
-            file_key=p["file_key"],
-            hmac_key=p["hmac_key"],
-            nonce=p["nonce"],
             plain_size=p["plain_size"],
+            plain_sha256=p.get("plain_sha256"),
         )
         return {"ok": True, "token": token}
 

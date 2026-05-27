@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from config import __version__
 from db.base import Base
+from models.factory import get_user_tables
 from models.user import User
 from serialization import user_to_dict, user_to_dict_with_token
 from server.auth import require_admin, require_localhost, require_user
@@ -359,18 +360,18 @@ def agent_guide() -> dict[str, object]:
             # ── ToDo Attachments ──
             {
                 "method": "POST",
-                "path": "/todos/attachments/list",
+                "path": "/attachment/list",
                 "auth": "user",
-                "description": "List encrypted attachment metadata for a ToDo.",
+                "description": "List attachment metadata for a ToDo.",
                 "body": {
                     "todo_id": {"type": "int", "required": True, "desc": "ToDo id."},
                 },
             },
             {
                 "method": "POST",
-                "path": "/todos/attachments/get",
+                "path": "/attachment/get",
                 "auth": "user",
-                "description": "Return encrypted attachment metadata for a specific attachment.",
+                "description": "Return attachment metadata for a specific attachment.",
                 "body": {
                     "todo_id": {"type": "int", "required": True},
                     "attachment_id": {"type": "int", "required": True},
@@ -378,21 +379,21 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/todos/attachments/upload",
+                "path": "/attachment/init-upload + PUT /attachment/upload?token=<token>",
                 "auth": "user",
-                "description": "Upload a file attachment via encrypted JSON (base64-encoded content).",
+                "description": "Create an upload token, then stream-upload file bytes.",
                 "body": {
                     "todo_id": {"type": "int", "required": True},
                     "filename": {"type": "string", "required": True, "desc": "Original filename."},
-                    "content_base64": {"type": "string", "required": True, "desc": "Base64-encoded file content."},
+                    "plain_size": {"type": "int", "required": True, "desc": "File size in bytes."},
                     "mime_type": {"type": "string|null", "default": None, "desc": "MIME type. Auto-detected if omitted."},
                 },
             },
             {
                 "method": "POST",
-                "path": "/todos/attachments/download",
+                "path": "/attachment/init-download + GET /attachment/{attachment_id}/download?token=<token>",
                 "auth": "user",
-                "description": "Download encrypted attachment bytes (returned as base64 in JSON).",
+                "description": "Create a download token, then stream-download file bytes.",
                 "body": {
                     "todo_id": {"type": "int", "required": True},
                     "attachment_id": {"type": "int", "required": True},
@@ -400,7 +401,7 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/todos/attachments/remove",
+                "path": "/attachment/remove",
                 "auth": "user",
                 "description": "Remove an attachment from a ToDo.",
                 "body": {
@@ -410,7 +411,7 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/todos/attachments/remove-orphaned",
+                "path": "/attachment/remove-orphaned",
                 "auth": "user",
                 "description": "Remove orphaned attachment metadata for a ToDo (metadata exists but file is missing).",
                 "body": {
@@ -598,18 +599,18 @@ def agent_guide() -> dict[str, object]:
             # ── Schedule Attachments ──
             {
                 "method": "POST",
-                "path": "/schedules/attachments/list",
+                "path": "/attachment/list",
                 "auth": "user",
-                "description": "List encrypted attachment metadata for a schedule.",
+                "description": "List attachment metadata for a schedule.",
                 "body": {
                     "schedule_id": {"type": "int", "required": True},
                 },
             },
             {
                 "method": "POST",
-                "path": "/schedules/attachments/get",
+                "path": "/attachment/get",
                 "auth": "user",
-                "description": "Return encrypted attachment metadata for a specific attachment.",
+                "description": "Return attachment metadata for a specific attachment.",
                 "body": {
                     "schedule_id": {"type": "int", "required": True},
                     "attachment_id": {"type": "int", "required": True},
@@ -617,21 +618,21 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/schedules/attachments/upload",
+                "path": "/attachment/init-upload + PUT /attachment/upload?token=<token>",
                 "auth": "user",
-                "description": "Upload a file attachment via encrypted JSON (base64-encoded content).",
+                "description": "Create an upload token, then stream-upload file bytes.",
                 "body": {
                     "schedule_id": {"type": "int", "required": True},
                     "filename": {"type": "string", "required": True},
-                    "content_base64": {"type": "string", "required": True},
+                    "plain_size": {"type": "int", "required": True},
                     "mime_type": {"type": "string|null", "default": None},
                 },
             },
             {
                 "method": "POST",
-                "path": "/schedules/attachments/download",
+                "path": "/attachment/init-download + GET /attachment/{attachment_id}/download?token=<token>",
                 "auth": "user",
-                "description": "Download encrypted attachment bytes.",
+                "description": "Create a download token, then stream-download file bytes.",
                 "body": {
                     "schedule_id": {"type": "int", "required": True},
                     "attachment_id": {"type": "int", "required": True},
@@ -639,7 +640,7 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/schedules/attachments/remove",
+                "path": "/attachment/remove",
                 "auth": "user",
                 "description": "Remove an attachment from a schedule.",
                 "body": {
@@ -649,7 +650,7 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "POST",
-                "path": "/schedules/attachments/remove-orphaned",
+                "path": "/attachment/remove-orphaned",
                 "auth": "user",
                 "description": "Remove orphaned attachment metadata for a schedule.",
                 "body": {
@@ -762,7 +763,7 @@ def agent_guide() -> dict[str, object]:
             # ── WebSocket ──
             {
                 "method": "WS",
-                "path": "/ws",
+                "path": "/api/v1/ws",
                 "auth": "Sec-WebSocket-Protocol: amtodo.v1, bearer.<access_token>",
                 "description": "Unified UI WebSocket endpoint for CRUD and real-time notification push. The server accepts the amtodo.v1 subprotocol after bearer token validation.",
             },
@@ -770,6 +771,7 @@ def agent_guide() -> dict[str, object]:
     }
 
 
+@router.post("/admin/init-db")
 def init_db(
     body: AdminInitDbRequest,
     request: Request,
@@ -783,6 +785,7 @@ def init_db(
     return {"ok": True, "database": "initialized"}
 
 
+@router.post("/admin/config")
 def server_config(
     body: AdminConfigRequest,
     request: Request,
@@ -836,7 +839,12 @@ def admin_user_create(
         )
         session.add(user)
         session.commit()
-        return {"ok": True, "user": user_to_dict_with_token(user)}
+        result = user_to_dict_with_token(user)
+
+    get_user_tables(user_id)
+    db.create_schema()
+    request.app.state.token_map[token] = user_id
+    return {"ok": True, "user": result}
 
 
 @router.post("/admin/users/list")
