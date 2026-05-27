@@ -39,9 +39,6 @@ class AppSettings:
     server_port: int = 8000
     server_name: str = ""
     admin_token: str = ""
-    server_public_key_path: str = ""
-    server_private_key_path: str = ""
-    request_timestamp_tolerance_seconds: int = 300
     max_attachment_size_bytes: int = DEFAULT_MAX_ATTACHMENT_SIZE_BYTES
     attachment_root: str = ""
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
@@ -149,7 +146,6 @@ def load_cli_settings() -> AppSettings:
     server_url = ""
     access_token = ""
     admin_token = ""
-    server_public_key_path = ""
 
     if config_path.is_file():
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -157,7 +153,6 @@ def load_cli_settings() -> AppSettings:
         server_url = data.get("server_url", "")
         access_token = data.get("access_token", "")
         admin_token = data.get("admin_token", "")
-        server_public_key_path = data.get("server_public_key_path", "")
 
     if not server_url:
         print(
@@ -174,7 +169,6 @@ def load_cli_settings() -> AppSettings:
         server_url=server_url,
         access_token=access_token,
         admin_token=admin_token,
-        server_public_key_path=server_public_key_path,
     )
 
 

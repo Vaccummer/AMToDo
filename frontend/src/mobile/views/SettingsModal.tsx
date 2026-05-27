@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../../api/client";
 import type { HealthResponse } from "../../api/client";
 import type { ConnectionStatusSnapshot } from "../../api/connection-status";
-import { FingerprintMismatchError, fingerprintPublicKey, importP256PublicKey, verifyOrEnrollKey } from "../../crypto/envelope";
 import { clearAttachmentCache, getCacheSize } from "../../lib/attachmentCache";
 import type { UISettings } from "../../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../../themes";
@@ -68,16 +67,12 @@ const MOB = {
   interruptedDesc: "保留上次验证信息，正在自动重连",
   address: "地址",
   userCreated: "用户创建",
-  publicKeyFingerprint: "公钥指纹",
-  copy: "复制",
-  copied: "已复制",
   unknownUser: "已验证用户",
   unverified: "未验证",
   retryState: "重连状态",
   currentStep: "当前步骤",
   unavailable: "不可用",
   tokenStep: "验证 Token",
-  fingerprintActionDesc: "服务器公钥指纹与本地记录不一致。请确认这是可信服务器后再信任新指纹。",
   check: "检测",
   checking: "检测中...",
   accessToken: "访问令牌",
@@ -92,12 +87,6 @@ const MOB = {
   connFailed: "连接失败",
   connFailedDesc: "请检查地址与网络",
   responseFormatError: "响应格式异常",
-  fpMismatch: "指纹不匹配",
-  fpChanged: "指纹已变更",
-  localRecord: "本地",
-  serverFp: "服务器",
-  trustFp: "信任新指纹",
-  reject: "拒绝",
   verifyingToken: "验证中...",
   tokenValid: "令牌有效",
   userLabel: "用户: ",
@@ -144,12 +133,6 @@ const WARN_ICON = (
   </svg>
 );
 
-const COPY_ICON = (
-  <svg viewBox="0 0 1024 1024" aria-hidden="true">
-    <path d="M731.68184 676.057473 731.68184 183.323259c0-30.233582-24.512277-54.745858-54.747905-54.745858L184.216093 128.577401c-30.233582 0-54.746882 24.512277-54.746882 54.745858l0 492.734214c0 30.207999 24.5133 54.746882 54.746882 54.746882l492.717841 0C707.16854 730.804355 731.68184 706.265472 731.68184 676.057473zM622.1891 676.057473 238.962975 676.057473c-30.233582 0-54.746882-24.538883-54.746882-54.745858L184.216093 238.07014c0-30.233582 24.5133-54.746882 54.746882-54.746882l383.226125 0c30.233582 0 54.744835 24.512277 54.744835 54.746882l0 383.242498C676.933935 651.51859 652.421658 676.057473 622.1891 676.057473zM841.17458 292.817022l-54.745858 0 0 54.746882c30.232558 0 54.745858 24.5133 54.745858 54.759161l0 383.228171c0 30.206976-24.5133 54.745858-54.745858 54.745858L403.201573 840.297095c-30.233582 0-54.746882-24.538883-54.746882-54.745858l-54.746882 0 0 54.745858c0 30.207999 24.5133 54.747905 54.746882 54.747905l492.719888 0c30.234605 0 54.747905-24.539906 54.747905-54.747905L895.922485 347.563904C895.922485 317.329299 871.408161 292.817022 841.17458 292.817022z" fill="currentColor" />
-  </svg>
-);
-
 const CHEVRON = (
   <svg className="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6" />
@@ -181,16 +164,13 @@ type UrlCheckResult =
       kind: "ok";
       version: string;
       name?: string;
-      publicKey?: string;
-      publicKeyFingerprint?: string;
       ipv4?: string;
       ipv6?: string;
       bind?: string[];
       maxAttachmentSizeBytes?: number;
     }
   | { kind: "unreachable"; message: string }
-  | { kind: "invalid"; message: string }
-  | { kind: "fingerprint"; old: string; new: string };
+  | { kind: "invalid"; message: string };
 
 type TokenResult =
   | { ok: true; userId: number; userName: string; createdAt: number }
@@ -204,12 +184,11 @@ type Props = {
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionToggle?: (enabled: boolean) => void;
-  onAcceptFingerprint?: (fingerprint: string) => void;
 };
 
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle, onAcceptFingerprint }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -236,9 +215,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // URL check
   const [urlChecking, setUrlChecking] = useState(false);
   const [urlCheckResult, setUrlCheckResult] = useState<UrlCheckResult | null>(null);
-  const storedPublicKeyRef = useRef<string | null>(null);
-  const validatedFingerprintRef = useRef<string | null>(null);
-  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
 
   // Token verify
   const [tokenVerifying, setTokenVerifying] = useState(false);
@@ -301,7 +277,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (!userToggledWsRef.current) return;
     if (!wsEnabled) return;
     const s = connectionStatus?.status;
-    if (s === "token-error" || s === "key-mismatch" || s === "fingerprint" || s === "replay-detected" || s === "offline") {
+    if (s === "token-error" || s === "offline") {
       userToggledWsRef.current = false;
       setWsEnabled(false);
       onConnectionToggle?.(false);
@@ -345,13 +321,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   async function checkUrl(): Promise<boolean> {
     if (!serverUrl) {
       setUrlCheckResult(null);
-      storedPublicKeyRef.current = null;
       return false;
     }
     setUrlChecking(true);
     setUrlCheckResult(null);
     setTokenResult(null);
-    storedPublicKeyRef.current = null;
     try {
       onSaveConnection?.({ server_url: serverUrl });
 
@@ -363,32 +337,10 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         return false;
       }
 
-      if (result.public_key) {
-        const storedFp = serverUrl === initial.server_url ? initial.known_key_fingerprint : "";
-        try {
-          await verifyOrEnrollKey(result.public_key, storedFp);
-          storedPublicKeyRef.current = result.public_key;
-        } catch (e) {
-          if (e instanceof FingerprintMismatchError) {
-            setUrlCheckResult({ kind: "fingerprint", old: e.expected, new: e.actual });
-            return false;
-          }
-          throw e;
-        }
-      }
-
-      if (result.public_key) {
-        const fp = await fingerprintPublicKey(result.public_key);
-        validatedFingerprintRef.current = fp;
-        onSaveConnection?.({ known_key_fingerprint: fp });
-      }
-
       setUrlCheckResult({
         kind: "ok",
         version: result.version,
         name: result.name,
-        publicKey: result.public_key,
-        publicKeyFingerprint: result.public_key_fingerprint,
         ipv4: result.ipv4,
         ipv6: result.ipv6,
         bind: result.bind,
@@ -409,8 +361,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     setServerUrl(value);
     if (urlCheckResult) {
       setUrlCheckResult(null);
-      storedPublicKeyRef.current = null;
-      validatedFingerprintRef.current = null;
       setTokenResult(null);
     }
   }
@@ -424,22 +374,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     setTokenVerifying(true);
     setTokenResult(null);
     try {
-      let pubKey = storedPublicKeyRef.current;
-      if (!pubKey) {
-        const healthApi = new AMToDoApi(serverUrl, null);
-        const health = await healthApi.health();
-        if (health.public_key) {
-          pubKey = health.public_key;
-          storedPublicKeyRef.current = pubKey;
-        }
-      }
-      let api: AMToDoApi;
-      if (pubKey) {
-        const p256Key = await importP256PublicKey(pubKey);
-        api = new AMToDoApi(serverUrl, accessToken, p256Key);
-      } else {
-        api = new AMToDoApi(serverUrl, accessToken);
-      }
+      const api = new AMToDoApi(serverUrl, accessToken);
       const result = await api.verifyTokenHttp();
       if (result.ok) {
         setTokenResult({
@@ -545,19 +480,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     onConnectionToggle?.(true);
   }
 
-  function handleAcceptFingerprint() {
-    if (urlCheckResult?.kind === "fingerprint") {
-      onSaveConnection?.({ known_key_fingerprint: urlCheckResult.new });
-      onAcceptFingerprint?.(urlCheckResult.new);
-      setTimeout(() => checkUrl(), 100);
-    }
-  }
-
-  function handleRejectFingerprint() {
-    setUrlCheckResult(null);
-    storedPublicKeyRef.current = null;
-  }
-
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
   // Connection section state
@@ -570,7 +492,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     "settings-inline-input",
     urlCheckResult?.kind === "ok" ? "url-ok" : "",
     urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" ? "url-err" : "",
-    urlCheckResult?.kind === "fingerprint" ? "url-warn" : "",
   ].filter(Boolean).join(" ");
 
   const tokenInputClass = [
@@ -685,35 +606,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             {CROSS_ICON} {urlCheckResult.message}
           </div>
         );
-      case "fingerprint":
-        return (
-          <>
-            <div className="settings-inline-status warn">
-              {WARN_ICON} {MOB.fpMismatch}
-            </div>
-            <div className="settings-fp-compact">
-              <div className="settings-fp-compact-title">
-                {WARN_ICON} {MOB.fpChanged}
-              </div>
-              <div className="settings-fp-compact-row">
-                <span className="settings-fp-compact-label">{MOB.localRecord}</span>
-                <code className="settings-fp-compact-hash old">{urlCheckResult.old}</code>
-              </div>
-              <div className="settings-fp-compact-row">
-                <span className="settings-fp-compact-label">{MOB.serverFp}</span>
-                <code className="settings-fp-compact-hash new">{urlCheckResult.new}</code>
-              </div>
-              <div className="settings-fp-compact-actions">
-                <button type="button" className="settings-fp-compact-btn accept" onClick={handleAcceptFingerprint}>
-                  {MOB.trustFp}
-                </button>
-                <button type="button" className="settings-fp-compact-btn reject" onClick={handleRejectFingerprint}>
-                  {MOB.reject}
-                </button>
-              </div>
-            </div>
-          </>
-        );
     }
   }
 
@@ -752,20 +644,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     });
   }
 
-  async function handleCopyFingerprint(fingerprint: string) {
-    try {
-      await navigator.clipboard?.writeText(fingerprint);
-      setCopiedFingerprint(true);
-      setTimeout(() => setCopiedFingerprint(false), 1200);
-    } catch {
-      setCopiedFingerprint(false);
-    }
-  }
-
-  type ConnectionViewState = "online" | "connecting" | "interrupted" | "error" | "idle" | "fingerprint";
+  type ConnectionViewState = "online" | "connecting" | "interrupted" | "error" | "idle";
 
   function getConnectionViewState(): ConnectionViewState {
-    if (urlCheckResult?.kind === "fingerprint") return "fingerprint";
     if (urlChecking || tokenVerifying) return "connecting";
 
     switch (connectionStatus?.status) {
@@ -779,11 +660,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         return "idle";
       case "offline":
         return wsEnabled && (tokenResult?.ok || connectionStatus.serverName) ? "interrupted" : "error";
-      case "fingerprint":
-        return "fingerprint";
-      case "key-mismatch":
       case "token-error":
-      case "replay-detected":
         return "error";
       default:
         if (urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" || tokenResult?.ok === false) return "error";
@@ -798,13 +675,12 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const serverTitle = serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion
     ? `${serverName} · v${serverVersion}`
     : MOB.serverInfoUnavailable;
-  const currentFingerprint = serverOk?.publicKeyFingerprint || validatedFingerprintRef.current || initial.known_key_fingerprint || "";
   const hasReliableServerInfo = Boolean(serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion);
   const userText = tokenResult?.ok ? `${tokenResult.userName} · #${tokenResult.userId}` : (connectionStatus?.status === "online" ? MOB.unknownUser : MOB.unverified);
   const userCreatedText = tokenResult?.ok ? formatUserCreated(tokenResult.createdAt) : MOB.serverPending;
   const viewState = getConnectionViewState();
   const isWorking = viewState === "connecting";
-  const canStartConnection = !isWorking && viewState !== "fingerprint";
+  const canStartConnection = !isWorking;
 
   function primaryConnectionLabel(): string {
     if (isWorking) return MOB.connecting;
@@ -830,7 +706,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   function renderConnectionIcon() {
     if (viewState === "online") return CHECK_ICON;
-    if (viewState === "fingerprint" || viewState === "interrupted") return WARN_ICON;
+    if (viewState === "interrupted") return WARN_ICON;
     if (viewState === "error") return CROSS_ICON;
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -844,7 +720,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (viewState === "online") return MOB.connConnected;
     if (viewState === "connecting") return MOB.connecting;
     if (viewState === "interrupted") return MOB.interrupted;
-    if (viewState === "fingerprint") return MOB.fpMismatch;
     if (viewState === "idle") return MOB.connDisconnected;
     return MOB.connFailed;
   }
@@ -856,33 +731,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       return tokenVerifying ? "服务器已响应，正在验证访问令牌" : "正在建立实时连接";
     }
     if (viewState === "interrupted") return MOB.interruptedDesc;
-    if (viewState === "fingerprint") return MOB.fingerprintActionDesc;
     if (viewState === "idle") return "连接未启用，点击连接开始验证服务器和令牌";
     return connectionStatus?.errorMessage || (tokenResult?.ok === false ? tokenResult.message : MOB.connFailedDesc);
-  }
-
-  function renderFingerprintConflict() {
-    if (urlCheckResult?.kind !== "fingerprint") return null;
-    return (
-      <div className="settings-conn-fingerprint">
-        <div className="settings-conn-fp-row">
-          <span>{MOB.localRecord}</span>
-          <code>{urlCheckResult.old}</code>
-        </div>
-        <div className="settings-conn-fp-row">
-          <span>{MOB.serverFp}</span>
-          <code>{urlCheckResult.new}</code>
-        </div>
-        <div className="settings-conn-actions">
-          <button type="button" className="settings-conn-primary" onClick={handleAcceptFingerprint}>
-            {MOB.trustFp}
-          </button>
-          <button type="button" className="settings-conn-secondary" onClick={handleRejectFingerprint}>
-            {MOB.reject}
-          </button>
-        </div>
-      </div>
-    );
   }
 
   function renderConnectionOverview() {
@@ -943,19 +793,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
         <div className="settings-conn-meta">
           <div className="settings-conn-meta-row">
-            <span>{MOB.publicKeyFingerprint}</span>
-            <strong className="mono">{currentFingerprint || MOB.serverPending}</strong>
-            <button
-              type="button"
-              className="settings-conn-copy"
-              onClick={() => currentFingerprint && handleCopyFingerprint(currentFingerprint)}
-              disabled={!currentFingerprint}
-              aria-label={MOB.copy}
-            >
-              {COPY_ICON}
-            </button>
-          </div>
-          <div className="settings-conn-meta-row">
             <span>{MOB.attachmentCache}</span>
             <strong>{serverOk?.maxAttachmentSizeBytes ? formatSize(serverOk.maxAttachmentSizeBytes) : MOB.serverPending}</strong>
           </div>
@@ -964,9 +801,6 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <strong>{viewState === "interrupted" ? `${reconnectMaxAttempts} max` : (viewState === "online" ? "实时通道在线" : MOB.serverPending)}</strong>
           </div>
         </div>
-
-        {copiedFingerprint ? <div className="settings-conn-toast">{MOB.copied}</div> : null}
-        {renderFingerprintConflict()}
 
         <div className="settings-conn-actions">
           <button

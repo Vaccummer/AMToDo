@@ -15,10 +15,7 @@ export type UnifiedStatus =
   | "online"            // HTTP OK + WS connected
   | "reconnecting"      // HTTP OK + WS retrying
   | "offline"           // HTTP unreachable
-  | "fingerprint"       // client-side TOFU check: stored fingerprint != server key
-  | "key-mismatch"      // server-side: decryption failed (close 4003)
   | "token-error"       // server-side: invalid token (close 4005)
-  | "replay-detected"   // server-side: replay attack (close 4006)
   | "idle";             // user manually disconnected (ws_enabled OFF)
 
 export interface ConnectionStatusSnapshot {
@@ -78,13 +75,6 @@ export class ConnectionStatusManager {
     if (this._reconnectExhausted) return;
     this._errorMessage = message;
     this._status = kind === "token" ? "token-error" : "offline";
-    this._emit();
-  }
-
-  /** Client-side TOFU fingerprint mismatch. */
-  reportFingerprintMismatch(message: string): void {
-    this._errorMessage = message;
-    this._status = "fingerprint";
     this._emit();
   }
 
@@ -148,17 +138,11 @@ export class ConnectionStatusManager {
 
     // wsStatus === "disconnected" — check close code for reason
     if (closeCode !== undefined && closeCode >= 4002 && closeCode <= 4006) {
-      if (closeCode === 4003) {
-        this._status = "key-mismatch";
-        this._errorMessage = WS_CLOSE_REASONS[4003];
-      } else if (closeCode === 4005) {
+      if (closeCode === 4005) {
         this._status = "token-error";
         this._errorMessage = WS_CLOSE_REASONS[4005];
-      } else if (closeCode === 4006) {
-        this._status = "replay-detected";
-        this._errorMessage = WS_CLOSE_REASONS[4006];
       } else {
-        // 4002 (timeout) or 4004 (missing fields) — treat as degraded
+        // 4002/4004 are handshake failures; reconnecting keeps the UI actionable.
         this._status = "reconnecting";
         this._errorMessage = WS_CLOSE_REASONS[closeCode] ?? null;
       }
@@ -197,9 +181,6 @@ export class ConnectionStatusManager {
         break;
       case "offline":
       case "token-error":
-      case "key-mismatch":
-      case "fingerprint":
-      case "replay-detected":
       case "idle":
         notifyNetworkStatus(false, snap.errorMessage ?? undefined);
         break;
@@ -212,10 +193,10 @@ export class ConnectionStatusManager {
 
 export const WS_CLOSE_REASONS: Record<number, string> = {
   4002: "ws.connectionTimeout",
-  4003: "ws.keyMismatch",
+  4003: "ws.missingFields",
   4004: "ws.missingFields",
   4005: "ws.invalidToken",
-  4006: "ws.replayDetected",
+  4006: "ws.missingFields",
 };
 
 // ── React Hook ──

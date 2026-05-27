@@ -17,9 +17,8 @@ from config import AppSettings
 from db.engine import create_database
 from models.factory import get_user_tables
 from models.user import User
-from serialization import attachment_to_dict
 from server.app import create_app
-from services import AttachmentService, TodoDraft, TodoService
+from services import AttachmentService
 from services.uow import UnitOfWork
 
 if TYPE_CHECKING:
@@ -87,7 +86,8 @@ def _setup_user_and_todo(app, tmp_path):
 
         todo_response = client.post(
             "/api/v1/todos/create",
-            json={"access_token": token, "title": "With upload"},
+            json={"title": "With upload"},
+            headers={"Authorization": f"Bearer {token}"},
         )
         todo_id = todo_response.json()["todo"]["id"]
 
@@ -150,7 +150,8 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         # Step 3: Verify metadata via list
         list_response = client.post(
             "/api/v1/attachment/list",
-            json={"access_token": token, "todo_id": todo_id},
+            json={"todo_id": todo_id},
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert list_response.json()["count"] == 1
 

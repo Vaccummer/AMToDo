@@ -14,11 +14,6 @@ admin_token = "123456"
 [log]
 file = "log/server.log"
 
-[encryption]
-public_key_path = "config/keys/server_public.pem"
-private_key_path = "config/keys/server_private.pem"
-request_timestamp_tolerance_seconds = 300
-
 [storage]
 attachment_root = "db"
 
@@ -33,12 +28,6 @@ watcher_interval = 10
 
 # Heartbeat interval for WebSocket connections (seconds)
 heartbeat_interval = 30
-
-# Authentication handshake timeout for new WebSocket connections (seconds)
-auth_timeout = 5
-
-# Maximum lifetime of a session key (seconds, safety net)
-session_key_ttl = 3600
 
 [health]
 # TTL (seconds) for cached public IP addresses (0 = no cache, fetch every time)

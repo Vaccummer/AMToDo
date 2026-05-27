@@ -1,21 +1,8 @@
-"""Authentication dependencies.
-
-Tokens are passed in the request body (not ``Authorization`` header).
-
-``require_admin`` validates ``admin_token`` from the JSON body against the
-server-configured admin token.
-
-``require_user`` looks up ``access_token`` from the JSON body in the
-in-memory ``token_map`` and returns the corresponding ``user_id``.
-
-Both read the body without consuming it via ``Body()`` so that FastAPI
-treats the Pydantic request model as the sole body parameter (flat mode).
-"""
+"""Authentication dependencies."""
 
 from __future__ import annotations
 
 import hmac
-import json
 
 from fastapi import HTTPException, Request, status
 
@@ -34,9 +21,8 @@ async def require_localhost(request: Request) -> None:
 
 
 async def require_admin(request: Request) -> None:
-    """Validate the server admin token from the request body."""
-    body = await _read_body(request)
-    admin_token = body.get("admin_token", "")
+    """Validate the server admin token from the Authorization header."""
+    admin_token = _bearer_token(request)
     expected: str = request.app.state.settings.admin_token
     if not hmac.compare_digest(admin_token, expected):
         raise HTTPException(
@@ -46,9 +32,8 @@ async def require_admin(request: Request) -> None:
 
 
 async def require_user(request: Request) -> int:
-    """Validate a user access token from the request body. Returns user_id."""
-    body = await _read_body(request)
-    access_token = body.get("access_token", "")
+    """Validate a user access token from the Authorization header."""
+    access_token = _bearer_token(request)
     token_map: dict[str, int] = request.app.state.token_map
     user_id = token_map.get(access_token)
     if user_id is None:
@@ -76,20 +61,10 @@ def _lookup_token_in_db(request: Request, access_token: str) -> int | None:
     return user.id if user is not None else None
 
 
-async def _read_body(request: Request) -> dict:
-    """Return the parsed JSON body without affecting FastAPI body resolution.
-
-    Uses ``request._body`` when available (set by the decryption middleware),
-    otherwise reads and caches via ``request.body()``.  The parsed dict is
-    cached on ``request.state`` so that repeated calls (e.g. from both
-    ``require_admin`` and FastAPI body resolution) do not re-parse.
-    """
-    cached = getattr(request.state, "_parsed_body", None)
-    if cached is not None:
-        return cached
-    body_bytes = getattr(request, "_body", None)
-    if body_bytes is None:
-        body_bytes = await request.body()
-    parsed = json.loads(body_bytes)
-    request.state._parsed_body = parsed
-    return parsed
+def _bearer_token(request: Request) -> str:
+    """Return the bearer token, or an empty string if the header is invalid."""
+    value = request.headers.get("authorization", "")
+    scheme, _, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return ""
+    return token.strip()

@@ -36,7 +36,8 @@ class ServerHarness:
     def response(self, path: str, body: dict[str, Any]) -> httpx.Response:
         return self._client.post(
             path,
-            json={"access_token": self._token, **body},
+            json=body,
+            headers={"Authorization": f"Bearer {self._token}"},
         )
 
 

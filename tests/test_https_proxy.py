@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from clock import SystemClock
 from config import AppSettings
+from models.factory import get_user_tables
+from models.user import User
 from server.app import create_app
 
 
@@ -78,4 +82,31 @@ def test_unified_websocket_route_is_registered(tmp_path: Path) -> None:
             with client.websocket_connect("/api/v1/ws"):
                 pass
         except WebSocketDisconnect as exc:
-            assert exc.code == 1011
+            assert exc.code == 4005
+
+
+def test_unified_websocket_route_accepts_bearer_subprotocol(tmp_path: Path) -> None:
+    settings = AppSettings(
+        database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}",
+        admin_token="admin-secret",
+    )
+    app = create_app(settings)
+    token = secrets.token_urlsafe(32)
+
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        db = app.state.db
+        with db.session() as session:
+            user = User(name="ws-test", token=token, created_at=SystemClock().now_epoch())
+            session.add(user)
+            session.commit()
+            user_id = user.id
+
+        app.state.token_map[token] = user_id
+        get_user_tables(user_id)
+        db.create_schema()
+
+        with client.websocket_connect(
+            "/api/v1/ws",
+            subprotocols=["amtodo.v1", f"bearer.{token}"],
+        ) as ws:
+            assert ws.accepted_subprotocol == "amtodo.v1"

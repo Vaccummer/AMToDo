@@ -3,7 +3,6 @@ import { AMToDoApi, type HealthResponse, type TodoItem, type ScheduleItem, type 
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "../api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "../api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
-import { verifyOrEnrollKey, FingerprintMismatchError } from "../crypto/envelope";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
@@ -225,16 +224,6 @@ export function App() {
       setHealth(result);
       mgr.reportHealthOk(result.version, result.name);
 
-      // TOFU: verify server public key fingerprint
-      let currentFingerprint = settings.known_key_fingerprint;
-      if (result.public_key) {
-        currentFingerprint = await verifyOrEnrollKey(result.public_key, currentFingerprint);
-        if (currentFingerprint !== settings.known_key_fingerprint) {
-          setSettings((prev) => ({ ...prev, known_key_fingerprint: currentFingerprint }));
-          shell.writeSettings({ known_key_fingerprint: currentFingerprint }).catch(() => {});
-        }
-      }
-
       const limits = result.limits;
 
       // Phase 2: Connect UI WebSocket
@@ -242,11 +231,6 @@ export function App() {
         settings.server_url,
         settings.access_token,
         settings.ws_reconnect_interval_ms,
-        currentFingerprint,
-        (enrolledFp: string) => {
-          setSettings((prev) => ({ ...prev, known_key_fingerprint: enrolledFp }));
-          shell.writeSettings({ known_key_fingerprint: enrolledFp }).catch(() => {});
-        },
         settings.reconnect_max_attempts
       );
 
@@ -286,7 +270,6 @@ export function App() {
       const readyApi = new AMToDoApi(
         settings.server_url,
         settings.access_token,
-        null,
         limits.max_attachment_size_bytes,
         wsClient
       );
@@ -312,19 +295,13 @@ export function App() {
         console.error("[AMToDo] bootstrap failed:", error);
         if (cancelled) return;
         const mgr = connectionManagerRef.current;
-        const message = error instanceof FingerprintMismatchError
-          ? error.messageKey
-          : error instanceof Error ? error.message : "common.connectionFailed";
-        if (error instanceof FingerprintMismatchError) {
-          mgr.reportFingerprintMismatch(message);
-        } else {
-          const kind = error instanceof TypeError ? "network" : "token";
-          mgr.reportHealthError(kind, message);
-        }
+        const message = error instanceof Error ? error.message : "common.connectionFailed";
+        const kind = error instanceof TypeError ? "network" : "token";
+        mgr.reportHealthError(kind, message);
         setHealth(null);
         setHealthError(message);
         setConnectionStatus("offline");
-        if (!(error instanceof FingerprintMismatchError)) scheduleRetry();
+        scheduleRetry();
       }
     };
 
@@ -494,9 +471,6 @@ export function App() {
           }}
           onConnectionToggle={(enabled) => {
             setSettings((prev) => ({ ...prev, ws_enabled: enabled }));
-          }}
-          onAcceptFingerprint={(fingerprint) => {
-            setSettings((prev) => ({ ...prev, known_key_fingerprint: fingerprint }));
           }}
           onClose={() => {
             flushSettings(settings);
