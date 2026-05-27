@@ -839,9 +839,9 @@ def agent_guide() -> dict[str, object]:
             },
             {
                 "method": "WS",
-                "path": "/notifications/ws",
+                "path": "/ws",
                 "auth": "user (query param: token)",
-                "description": "WebSocket endpoint for real-time notification push. Connect with ?token=<access_token>. Receives encrypted notification payloads. Send 'ping' to keep alive.",
+                "description": "Unified UI WebSocket endpoint for CRUD and real-time notification push.",
             },
         ],
     }

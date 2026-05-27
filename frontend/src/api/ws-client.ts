@@ -1,7 +1,7 @@
 /**
  * UI WebSocket Client — pure WS transport for all CRUD + notifications.
  *
- * Protocol: /api/v1/ui/ws
+ * Protocol: /api/v1/ws
  * Auth: P-256 envelope (access_token + session_key) during handshake.
  * Business messages: AES-256-GCM encrypted with session_key.
  */
@@ -332,7 +332,7 @@ export class UiWsClient {
 
     const wsUrl = this.serverUrl
       .replace(/^http/, "ws")
-      .replace(/\/+$/, "") + "/api/v1/ui/ws";
+      .replace(/\/+$/, "") + "/api/v1/ws";
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;

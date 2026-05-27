@@ -19,7 +19,6 @@ from models.factory import get_user_tables
 from models.user import User
 from serialization import attachment_to_dict, notification_to_dict, schedule_to_dict, todo_to_dict, user_to_dict_with_token
 from services import (
-    AttachmentDraft,
     AttachmentService,
     NotificationService,
     NotificationUpdate,
@@ -1158,7 +1157,7 @@ def _run_http(operation: Callable, settings: AppSettings) -> None:
     try:
         result = operation(client)
         _echo_json(result)
-        if isinstance(result, dict) and result.get("ok") is False:
+        if isinstance(result, dict) and (result.get("ok") is False or "detail" in result):
             raise typer.Exit(1)
     finally:
         client.close()

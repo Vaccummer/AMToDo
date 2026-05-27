@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -459,7 +458,12 @@ def create_app(settings: AppSettings) -> FastAPI:
 
 
 def main() -> None:
-    """Run the AMToDo HTTP server."""
+    """Run the AMToDo HTTP/2-capable server."""
+    import asyncio
+
+    from hypercorn.asyncio import serve
+    from hypercorn.config import Config
+
     root = server_root()
     raw = _load_raw_config(str(root / "config" / "server.toml"))
 
@@ -520,7 +524,10 @@ def main() -> None:
     if trusted_proxy_ips:
         print(f"  Trusted proxies: {', '.join(trusted_proxy_ips)}")
     print(f"  Auth:      admin token configured ({'*' * min(len(admin_token), 8)})")
-    print(f"  Rate limit: {rate_limit_requests} req / {rate_limit_window_seconds}s per IP (public endpoints)")
+    print(
+        f"  Rate limit: {rate_limit_requests} req / "
+        f"{rate_limit_window_seconds}s per IP (public endpoints)"
+    )
 
     settings = AppSettings(
         database_url=database_url,
@@ -549,8 +556,15 @@ def main() -> None:
     app.state.notification_config = raw.get("notification", {})
 
     log_config = _build_log_config(str(log_path))
+    hypercorn_config = Config()
+    hypercorn_config.bind = [f"{'::' if host is None else host}:{port}"]
+    hypercorn_config.logconfig_dict = log_config
+    hypercorn_config.alpn_protocols = ["h2", "http/1.1"]
+    hypercorn_config.accesslog = logging.getLogger("uvicorn.access")
+    hypercorn_config.errorlog = logging.getLogger("uvicorn.error")
+
     try:
-        uvicorn.run(app, host=host, port=port, log_config=log_config)
+        asyncio.run(serve(app, hypercorn_config))
     except Exception:
         logging.getLogger("amtodo").critical("Server failed to start", exc_info=True)
         print("FATAL: Server failed to start", file=sys.stderr)

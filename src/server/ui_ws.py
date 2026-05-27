@@ -1,6 +1,6 @@
 """UI WebSocket endpoint — single connection for all CRUD + notifications.
 
-Exposes ``WS /api/v1/ui/ws`` with a P-256 envelope auth handshake,
+Exposes ``WS /api/v1/ws`` with a P-256 envelope auth handshake,
 followed by AES-256-GCM encrypted request/response messages.
 """
 
@@ -11,7 +11,6 @@ import base64
 import json
 import logging
 import os
-import time
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -64,7 +63,8 @@ def _aes_decrypt(key: bytes, encoded: str) -> bytes:
 
 
 @router.websocket("/ui/ws")
-async def ui_ws_endpoint(websocket: WebSocket):
+@router.websocket("/ws")
+async def ui_ws_endpoint(websocket: WebSocket) -> None:
     """UI WebSocket endpoint with self-contained P-256 auth handshake."""
 
     app = websocket.app
@@ -100,7 +100,7 @@ async def ui_ws_endpoint(websocket: WebSocket):
     # --- Step 2: Wait for auth message ---
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await _safe_close(websocket, CLOSE_AUTH_TIMEOUT, "auth timeout")
         return
     except WebSocketDisconnect:
@@ -152,8 +152,9 @@ async def ui_ws_endpoint(websocket: WebSocket):
     if user_id is not None:
         logger.info("UI WS auth: token found in cache, user_id=%d", user_id)
     else:
-        from models.user import User
         from sqlalchemy import select
+
+        from models.user import User
 
         with db.session() as session:
             user = session.execute(
@@ -187,8 +188,6 @@ async def ui_ws_endpoint(websocket: WebSocket):
         upload_token_store=upload_token_store,
         download_token_store=download_token_store,
     )
-    last_pong = time.monotonic()
-
     try:
         while True:
             raw = await websocket.receive_text()
@@ -198,7 +197,6 @@ async def ui_ws_endpoint(websocket: WebSocket):
 
             # Heartbeat reply
             if msg_type == "pong":
-                last_pong = time.monotonic()
                 continue
 
             # Ping to client (server-initiated heartbeat handled by _heartbeat_task)
