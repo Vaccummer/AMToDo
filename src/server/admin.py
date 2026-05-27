@@ -72,6 +72,8 @@ async def health(request: Request) -> dict[str, object]:
         "status": "ok",
         "version": __version__,
         **({"name": settings.server_name} if settings.server_name else {}),
+        **({"public_url": settings.public_url} if settings.public_url else {}),
+        "scheme": request.url.scheme,
         "limits": {
             "max_attachment_size_bytes": settings.max_attachment_size_bytes,
         },

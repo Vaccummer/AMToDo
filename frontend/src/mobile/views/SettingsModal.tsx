@@ -997,7 +997,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               value={lanAddress}
               onChange={(e) => setLanAddress(e.target.value)}
               onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
-              placeholder="http://192.168.x.x:8000"
+              placeholder="https://todo.example.com"
               disabled={connLocked}
             />
             <button
@@ -1021,7 +1021,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               onChange={handleUrlChange}
               onBlur={() => onUpdateField?.({ server_url: serverUrl })}
               disabled={connLocked}
-              placeholder="http://127.0.0.1:8000"
+              placeholder="https://todo.example.com"
             />
             <button
               type="button"

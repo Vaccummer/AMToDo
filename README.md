@@ -16,6 +16,32 @@ uv run amtodo --help
 uv run amtodo-ui
 ```
 
+## HTTPS Reverse Proxy
+
+AMToDo can run HTTP on localhost while a reverse proxy provides the public
+HTTPS/WSS entry point:
+
+```text
+client -> https://your-domain -> reverse proxy -> http://127.0.0.1:8000
+```
+
+Use a local-only backend listener in `config/server.toml`:
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 8000
+public_url = "https://your-domain"
+
+[proxy]
+trusted_ips = ["127.0.0.1", "::1"]
+```
+
+For large attachment transfers, configure the proxy request body size and
+read/write timeouts to match AMToDo's attachment limits. Avoid logging query
+strings on upload/download paths because short-lived transfer tokens can appear
+there.
+
 ## ToDo CLI
 
 ```powershell

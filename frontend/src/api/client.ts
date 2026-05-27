@@ -10,6 +10,8 @@ export type HealthResponse = {
   status: string;
   version: string;
   name?: string;
+  public_url?: string;
+  scheme?: "http" | "https";
   public_key?: string;
   public_key_fingerprint?: string;
   ipv4?: string;
