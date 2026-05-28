@@ -147,11 +147,7 @@ public class NativeAttachmentPlugin extends Plugin {
             applyHeaders(connection, headers);
 
             long knownSize = totalSize == null ? querySize(uri) : totalSize;
-            if (knownSize >= 0) {
-                connection.setFixedLengthStreamingMode(knownSize);
-            } else {
-                connection.setChunkedStreamingMode(BUFFER_SIZE);
-            }
+            connection.setChunkedStreamingMode(BUFFER_SIZE);
 
             streamUriToConnection(uploadId, uri, connection, knownSize);
 
