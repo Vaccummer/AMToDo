@@ -169,6 +169,19 @@ export function AttachmentManager({
     });
   }
 
+  async function openVideoPreview(attachment: AnyAttachment) {
+    if (attachment.is_orphaned) return;
+    try {
+      const url = await getDownloadUrl(attachment.id);
+      rememberAttachmentUrl(attachment, url);
+      setPreview(attachment);
+      setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
+      setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+    }
+  }
+
   function forgetAttachmentUrl(attachmentId: number) {
     setAttachmentUrls((prev) => {
       const existing = prev[attachmentId];
@@ -669,6 +682,10 @@ export function AttachmentManager({
   async function handlePreview(attachment: AnyAttachment) {
     if (attachment.is_orphaned) return;
     const kind = effectivePreviewKind(attachment);
+    if (kind === "video") {
+      await openVideoPreview(attachment);
+      return;
+    }
     if (kind === "image" || kind === "video" || kind === "audio") {
       if (downloadedRef.current.has(attachment.id) && attachmentUrls[attachment.id]) {
         setPreview(attachment);
@@ -929,9 +946,9 @@ export function AttachmentManager({
                 >
                   {orphaned || loadError ? (
                     <AttachmentMissingIcon />
-                  ) : attachment.preview_kind === "image" && url ? (
+                  ) : effectivePreviewKind(attachment) === "image" && url ? (
                     <img src={url} alt="" />
-                  ) : attachment.preview_kind === "video" && url ? (
+                  ) : effectivePreviewKind(attachment) === "video" && url ? (
                     <video src={url} muted />
                   ) : effectivePreviewKind(attachment) === "audio" ? (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1024,6 +1041,7 @@ export function AttachmentManager({
       {preview ? (() => {
         const currentIdx = previewItems.findIndex((a) => a.id === preview.id);
         const kind = effectivePreviewKind(preview);
+        const previewUrl = attachmentUrls[preview.id];
         const openPreviewItem = (item: AnyAttachment) => {
           resetZoom();
           setTextPreviewContent(null);
@@ -1034,54 +1052,53 @@ export function AttachmentManager({
         return (
           <div className="attachment-preview-backdrop" onClick={() => { setPreview(null); setTextPreviewContent(null); }}>
             <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onDoubleClick={handleDoubleClick}>
-              <button
-                type="button"
-                className={`${modalClass}-close attachment-preview-close`}
-                onClick={() => { setPreview(null); setTextPreviewContent(null); }}
-                aria-label={t("common.close")}
-              >
-                ×
-              </button>
               {goPrev && (
                 <button type="button" className="preview-nav preview-nav-prev" onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label={t("common.previous")}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                 </button>
               )}
-              {kind === "image" ? (
-                <img
-                  src={attachmentUrls[preview.id]}
-                  alt={preview.filename}
-                  style={{
-                    transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
-                    transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
-                    touchAction: 'none',
-                  }}
-                />
-              ) : kind === "video" ? (
-                <video
-                  src={attachmentUrls[preview.id]}
-                  controls
-                  autoPlay
-                  style={{
-                    transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
-                    transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
-                    touchAction: 'none',
-                  }}
-                />
-              ) : kind === "audio" ? (
-                <div className="preview-audio-wrapper">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                  </svg>
-                  <audio src={attachmentUrls[preview.id]} controls autoPlay style={{ width: "100%", marginTop: 16 }} />
-                  <div className="preview-audio-name">{preview.filename}</div>
-                </div>
-              ) : kind === "text" && textPreviewContent !== null ? (
-                <div className="preview-text-wrapper">
-                  <div className="preview-text-name">{preview.filename}</div>
-                  <pre className="preview-text">{textPreviewContent}</pre>
-                </div>
-              ) : null}
+              <div className={`attachment-preview-media-frame attachment-preview-media-frame-${kind}`}>
+                <button
+                  type="button"
+                  className={`${modalClass}-close attachment-preview-close`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => { setPreview(null); setTextPreviewContent(null); }}
+                  aria-label={t("common.close")}
+                >
+                  ×
+                </button>
+                {kind === "image" && previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt={preview.filename}
+                    style={{
+                      transform: `scale(${zoom.scale}) translate(${zoom.x / zoom.scale}px, ${zoom.y / zoom.scale}px)`,
+                      transition: zoomRef.current.isPinching ? 'none' : 'transform 0.15s ease-out',
+                      touchAction: 'none',
+                    }}
+                  />
+                ) : kind === "video" && previewUrl ? (
+                  <video
+                    src={previewUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : kind === "audio" ? (
+                  <div className="preview-audio-wrapper">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                    </svg>
+                    <audio src={previewUrl} controls autoPlay style={{ width: "100%", marginTop: 16 }} />
+                    <div className="preview-audio-name">{preview.filename}</div>
+                  </div>
+                ) : kind === "text" && textPreviewContent !== null ? (
+                  <div className="preview-text-wrapper">
+                    <div className="preview-text-name">{preview.filename}</div>
+                    <pre className="preview-text">{textPreviewContent}</pre>
+                  </div>
+                ) : null}
+              </div>
               {goNext && (
                 <button type="button" className="preview-nav preview-nav-next" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label={t("common.next")}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
