@@ -672,7 +672,7 @@ export class AMToDoApi {
 
     return uploadWithProgress<AttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
-      await file.arrayBuffer(),
+      file,
       { "Content-Type": file.type || "application/octet-stream" },
       onProgress,
       abortSignal,
@@ -729,7 +729,7 @@ export class AMToDoApi {
 
     return uploadWithProgress<ScheduleAttachmentMetadata>(
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
-      await file.arrayBuffer(),
+      file,
       { "Content-Type": file.type || "application/octet-stream" },
       onProgress,
       abortSignal,

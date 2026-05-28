@@ -10,6 +10,55 @@ export interface UploadResult<T = unknown> {
   attachment: T;
 }
 
+type UploadBody = XMLHttpRequestBodyInit;
+
+function isCapacitorNative(): boolean {
+  const cap = window.Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform();
+  return !!cap.isNativePlatform;
+}
+
+function uploadBodySize(content: UploadBody): number {
+  if (content instanceof Blob) return content.size;
+  if (content instanceof ArrayBuffer) return content.byteLength;
+  if (ArrayBuffer.isView(content)) return content.byteLength;
+  if (typeof content === "string") return new Blob([content]).size;
+  return 0;
+}
+
+async function uploadWithFetch<T = unknown>(
+  url: string,
+  content: UploadBody,
+  headers: Record<string, string>,
+  onProgress?: (progress: UploadProgress) => void,
+  abortSignal?: AbortSignal,
+): Promise<UploadResult<T>> {
+  const total = uploadBodySize(content);
+  onProgress?.({ loaded: 0, total, percent: 0, phase: "uploading" });
+  const response = await fetch(url, {
+    method: "PUT",
+    body: content,
+    headers,
+    signal: abortSignal,
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    let message = `Upload failed: ${response.status}`;
+    try {
+      const payload = JSON.parse(text);
+      message = payload?.error?.message ?? payload?.detail ?? message;
+    } catch {
+      if (text) message = `${message} ${text}`;
+    }
+    throw new Error(message);
+  }
+
+  onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
+  return JSON.parse(text) as UploadResult<T>;
+}
+
 /**
  * Upload a ReadableStream with progress.
  * The stream is accumulated into an ArrayBuffer because XHR upload progress
@@ -58,11 +107,15 @@ export async function streamingUpload<T = unknown>(
  */
 export function uploadWithProgress<T = unknown>(
   url: string,
-  content: ArrayBuffer,
+  content: UploadBody,
   headers: Record<string, string>,
   onProgress?: (progress: UploadProgress) => void,
   abortSignal?: AbortSignal,
 ): Promise<UploadResult<T>> {
+  if (isCapacitorNative()) {
+    return uploadWithFetch(url, content, headers, onProgress, abortSignal);
+  }
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
