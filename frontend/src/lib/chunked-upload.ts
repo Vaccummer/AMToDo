@@ -1,5 +1,3 @@
-import { CapacitorHttp } from "@capacitor/core";
-
 export interface UploadProgress {
   loaded: number;
   total: number;
@@ -14,98 +12,12 @@ export interface UploadResult<T = unknown> {
 
 type UploadBody = XMLHttpRequestBodyInit;
 
-function isCapacitorNative(): boolean {
-  const cap = window.Capacitor;
-  if (!cap) return false;
-  if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform();
-  return !!cap.isNativePlatform;
-}
-
 function uploadBodySize(content: UploadBody): number {
   if (content instanceof Blob) return content.size;
   if (content instanceof ArrayBuffer) return content.byteLength;
   if (ArrayBuffer.isView(content)) return content.byteLength;
   if (typeof content === "string") return new Blob([content]).size;
   return 0;
-}
-
-async function uploadWithFetch<T = unknown>(
-  url: string,
-  content: UploadBody,
-  headers: Record<string, string>,
-  onProgress?: (progress: UploadProgress) => void,
-  abortSignal?: AbortSignal,
-): Promise<UploadResult<T>> {
-  const total = uploadBodySize(content);
-  onProgress?.({ loaded: 0, total, percent: 0, phase: "uploading" });
-  const response = await fetch(url, {
-    method: "PUT",
-    body: content,
-    headers,
-    signal: abortSignal,
-  });
-
-  const text = await response.text();
-  if (!response.ok) {
-    let message = `Upload failed: ${response.status}`;
-    try {
-      const payload = JSON.parse(text);
-      message = payload?.error?.message ?? payload?.detail ?? message;
-    } catch {
-      if (text) message = `${message} ${text}`;
-    }
-    throw new Error(message);
-  }
-
-  onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
-  onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
-  return JSON.parse(text) as UploadResult<T>;
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result);
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function uploadWithNativeHttp<T = unknown>(
-  url: string,
-  content: UploadBody,
-  headers: Record<string, string>,
-  onProgress?: (progress: UploadProgress) => void,
-): Promise<UploadResult<T>> {
-  if (!(content instanceof Blob)) {
-    return uploadWithFetch(url, content, headers, onProgress);
-  }
-
-  const total = content.size;
-  onProgress?.({ loaded: 0, total, percent: 0, phase: "uploading" });
-  const response = await CapacitorHttp.put({
-    url,
-    headers,
-    data: await blobToBase64(content),
-    dataType: "file",
-    responseType: "json",
-    connectTimeout: 30_000,
-    readTimeout: 600_000,
-  });
-
-  if (response.status < 200 || response.status >= 300) {
-    const data = response.data;
-    const message = typeof data === "object" && data !== null
-      ? (data.error?.message ?? data.detail ?? `Upload failed: ${response.status}`)
-      : `Upload failed: ${response.status}${data ? ` ${String(data)}` : ""}`;
-    throw new Error(message);
-  }
-
-  onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
-  return response.data as UploadResult<T>;
 }
 
 /**
@@ -161,11 +73,6 @@ export function uploadWithProgress<T = unknown>(
   onProgress?: (progress: UploadProgress) => void,
   abortSignal?: AbortSignal,
 ): Promise<UploadResult<T>> {
-  if (isCapacitorNative()) {
-    if (abortSignal?.aborted) return Promise.reject(new Error("Upload aborted"));
-    return uploadWithNativeHttp(url, content, headers, onProgress);
-  }
-
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
