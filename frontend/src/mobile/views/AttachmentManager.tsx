@@ -171,14 +171,36 @@ export function AttachmentManager({
 
   async function openVideoPreview(attachment: AnyAttachment) {
     if (attachment.is_orphaned) return;
+    if (downloadingIds.current.has(attachment.id)) return;
+    const existingUrl = attachmentUrls[attachment.id];
+    if (existingUrl?.startsWith("blob:")) {
+      setPreview(attachment);
+      return;
+    }
+    const ac = new AbortController();
+    downloadingIds.current.add(attachment.id);
+    downloadAbortMapRef.current.set(attachment.id, ac);
     try {
-      const url = await getDownloadUrl(attachment.id);
-      rememberAttachmentUrl(attachment, url);
+      const { blob } = await getAttachmentBlob(
+        (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
+        attachment,
+        getCacheKey(attachment),
+        (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+        ac.signal,
+      );
+      if (ac.signal.aborted) return;
+      const type = attachment.mime_type && attachment.mime_type !== "application/octet-stream" ? attachment.mime_type : getMimeType(attachment.filename);
+      rememberAttachmentUrl(attachment, URL.createObjectURL(blob.type === type ? blob : blob.slice(0, blob.size, type)));
       setPreview(attachment);
       setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
     } catch (err: unknown) {
+      if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+    } finally {
+      downloadingIds.current.delete(attachment.id);
+      downloadAbortMapRef.current.delete(attachment.id);
+      setDownloadProgressMap((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
     }
   }
 

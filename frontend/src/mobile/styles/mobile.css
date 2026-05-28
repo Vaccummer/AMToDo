@@ -3207,7 +3207,7 @@
   max-height: 100dvh;
   width: 100%;
   height: 100%;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 8px calc(env(safe-area-inset-bottom, 0px) + 36px);
+  padding: calc(env(safe-area-inset-top, 0px) + 48px) 8px calc(env(safe-area-inset-bottom, 0px) + 36px);
   box-sizing: border-box;
 }
 
@@ -3216,7 +3216,7 @@
   display: inline-grid;
   place-items: center;
   max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 52px);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 96px);
 }
 
 .mobile-shell .attachment-preview-panel img,
@@ -3225,7 +3225,7 @@
   width: auto;
   height: auto;
   max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 52px);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 96px);
   object-fit: contain;
   border-radius: 8px;
 }
@@ -3241,8 +3241,8 @@
 
 .mobile-shell .attachment-preview-close {
   position: absolute;
-  top: clamp(6px, 2vw, 12px);
-  right: clamp(6px, 2vw, 12px);
+  top: -42px;
+  right: 0;
   width: 38px;
   height: 38px;
   z-index: 10;
