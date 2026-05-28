@@ -896,6 +896,7 @@ export function AttachmentManager({
           const isSaved = savedIds.has(attachment.id);
           const isSwiped = swipedAttachId === attachment.id;
           const isRenaming = renamingId === attachment.id;
+          const hasClearCacheAction = isDownloaded;
 
           function onTouchStart(e: React.TouchEvent) {
             const touch = e.touches[0];
@@ -927,7 +928,7 @@ export function AttachmentManager({
 
           return (
             <div
-              className={`attach-swipe-wrapper${isSwiped ? " swiped" : ""}`}
+              className={`attach-swipe-wrapper${isSwiped ? " swiped" : ""}${hasClearCacheAction ? "" : " single-action"}`}
               key={attachment.id}
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
@@ -935,7 +936,7 @@ export function AttachmentManager({
             >
               {/* Swipe actions: clear cache + delete */}
               {!isDownloading && <div className="attach-swipe-action">
-                {isDownloaded && (
+                {hasClearCacheAction && (
                   <button
                     type="button"
                     className="attach-swipe-clear-cache"

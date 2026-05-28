@@ -2277,6 +2277,10 @@
   overflow: hidden;
 }
 
+.attach-swipe-wrapper.single-action .attach-swipe-action {
+  width: 56px;
+}
+
 .attach-swipe-clear-cache {
   flex: 1;
   height: 100%;
@@ -2324,6 +2328,10 @@
 .attach-swipe-wrapper.swiped > .attach-row {
   transform: translateX(-112px);
   transition: transform 0.2s ease;
+}
+
+.attach-swipe-wrapper.single-action.swiped > .attach-row {
+  transform: translateX(-56px);
 }
 
 /* ── Capture filename dialog ── */
