@@ -1886,6 +1886,7 @@
 /* Ensure no blue tap highlight on interactive elements */
 .mobile-shell .settings-sw,
 .mobile-shell .settings-inline-btn,
+.mobile-shell .settings-cache-clear-btn,
 .mobile-shell .settings-inline-eye,
 .mobile-shell .settings-fp-compact-btn,
 .mobile-shell .settings-modal-close,
@@ -1984,6 +1985,32 @@
 }
 
 .mobile-shell .settings-cache-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mobile-shell .settings-cache-clear-btn {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--status-danger-base) 22%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--status-danger-base) 9%, transparent);
+  color: var(--status-danger-base);
+  font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s, transform 0.1s, background 0.15s;
+}
+
+.mobile-shell .settings-cache-clear-btn:active:not(:disabled) {
+  transform: scale(0.96);
+  background: color-mix(in srgb, var(--status-danger-base) 14%, transparent);
+}
+
+.mobile-shell .settings-cache-clear-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -2144,6 +2171,17 @@
 .mobile-shell .attach-row.uploading .ring-progress svg {
   width: 36px;
   height: 36px;
+}
+
+.mobile-shell .attach-video-thumb {
+  border-radius: 8px;
+}
+
+.mobile-shell .attach-video-play {
+  width: 18px;
+  height: 18px;
+  right: 3px;
+  bottom: 3px;
 }
 
 .mobile-shell .attach-del-btn {
@@ -3619,17 +3657,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   flex-shrink: 0;
-  width: 44px;
+  min-width: 92px;
   height: 44px;
-  padding: 0;
+  padding: 0 14px;
   border: none;
   border-radius: 12px;
-  background: var(--global-accent);
+  background: linear-gradient(135deg, var(--status-primary-base, var(--global-accent)), #14967e);
   color: #fff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--status-primary-base, #1a7f72) 25%, transparent);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, opacity 0.15s;
 }
 
 .dirpicker-save-btn:disabled {
@@ -3643,7 +3683,8 @@
 
 .dirpicker-save-btn-text {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* Mobile full-screen override */

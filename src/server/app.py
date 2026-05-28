@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import logging.config
+import os
 import sys
 import tomllib
 from contextlib import asynccontextmanager
@@ -348,6 +349,7 @@ def main() -> None:
     log_path = (root / log_file).resolve()
 
     print(f"AMToDo Server v{__version__}")
+    print(f"  PID:       {os.getpid()}")
     print(f"  Log:       {log_path}")
     print(f"  Database:  {database_url}")
     listen_display = f"[::]:{port} (dual-stack)" if host is None else f"{host}:{port}"

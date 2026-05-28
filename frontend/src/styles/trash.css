@@ -35,6 +35,12 @@
   flex-shrink: 0;
 }
 
+.mobile-shell .trash-filter-bar,
+.mobile-shell .trash-search-bar {
+  background: var(--components-titlebar-bg);
+  border-bottom-color: rgba(100, 220, 210, 0.08);
+}
+
 .filter-tabs {
   display: inline-flex;
   border: 1px solid var(--global-surface-warm-4);

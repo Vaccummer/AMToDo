@@ -87,7 +87,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<ScheduleAttachmentMetadata | null>(null);
-  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // Fetch full schedule on mount (the list item may lack some fields)
@@ -148,6 +147,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         }
       })
     );
+    return result.attachments;
   }, [api, schedule.id]);
 
   useEffect(() => {
@@ -199,8 +199,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
         }
       }
-      setAttachmentsChanged(true);
-      await loadAttachments();
+      const updatedAttachments = await loadAttachments();
+      const updatedSchedule = { ...schedule, attachment_count: updatedAttachments.length };
+      setSchedule(updatedSchedule);
+      onUpdate(updatedSchedule);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
     } finally {
@@ -254,8 +256,10 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     setError(null);
     try {
       await api.removeScheduleAttachment(schedule.id, attachment.id);
-      setAttachmentsChanged(true);
-      await loadAttachments();
+      const updatedAttachments = await loadAttachments();
+      const updatedSchedule = { ...schedule, attachment_count: updatedAttachments.length };
+      setSchedule(updatedSchedule);
+      onUpdate(updatedSchedule);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t("common.attachmentDeleteFailed"));
     } finally {
@@ -277,7 +281,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   // Dirty tracking: compare form fields against the fetched schedule
   const dirty = useMemo(() => {
     return (
-      attachmentsChanged ||
       title !== schedule.title ||
       description !== (schedule.description ?? "") ||
       (startKey ? epochFromDatetimeLocal(startKey) : null) !== schedule.start_at ||
@@ -286,7 +289,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       category !== (schedule.category ?? "") ||
       JSON.stringify(extraFields) !== JSON.stringify(schedule.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, startKey, endKey, location, category, extraFields, schedule]);
+  }, [title, description, startKey, endKey, location, category, extraFields, schedule]);
 
   // Timeline bar data
   const timeline = useMemo(() => {
@@ -371,7 +374,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         setLocation(s.location ?? "");
         setCategory(s.category ?? "");
         setExtraFields(s.extra_fields ?? {});
-        setAttachmentsChanged(false);
         onUpdate(fresh.schedule);
       } catch {
         // Can't reach server either, keep current state

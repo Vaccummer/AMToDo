@@ -1143,14 +1143,22 @@ export class AMToDoApi {
     offset: number,
     length: number,
   ): Promise<AttachmentDownloadChunkResponse> {
-    await this.ensureConnected();
-    return this.wsClient!.send<AttachmentDownloadChunkResponse>("attachment.download_chunk", {
+    const payload = {
       owner_type: ownerType,
       owner_id: ownerId,
       attachment_id: attachmentId,
       offset,
       length,
-    });
+    };
+    await this.ensureConnected();
+    try {
+      return await this.wsClient!.send<AttachmentDownloadChunkResponse>("attachment.download_chunk", payload);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (!/websocket/i.test(message) && !/not connected/i.test(message)) throw err;
+      await this.ensureConnected();
+      return this.wsClient!.send<AttachmentDownloadChunkResponse>("attachment.download_chunk", payload);
+    }
   }
 
   private async initAttachmentToken(
