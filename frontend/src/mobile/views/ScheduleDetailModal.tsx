@@ -431,6 +431,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             uploadNativeFile={(file, onProgress, signal) => api.uploadScheduleNativeAttachment(schedule.id, file, onProgress, signal)}
             downloadFile={(attachmentId, onProgress, signal) => api.downloadScheduleAttachment(schedule.id, attachmentId, onProgress, signal)}
             getDownloadUrl={(attachmentId) => api.getScheduleAttachmentDownloadUrl(schedule.id, attachmentId)}
+            downloadChunk={(attachmentId, offset, length) => api.downloadScheduleAttachmentChunk(schedule.id, attachmentId, offset, length)}
             removeFile={(attachmentId) => api.removeScheduleAttachment(schedule.id, attachmentId)}
             renameFile={(attachmentId, filename) => api.renameScheduleAttachment(schedule.id, attachmentId, filename)}
             listAttachments={() => api.listScheduleAttachments(schedule.id)}

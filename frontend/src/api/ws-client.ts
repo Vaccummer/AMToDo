@@ -24,7 +24,7 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-const REQUEST_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 
 export const RECONNECT_EXHAUSTED_CODE = -2;

@@ -6,6 +6,7 @@ Parameter names are fully aligned with the REST API schemas.
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from pathlib import Path
@@ -115,6 +116,7 @@ class UiMessageRouter:
         self._handlers["attachment.get"] = self._handle_attachment_get
         self._handlers["attachment.init_upload"] = self._handle_init_upload
         self._handlers["attachment.init_download"] = self._handle_init_download
+        self._handlers["attachment.download_chunk"] = self._handle_download_chunk
         self._handlers["attachment.remove"] = self._handle_attachment_remove
         self._handlers["attachment.remove_orphaned"] = self._handle_attachment_remove_orphaned
         self._handlers["attachment.rename"] = self._handle_attachment_rename
@@ -961,6 +963,39 @@ class UiMessageRouter:
             "token": token,
             "file_size": file_size,
             "plain_size_bytes": attachment.plain_size_bytes,
+        }
+
+    def _handle_download_chunk(self, p: dict) -> dict:
+        owner_type = p["owner_type"]
+        owner_id = p["owner_id"]
+        attachment_id = p["attachment_id"]
+        offset = max(int(p.get("offset", 0)), 0)
+        length = min(max(int(p.get("length", 262144)), 1), 1048576)
+
+        with self._uow() as uow:
+            changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
+            svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
+            attachment = svc.show(owner_id, attachment_id)
+            content_path = svc.storage_path(attachment)
+            if not content_path.is_file():
+                raise ValidationError("attachment file was not found")
+            file_size = content_path.stat().st_size
+            if offset > file_size:
+                raise ValidationError("download offset is out of range")
+            with open(content_path, "rb") as f:
+                f.seek(offset)
+                chunk = f.read(length)
+
+        bytes_read = len(chunk)
+        next_offset = offset + bytes_read
+        return {
+            "ok": True,
+            "offset": offset,
+            "bytes_read": bytes_read,
+            "next_offset": next_offset,
+            "file_size": file_size,
+            "done": next_offset >= file_size,
+            "data": base64.b64encode(chunk).decode("ascii"),
         }
 
     def _handle_attachment_remove(self, p: dict) -> dict:
