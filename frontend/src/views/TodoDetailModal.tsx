@@ -89,7 +89,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<AttachmentMetadata | null>(null);
-  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t } = useI18n();
 
@@ -171,7 +170,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
   const dirty = useMemo(() => {
     return (
-      attachmentsChanged ||
       title !== todo.title ||
       description !== (todo.description ?? "") ||
       plannedAtKey !== (todo.planned_at ? datetimeLocalFromEpoch(todo.planned_at) : "") ||
@@ -180,7 +178,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       tag !== (todo.tag ?? "") ||
       JSON.stringify(extraFields) !== JSON.stringify(todo.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo]);
+  }, [title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo]);
 
   const datetimeValidation = useMemo(() => {
     let plannedDateError = !plannedDate;
@@ -344,7 +342,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
         }
       }
-      setAttachmentsChanged(true);
       const updatedAttachments = await loadAttachments();
       const updatedTodo = { ...todo, attachment_count: updatedAttachments.length };
       setTodo(updatedTodo);
@@ -402,7 +399,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     setError(null);
     try {
       await api.removeTodoAttachment(todo.id, attachment.id);
-      setAttachmentsChanged(true);
       const updatedAttachments = await loadAttachments();
       const updatedTodo = { ...todo, attachment_count: updatedAttachments.length };
       setTodo(updatedTodo);

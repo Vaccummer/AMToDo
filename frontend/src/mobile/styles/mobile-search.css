@@ -23,7 +23,7 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  background: linear-gradient(160deg, #283434 0%, #2a3e3e 40%, #283434 100%);
+  background: var(--components-titlebar-bg);
   overflow: hidden;
   container-type: size;
   container-name: search;
@@ -32,7 +32,7 @@
 /* ── Top Section (dark gradient area) ── */
 
 .mobile-shell .ms-top-section {
-  background: linear-gradient(160deg, #283434 0%, #2a3e3e 40%, #283434 100%);
+  background: var(--components-titlebar-bg);
   padding: 10px 16px 14px;
   flex-shrink: 0;
 }

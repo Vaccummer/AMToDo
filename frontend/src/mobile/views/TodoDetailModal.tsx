@@ -65,7 +65,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t } = useI18n();
 
@@ -112,7 +111,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const dirty = useMemo(() => {
     if (createMode) return true;
     return (
-      attachmentsChanged ||
       title !== todo.title ||
       description !== (todo.description ?? "") ||
       plannedAtKey !== (todo.planned_at ? datetimeLocalFromEpoch(todo.planned_at) : "") ||
@@ -121,7 +119,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       tag !== (todo.tag ?? "") ||
       JSON.stringify(extraFields) !== JSON.stringify(todo.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo, createMode]);
+  }, [title, description, plannedAtKey, dueAtKey, priority, tag, extraFields, todo, createMode]);
 
   const datetimeValidation = useMemo(() => {
     let plannedDateError = !plannedDate;
@@ -438,7 +436,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             renameFile={(attachmentId, filename) => api.renameTodoAttachment(todo.id, attachmentId, filename)}
             listAttachments={() => api.listTodoAttachments(todo.id)}
             onAttachmentsChanged={(count) => {
-              setAttachmentsChanged(true);
               const updatedTodo = { ...todo, attachment_count: count };
               setTodo(updatedTodo);
               onUpdate(updatedTodo);

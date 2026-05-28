@@ -3,6 +3,7 @@ import { AMToDoApi } from "../../api/client";
 import type { HealthResponse } from "../../api/client";
 import type { ConnectionStatusSnapshot } from "../../api/connection-status";
 import { clearAttachmentCache, getCacheSize } from "../../lib/attachmentCache";
+import { clearDiskCache, getDiskCacheSize, isNative as isNativePlatform } from "../../lib/attachmentDiskCache";
 import type { UISettings } from "../../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../../themes";
 import { Dropdown } from "./Dropdown";
@@ -257,7 +258,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   const loadCacheSize = useCallback(async () => {
     try {
-      const size = await getCacheSize();
+      const size = isNativePlatform() ? await getDiskCacheSize() : await getCacheSize();
       setCacheSize(size);
     } catch {
       setCacheSize(null);
@@ -516,7 +517,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (!ok) return;
     setClearingCache(true);
     try {
-      await clearAttachmentCache();
+      if (isNativePlatform()) {
+        await clearDiskCache();
+      } else {
+        await clearAttachmentCache();
+      }
       await loadCacheSize();
     } catch {
       // ignore
@@ -1036,8 +1041,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 </span>
                 <button
                   type="button"
-                  className="settings-inline-btn"
-                  style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }}
+                  className="settings-cache-clear-btn"
                   disabled={clearingCache || !cacheSize || cacheSize.count === 0}
                   onClick={handleClearCache}
                 >

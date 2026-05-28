@@ -61,7 +61,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // System gesture navigation: push history entry so Android back gesture closes the modal
@@ -120,7 +119,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   // Dirty tracking: compare form fields against the fetched schedule
   const dirty = useMemo(() => {
     return (
-      attachmentsChanged ||
       title !== schedule.title ||
       description !== (schedule.description ?? "") ||
       (startKey ? epochFromDatetimeLocal(startKey) : null) !== schedule.start_at ||
@@ -129,7 +127,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
       category !== (schedule.category ?? "") ||
       JSON.stringify(extraFields) !== JSON.stringify(schedule.extra_fields ?? {})
     );
-  }, [attachmentsChanged, title, description, startKey, endKey, location, category, schedule, extraFields]);
+  }, [title, description, startKey, endKey, location, category, schedule, extraFields]);
 
   // Timeline bar data
   const timeline = useMemo(() => {
@@ -213,7 +211,6 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
         setLocation(s.location ?? "");
         setCategory(s.category ?? "");
         setExtraFields(s.extra_fields ?? {});
-        setAttachmentsChanged(false);
         onUpdate(fresh.schedule);
       } catch {
         // Can't reach server either, keep current state
@@ -436,7 +433,8 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             renameFile={(attachmentId, filename) => api.renameScheduleAttachment(schedule.id, attachmentId, filename)}
             listAttachments={() => api.listScheduleAttachments(schedule.id)}
             onAttachmentsChanged={(count) => {
-              setAttachmentsChanged(true);
+              setSchedule((prev) => ({ ...prev, attachment_count: count }));
+              onUpdate({ ...schedule, attachment_count: count });
             }}
             modalClass="schedule-modal"
           />
