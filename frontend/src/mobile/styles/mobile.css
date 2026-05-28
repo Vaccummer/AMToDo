@@ -3357,6 +3357,7 @@
 .dirpicker-card {
   width: min(480px, 92vw);
   max-height: 88vh;
+  box-sizing: border-box;
   background: var(--global-surface-bg);
   border-radius: 16px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 8px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -3382,29 +3383,30 @@
   font-weight: 600;
   color: var(--global-text-primary);
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dirpicker-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 62px;
-  height: 32px;
-  padding: 0 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: none;
-  background: transparent;
-  border-radius: 8px;
-  color: var(--global-text-secondary);
-  font-size: 13px;
-  font-weight: 600;
+  background: color-mix(in srgb, var(--status-danger-base) 10%, transparent);
+  border-radius: 10px;
+  color: var(--status-danger-base);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .dirpicker-close:active {
-  background: var(--global-bg-hover);
+  background: color-mix(in srgb, var(--status-danger-base) 18%, transparent);
 }
 
 /* Path breadcrumb */
@@ -3627,6 +3629,8 @@
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--global-border-light);
   background: var(--global-surface-bg);
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
@@ -3646,16 +3650,18 @@
 }
 
 .dirpicker-save-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
 
 .dirpicker-filename-input {
-  flex: 1;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--global-border);
@@ -3675,11 +3681,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  flex-shrink: 0;
-  min-width: 72px;
+  width: 44px;
+  min-width: 44px;
   height: 44px;
-  padding: 0 10px;
+  padding: 0;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--status-primary-base, var(--global-accent)), #14967e);
@@ -3713,7 +3718,9 @@
 
 .mobile-shell .dirpicker-card {
   width: 100%;
+  max-width: 100%;
   max-height: 100%;
+  box-sizing: border-box;
   border-radius: 0;
   animation: mobile-modal-in 0.2s ease-out;
 }

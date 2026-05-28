@@ -244,8 +244,7 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
         <div className="dirpicker-header">
           <h2 className="dirpicker-title">{t("common.selectSavePath")}</h2>
           <button type="button" className="dirpicker-close" onClick={onClose} aria-label={t("common.close")}>
-            <span>{t("common.cancel")}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
@@ -383,16 +382,10 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
                   disabled={saving || !editFilename.trim()}
                   onClick={handleSave}
                 >
-                  {saving ? (
-                    <span className="dirpicker-save-btn-text">{t("common.saving")}</span>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      <span className="dirpicker-save-btn-text">{t("common.save")}</span>
-                    </>
-                  )}
+                  <svg width="25" height="25" viewBox="0 0 1024 1024" aria-hidden="true">
+                    <path d="M576.2 303.2c17.7 0 32.1-14.5 32.1-32.1V239c0-17.7-14.5-32.1-32.1-32.1s-32.1 14.5-32.1 32.1v32.1c0 17.7 14.5 32.1 32.1 32.1z" fill="#FFFFFF" />
+                    <path d="M919.9 232.6L791.4 104.1c-6.4-6.4-14.5-9.6-22.5-9.6H190.8c-53 0-96.4 43.4-96.4 96.4v642.3c0 53 43.4 96.4 96.4 96.4h642.4c53 0 96.4-43.4 96.4-96.4V255.1c-0.1-8.1-3.3-16.1-9.7-22.5z m-263.4-73.9v171.8c0 11.2-9.6 20.9-20.9 20.9H388.3c-11.2 0-20.9-9.6-20.9-20.9V158.7h289.1zM319.3 865.3V643.7c0-19.3 16.1-35.3 35.3-35.3h314.7c19.3 0 35.3 16.1 35.3 35.3v221.6H319.3z m546-32.1c0 17.7-14.5 32.1-32.1 32.1h-62.6V643.7c0-54.6-45-99.6-99.6-99.6H354.6c-54.6 0-99.6 45-99.6 99.6v221.6h-64.2c-17.7 0-32.1-14.5-32.1-32.1V190.8c0-17.7 14.5-32.1 32.1-32.1h112.4v171.8c0 46.6 38.5 85.1 85.1 85.1h247.3c46.6 0 85.1-38.5 85.1-85.1V158.7H756l109.2 109.2v565.3z" fill="#FFFFFF" />
+                  </svg>
                 </button>
               </div>
             </div>
