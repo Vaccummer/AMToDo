@@ -269,11 +269,11 @@
 /* ── Mobile Hero: Glass Card + Ring (Concept D) ── */
 
 .mobile-shell .todo-view {
-  background: #283434;
+  background: var(--status-primary-base, #1a7f72);
 }
 
 .mobile-shell .mobile-hero {
-  background: #283434;
+  background: var(--status-primary-base, #1a7f72);
   padding: 14px 20px 12px;
   flex-shrink: 0;
   overflow: hidden;
@@ -2177,11 +2177,17 @@
   border-radius: 8px;
 }
 
+.mobile-shell .attach-row-thumb .attach-video-thumb {
+  position: absolute;
+  inset: 0;
+}
+
 .mobile-shell .attach-video-play {
   width: 18px;
   height: 18px;
   right: 3px;
   bottom: 3px;
+  transform: none;
 }
 
 .mobile-shell .attach-del-btn {
@@ -3609,10 +3615,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left));
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--global-border-light);
   background: var(--global-surface-bg);
+  box-sizing: border-box;
 }
 
 .dirpicker-save-path {
@@ -3634,6 +3641,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .dirpicker-filename-input {
@@ -3659,9 +3669,9 @@
   justify-content: center;
   gap: 6px;
   flex-shrink: 0;
-  min-width: 92px;
+  min-width: 84px;
   height: 44px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--status-primary-base, var(--global-accent)), #14967e);
