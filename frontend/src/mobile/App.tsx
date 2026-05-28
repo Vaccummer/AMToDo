@@ -16,6 +16,7 @@ import { TodoDetailModal } from "./views/TodoDetailModal";
 import { ScheduleDetailModal } from "./views/ScheduleDetailModal";
 import { NotifyFormModal } from "./views/NotifyFormModal";
 import { TrashStyleDemo } from "./views/TrashStyleDemo";
+import { setMainStatusBar } from "./statusBar";
 import gearIcon from "../assets/gear.svg";
 import todoIcon from "../assets/todo.svg";
 import scheduleIcon from "../assets/schedule.svg";
@@ -176,11 +177,10 @@ export function App() {
 
   // Configure status bar
   useEffect(() => {
-    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: "#1a2820" }).catch(() => {});
-    }).catch(() => {});
-  }, []);
+    if (activeTab !== "settings") {
+      setMainStatusBar();
+    }
+  }, [activeTab, settings.theme]);
 
   // Load settings
   useEffect(() => {
