@@ -1,3 +1,5 @@
+import { CapacitorHttp } from "@capacitor/core";
+
 export interface UploadProgress {
   loaded: number;
   total: number;
@@ -59,6 +61,52 @@ async function uploadWithFetch<T = unknown>(
   return JSON.parse(text) as UploadResult<T>;
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function uploadWithNativeHttp<T = unknown>(
+  url: string,
+  content: UploadBody,
+  headers: Record<string, string>,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<UploadResult<T>> {
+  if (!(content instanceof Blob)) {
+    return uploadWithFetch(url, content, headers, onProgress);
+  }
+
+  const total = content.size;
+  onProgress?.({ loaded: 0, total, percent: 0, phase: "uploading" });
+  const response = await CapacitorHttp.put({
+    url,
+    headers,
+    data: await blobToBase64(content),
+    dataType: "file",
+    responseType: "json",
+    connectTimeout: 30_000,
+    readTimeout: 600_000,
+  });
+
+  if (response.status < 200 || response.status >= 300) {
+    const data = response.data;
+    const message = typeof data === "object" && data !== null
+      ? (data.error?.message ?? data.detail ?? `Upload failed: ${response.status}`)
+      : `Upload failed: ${response.status}${data ? ` ${String(data)}` : ""}`;
+    throw new Error(message);
+  }
+
+  onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
+  return response.data as UploadResult<T>;
+}
+
 /**
  * Upload a ReadableStream with progress.
  * The stream is accumulated into an ArrayBuffer because XHR upload progress
@@ -113,7 +161,8 @@ export function uploadWithProgress<T = unknown>(
   abortSignal?: AbortSignal,
 ): Promise<UploadResult<T>> {
   if (isCapacitorNative()) {
-    return uploadWithFetch(url, content, headers, onProgress, abortSignal);
+    if (abortSignal?.aborted) return Promise.reject(new Error("Upload aborted"));
+    return uploadWithNativeHttp(url, content, headers, onProgress);
   }
 
   return new Promise((resolve, reject) => {
