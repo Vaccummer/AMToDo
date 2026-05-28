@@ -132,7 +132,7 @@ async function nativeDownloadToDisk(
   const listener = await Filesystem.addListener("progress", (progress) => {
     if (progress.url && progress.url !== url) return;
     lastProgress = progress;
-    const total = Math.max(progress.contentLength || 0, 0);
+    const total = Math.max(progress.contentLength || meta.plain_size_bytes || 0, 0);
     const loaded = Math.max(progress.bytes || 0, 0);
     onProgress?.({
       loaded,
@@ -154,7 +154,7 @@ async function nativeDownloadToDisk(
     if (abortSignal?.aborted) throw new Error("Download aborted");
 
     const stat = await Filesystem.stat({ path: outPath, directory: Directory.Cache });
-    const expected = Math.max(lastProgress?.contentLength || 0, 0);
+    const expected = Math.max(lastProgress?.contentLength || 0, meta.plain_size_bytes || 0);
     if (expected > 0 && stat.size < expected) {
       try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
       throw new Error(`Download incomplete: received ${stat.size} of ${expected} bytes`);
