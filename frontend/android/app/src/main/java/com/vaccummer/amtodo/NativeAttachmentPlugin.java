@@ -23,6 +23,9 @@ import org.json.JSONException;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -133,8 +136,14 @@ public class NativeAttachmentPlugin extends Plugin {
         JSObject headers
     ) {
         HttpURLConnection connection = null;
+        File tempFile = null;
+        String phase = "staging";
         try {
             Uri uri = Uri.parse(uriText);
+            tempFile = copyUriToTempFile(uri);
+            long actualSize = tempFile.length();
+
+            phase = "connecting";
             URL url = new URL(urlText);
             connection = (HttpURLConnection) url.openConnection();
             activeUploads.put(uploadId, connection);
@@ -146,11 +155,12 @@ public class NativeAttachmentPlugin extends Plugin {
             connection.setRequestProperty("Content-Type", contentType == null || contentType.isEmpty() ? "application/octet-stream" : contentType);
             applyHeaders(connection, headers);
 
-            long knownSize = totalSize == null ? querySize(uri) : totalSize;
-            connection.setChunkedStreamingMode(BUFFER_SIZE);
+            connection.setFixedLengthStreamingMode(actualSize);
 
-            streamUriToConnection(uploadId, uri, connection, knownSize);
+            phase = "uploading";
+            streamFileToConnection(uploadId, tempFile, connection, actualSize);
 
+            phase = "reading response";
             int status = connection.getResponseCode();
             String responseText = readResponseText(connection, status);
             if (status < 200 || status >= 300) {
@@ -161,20 +171,43 @@ public class NativeAttachmentPlugin extends Plugin {
             JSObject ret = parseResponse(responseText);
             call.resolve(ret);
         } catch (IOException | JSONException ex) {
-            call.reject(ex.getMessage() == null ? "Upload failed" : ex.getMessage(), ex);
+            String detail = ex.getMessage() == null ? "unknown error" : ex.getMessage();
+            call.reject("Upload failed while " + phase + ": " + detail, ex);
         } finally {
             activeUploads.remove(uploadId);
             if (connection != null) {
                 connection.disconnect();
             }
+            if (tempFile != null) {
+                tempFile.delete();
+            }
         }
     }
 
-    private void streamUriToConnection(String uploadId, Uri uri, HttpURLConnection connection, long totalSize) throws IOException {
+    private File copyUriToTempFile(Uri uri) throws IOException {
         ContentResolver resolver = getContext().getContentResolver();
+        File tempFile = File.createTempFile("amtodo-upload-", ".bin", getContext().getCacheDir());
+        InputStream rawInput = resolver.openInputStream(uri);
+        if (rawInput == null) {
+            throw new IOException("Unable to open selected file");
+        }
         try (
-            InputStream rawInput = resolver.openInputStream(uri);
             InputStream input = new BufferedInputStream(rawInput);
+            OutputStream output = new BufferedOutputStream(new FileOutputStream(tempFile))
+        ) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+        }
+        return tempFile;
+    }
+
+    private void streamFileToConnection(String uploadId, File file, HttpURLConnection connection, long totalSize) throws IOException {
+        try (
+            InputStream input = new BufferedInputStream(new FileInputStream(file));
             OutputStream output = new BufferedOutputStream(connection.getOutputStream())
         ) {
             byte[] buffer = new byte[BUFFER_SIZE];
