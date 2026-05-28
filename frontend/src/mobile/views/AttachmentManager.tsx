@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
-import type { AMToDoApi, AttachmentMetadata, ScheduleAttachmentMetadata } from "../../api/client";
+import type { AMToDoApi, AttachmentDownloadUrl, AttachmentMetadata, ScheduleAttachmentMetadata } from "../../api/client";
 import { useConfirm } from "./ConfirmDialog";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
@@ -22,7 +22,7 @@ export type AttachmentManagerProps = {
   uploadFile: (file: File, onProgress: (p: UploadProgress) => void, signal?: AbortSignal) => Promise<unknown>;
   uploadNativeFile?: (file: NativeAttachmentFile, onProgress: (p: UploadProgress) => void, signal?: AbortSignal) => Promise<unknown>;
   downloadFile: (attachmentId: number, onProgress: (p: DownloadProgress) => void, signal?: AbortSignal) => Promise<ArrayBuffer>;
-  getDownloadUrl: (attachmentId: number) => Promise<string>;
+  getDownloadUrl: (attachmentId: number) => Promise<AttachmentDownloadUrl>;
   removeFile: (attachmentId: number) => Promise<unknown>;
   renameFile: (attachmentId: number, filename: string) => Promise<{ attachment: AnyAttachment }>;
   listAttachments: () => Promise<{ attachments: AnyAttachment[] }>;
@@ -54,6 +54,15 @@ const TEXT_EXTS = new Set(["txt", "md", "json", "csv", "xml", "log", "py", "js",
 
 function isPreviewable(a: AnyAttachment): boolean {
   return effectivePreviewKind(a) !== "none";
+}
+
+function downloadUrlValue(info: AttachmentDownloadUrl): string {
+  return typeof info === "string" ? info : info.url;
+}
+
+function withDownloadSize(attachment: AnyAttachment, info: AttachmentDownloadUrl): AnyAttachment {
+  if (typeof info === "string" || !Number.isFinite(info.fileSize)) return attachment;
+  return { ...attachment, plain_size_bytes: Math.max(info.fileSize ?? 0, 0) };
 }
 
 function effectivePreviewKind(a: AnyAttachment): string {
@@ -192,13 +201,14 @@ export function AttachmentManager({
     try {
       let url: string;
       if (isNativePlatform()) {
-        const dlUrl = await getDownloadUrl(attachment.id);
+        const dlInfo = await getDownloadUrl(attachment.id);
+        const downloadMeta = withDownloadSize(attachment, dlInfo);
         const result = await getAttachmentUri(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-          attachment,
+          downloadMeta,
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
-          dlUrl,
+          downloadUrlValue(dlInfo),
         );
         url = result.uri;
       } else {
@@ -511,13 +521,14 @@ export function AttachmentManager({
     try {
       let url: string;
       if (useDisk) {
-        const dlUrl = await getDownloadUrl(attachment.id);
+        const dlInfo = await getDownloadUrl(attachment.id);
+        const downloadMeta = withDownloadSize(attachment, dlInfo);
         const { uri } = await getAttachmentUri(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-          attachment,
+          downloadMeta,
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
-          dlUrl,
+          downloadUrlValue(dlInfo),
         );
         url = uri;
       } else {
@@ -573,13 +584,14 @@ export function AttachmentManager({
     try {
       let url: string;
       if (isNativePlatform()) {
-        const dlUrl = await getDownloadUrl(attachment.id);
+        const dlInfo = await getDownloadUrl(attachment.id);
+        const downloadMeta = withDownloadSize(attachment, dlInfo);
         const { uri } = await getAttachmentUri(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-          attachment,
+          downloadMeta,
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
-          dlUrl,
+          downloadUrlValue(dlInfo),
         );
         url = uri;
       } else {
@@ -658,13 +670,14 @@ export function AttachmentManager({
     }));
     try {
       if (isNativePlatform()) {
-        const dlUrl = await getDownloadUrl(attachment.id);
+        const dlInfo = await getDownloadUrl(attachment.id);
+        const downloadMeta = withDownloadSize(attachment, dlInfo);
         const { uri } = await getAttachmentUri(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-          attachment,
+          downloadMeta,
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
-          dlUrl,
+          downloadUrlValue(dlInfo),
         );
         rememberAttachmentUrl(attachment, uri);
       } else {
@@ -763,13 +776,14 @@ export function AttachmentManager({
         downloadAbortMapRef.current.set(attachment.id, ac);
         try {
           if (isNativePlatform()) {
-            const dlUrl = await getDownloadUrl(attachment.id);
+            const dlInfo = await getDownloadUrl(attachment.id);
+            const downloadMeta = withDownloadSize(attachment, dlInfo);
             await getAttachmentUri(
               (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-              attachment,
+              downloadMeta,
               (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
               ac.signal,
-              dlUrl,
+              downloadUrlValue(dlInfo),
             );
           } else {
             await getAttachmentBlob(

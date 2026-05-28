@@ -128,6 +128,19 @@ export type AttachmentListResponse = {
   attachments: AttachmentMetadata[];
 };
 
+export type AttachmentDownloadUrl = string | {
+  url: string;
+  fileSize?: number;
+  plainSizeBytes?: number;
+};
+
+type AttachmentDownloadInitResponse = {
+  ok: boolean;
+  token: string;
+  file_size?: number;
+  plain_size_bytes?: number;
+};
+
 export type ScheduleAttachmentMetadata = {
   id: number;
   user_id: number;
@@ -694,18 +707,22 @@ export class AMToDoApi {
   }
 
   async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    const token = await this.initAttachmentDownload("todo", todoId, attachmentId);
+    const init = await this.initAttachmentDownload("todo", todoId, attachmentId);
 
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
       onProgress,
       abortSignal,
     );
   }
 
-  async getTodoAttachmentDownloadUrl(todoId: number, attachmentId: number): Promise<string> {
-    const token = await this.initAttachmentDownload("todo", todoId, attachmentId);
-    return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
+  async getTodoAttachmentDownloadUrl(todoId: number, attachmentId: number): Promise<AttachmentDownloadUrl> {
+    const init = await this.initAttachmentDownload("todo", todoId, attachmentId);
+    return {
+      url: `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
+      fileSize: init.file_size,
+      plainSizeBytes: init.plain_size_bytes,
+    };
   }
 
   async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
@@ -763,18 +780,22 @@ export class AMToDoApi {
   }
 
   async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    const token = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
+    const init = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
 
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`,
+      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
       onProgress,
       abortSignal,
     );
   }
 
-  async getScheduleAttachmentDownloadUrl(scheduleId: number, attachmentId: number): Promise<string> {
-    const token = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
-    return `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${token}`;
+  async getScheduleAttachmentDownloadUrl(scheduleId: number, attachmentId: number): Promise<AttachmentDownloadUrl> {
+    const init = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
+    return {
+      url: `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
+      fileSize: init.file_size,
+      plainSizeBytes: init.plain_size_bytes,
+    };
   }
 
   async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
@@ -1084,13 +1105,17 @@ export class AMToDoApi {
     ownerType: AttachmentOwnerType,
     ownerId: number,
     attachmentId: number,
-  ): Promise<string> {
+  ): Promise<AttachmentDownloadInitResponse> {
     const payload = {
       owner_type: ownerType,
       owner_id: ownerId,
       attachment_id: attachmentId,
     };
-    return this.initAttachmentToken("attachment.init_download", "/api/v1/attachment/init-download", payload);
+    return this.initAttachmentTokenResponse<AttachmentDownloadInitResponse>(
+      "attachment.init_download",
+      "/api/v1/attachment/init-download",
+      payload,
+    );
   }
 
   private async initAttachmentToken(
@@ -1098,18 +1123,25 @@ export class AMToDoApi {
     httpPath: string,
     payload: Record<string, unknown>,
   ): Promise<string> {
+    const result = await this.initAttachmentTokenResponse<{ ok: boolean; token: string }>(wsType, httpPath, payload);
+    return result.token;
+  }
+
+  private async initAttachmentTokenResponse<T extends { ok: boolean; token: string }>(
+    wsType: string,
+    httpPath: string,
+    payload: Record<string, unknown>,
+  ): Promise<T> {
     if (this.wsClient) {
       try {
         await this.ensureConnected();
-        const result = await this.wsClient.send<{ ok: boolean; token: string }>(wsType, payload);
-        return result.token;
+        return await this.wsClient.send<T>(wsType, payload);
       } catch {
         // Fall back to the Bearer REST token endpoint. Attachment bytes are
         // transferred over HTTPS either way.
       }
     }
-    const result = await this.postHttp<{ ok: boolean; token: string }>(httpPath, payload);
-    return result.token;
+    return this.postHttp<T>(httpPath, payload);
   }
 
   private async postHttp<T>(path: string, body: Record<string, unknown>): Promise<T> {

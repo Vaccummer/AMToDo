@@ -83,7 +83,11 @@ def init_download_attachment(
 ) -> dict[str, object]:
     """Create a one-time token for an authenticated attachment download."""
     service = make_attachment_service(uow, clock, request, body.owner_type)
-    service.show(body.owner_id, body.attachment_id)
+    attachment = service.show(body.owner_id, body.attachment_id)
+    content_path = service.storage_path(attachment)
+    if not content_path.is_file():
+        raise HTTPException(404, "File not found")
+    file_size = content_path.stat().st_size
     download_token_store = request.app.state.download_token_store
     token = download_token_store.create(
         owner_type=body.owner_type,
@@ -91,7 +95,12 @@ def init_download_attachment(
         user_id=uow.user_id,
         attachment_id=body.attachment_id,
     )
-    return {"ok": True, "token": token}
+    return {
+        "ok": True,
+        "token": token,
+        "file_size": file_size,
+        "plain_size_bytes": attachment.plain_size_bytes,
+    }
 
 
 @router.post("/attachment/list")
