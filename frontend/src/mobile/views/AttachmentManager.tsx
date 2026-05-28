@@ -48,18 +48,23 @@ function AttachmentMissingIcon() {
   );
 }
 
+const VIDEO_EXTS = new Set(["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv", "flv", "3gp", "3g2", "mpeg", "mpg", "ogv"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "webm", "m4b"]);
 const TEXT_EXTS = new Set(["txt", "md", "json", "csv", "xml", "log", "py", "js", "ts", "tsx", "jsx", "html", "css", "yaml", "yml", "ini", "cfg", "sh", "bat", "rs", "go", "java", "c", "cpp", "h", "hpp", "sql", "toml", "env", "gitignore", "dockerfile", "makefile", "rb", "php", "swift", "kt", "lua", "r", "vue", "svelte", "astro", "conf", "config", "properties", "gradle", "cmake", "lock", "diff", "patch", "svg"]);
 
 function isPreviewable(a: AnyAttachment): boolean {
-  if (a.preview_kind === "image" || a.preview_kind === "video") return true;
-  const ext = a.filename.split(".").pop()?.toLowerCase() || "";
-  return AUDIO_EXTS.has(ext) || TEXT_EXTS.has(ext);
+  return effectivePreviewKind(a) !== "none";
 }
 
 function effectivePreviewKind(a: AnyAttachment): string {
   if (a.preview_kind !== "none") return a.preview_kind;
+  const mime = a.mime_type?.toLowerCase() || "";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("text/")) return "text";
   const ext = a.filename.split(".").pop()?.toLowerCase() || "";
+  if (VIDEO_EXTS.has(ext)) return "video";
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (TEXT_EXTS.has(ext)) return "text";
   return "none";
@@ -118,6 +123,7 @@ export function AttachmentManager({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureNameInputRef = useRef<HTMLInputElement>(null);
   const attachSwipeRef = useRef({ id: 0, startX: 0, startY: 0, moved: false, cancelled: false });
+  const attachmentUrlsRef = useRef<Record<number, string>>({});
 
   const previewItems = useMemo(
     () => attachments.filter((a) => !a.is_orphaned && isPreviewable(a)),
@@ -153,6 +159,26 @@ export function AttachmentManager({
     });
   }
 
+  function rememberAttachmentUrl(attachment: AnyAttachment, url: string) {
+    if (!isPreviewable(attachment)) return;
+    setAttachmentUrls((prev) => {
+      const existing = prev[attachment.id];
+      if (existing === url) return prev;
+      if (existing && existing.startsWith("blob:")) URL.revokeObjectURL(existing);
+      return { ...prev, [attachment.id]: url };
+    });
+  }
+
+  function forgetAttachmentUrl(attachmentId: number) {
+    setAttachmentUrls((prev) => {
+      const existing = prev[attachmentId];
+      if (existing?.startsWith("blob:")) URL.revokeObjectURL(existing);
+      const next = { ...prev };
+      delete next[attachmentId];
+      return next;
+    });
+  }
+
   const loadAttachments = useCallback(async () => {
     batchAbortRef.current?.abort();
     const ac = new AbortController();
@@ -170,9 +196,7 @@ export function AttachmentManager({
           if (ac.signal.aborted) return;
           if (cachedUri) {
             markDownloaded(attachment.id);
-            if (attachment.preview_kind !== "none") {
-              setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: cachedUri }));
-            }
+            rememberAttachmentUrl(attachment, cachedUri);
           }
         } catch { /* Cache lookup failed */ }
       })
@@ -198,12 +222,16 @@ export function AttachmentManager({
   }, [pickerAttachment, pickerOpenRef]);
 
   useEffect(() => {
-    return () => {
-      if (!isNativePlatform()) {
-        Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
-      }
-    };
+    attachmentUrlsRef.current = attachmentUrls;
   }, [attachmentUrls]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(attachmentUrlsRef.current).forEach((url) => {
+        if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+      });
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -540,7 +568,7 @@ export function AttachmentManager({
     try {
       await deleteCachedAttachment(attachment);
       markNotDownloaded(attachment.id);
-      setAttachmentUrls((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
+      forgetAttachmentUrl(attachment.id);
       setSavedIds((prev) => { const next = new Set(prev); next.delete(attachment.id); return next; });
     } catch { /* ignore */ }
   }
@@ -557,21 +585,23 @@ export function AttachmentManager({
     try {
       if (isNativePlatform()) {
         const dlUrl = await getDownloadUrl(attachment.id);
-        await getAttachmentUri(
+        const { uri } = await getAttachmentUri(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
           attachment,
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
           dlUrl,
         );
+        rememberAttachmentUrl(attachment, uri);
       } else {
-        await getAttachmentBlob(
+        const { blob } = await getAttachmentBlob(
           (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
           attachment,
           getCacheKey(attachment),
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
         );
+        rememberAttachmentUrl(attachment, URL.createObjectURL(blob));
       }
       markDownloaded(attachment.id);
     } catch (err: unknown) {
@@ -994,8 +1024,13 @@ export function AttachmentManager({
       {preview ? (() => {
         const currentIdx = previewItems.findIndex((a) => a.id === preview.id);
         const kind = effectivePreviewKind(preview);
-        const goPrev = currentIdx > 0 ? () => { resetZoom(); setTextPreviewContent(null); setPreview(previewItems[currentIdx - 1]); } : null;
-        const goNext = currentIdx < previewItems.length - 1 ? () => { resetZoom(); setTextPreviewContent(null); setPreview(previewItems[currentIdx + 1]); } : null;
+        const openPreviewItem = (item: AnyAttachment) => {
+          resetZoom();
+          setTextPreviewContent(null);
+          void handlePreview(item);
+        };
+        const goPrev = currentIdx > 0 ? () => openPreviewItem(previewItems[currentIdx - 1]) : null;
+        const goNext = currentIdx < previewItems.length - 1 ? () => openPreviewItem(previewItems[currentIdx + 1]) : null;
         return (
           <div className="attachment-preview-backdrop" onClick={() => { setPreview(null); setTextPreviewContent(null); }}>
             <div className="attachment-preview-panel" onClick={(e) => e.stopPropagation()} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onDoubleClick={handleDoubleClick}>
