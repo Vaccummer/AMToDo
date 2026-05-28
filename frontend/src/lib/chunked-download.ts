@@ -1,52 +1,7 @@
-import { Capacitor, CapacitorHttp } from "@capacitor/core";
-
 export interface DownloadProgress {
   loaded: number;
   total: number;
   percent: number;
-}
-
-function base64ToArrayBuffer(b64: string): ArrayBuffer {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-function asArrayBuffer(data: unknown): ArrayBuffer {
-  if (data instanceof ArrayBuffer) return data;
-  if (typeof data === "string") return base64ToArrayBuffer(data);
-  if (ArrayBuffer.isView(data)) {
-    const view = data as ArrayBufferView;
-    const copy = new Uint8Array(view.byteLength);
-    copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
-    return copy.buffer;
-  }
-  throw new Error("Download failed: invalid binary response");
-}
-
-async function nativeDownloadWithProgress(
-  url: string,
-  onProgress?: (progress: DownloadProgress) => void,
-  abortSignal?: AbortSignal,
-): Promise<ArrayBuffer> {
-  if (abortSignal?.aborted) throw new Error("Download aborted");
-  onProgress?.({ loaded: 0, total: 0, percent: 0 });
-  const response = await CapacitorHttp.get({
-    url,
-    responseType: "arraybuffer",
-    connectTimeout: 30_000,
-    readTimeout: 600_000,
-  });
-  if (abortSignal?.aborted) throw new Error("Download aborted");
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`Download failed: ${response.status}`);
-  }
-  const buffer = asArrayBuffer(response.data);
-  onProgress?.({ loaded: buffer.byteLength, total: buffer.byteLength, percent: 100 });
-  return buffer;
 }
 
 export async function downloadWithProgress(
@@ -54,10 +9,6 @@ export async function downloadWithProgress(
   onProgress?: (progress: DownloadProgress) => void,
   abortSignal?: AbortSignal,
 ): Promise<ArrayBuffer> {
-  if (Capacitor.isNativePlatform()) {
-    return nativeDownloadWithProgress(url, onProgress, abortSignal);
-  }
-
   const resp = await fetch(url, { signal: abortSignal });
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
 
