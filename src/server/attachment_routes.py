@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 from typing import Annotated
 
@@ -261,22 +262,91 @@ async def stream_download_attachment(
     if not content_path.exists():
         raise HTTPException(404, "File not found")
 
-    # 3. Stream file back
+    # 3. Stream file back. Browsers need MIME + byte ranges for reliable media previews.
     safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
+    media_type = _download_media_type(attachment.mime_type, attachment.filename)
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'attachment; filename="{safe_name}"',
+        "X-AMToDo-Content-SHA256": attachment.plain_sha256,
+        "X-AMToDo-Updated-At": str(attachment.updated_at),
+    }
+
+    range_header = request.headers.get("range")
+    byte_range = _parse_range_header(range_header, attachment.plain_size_bytes)
+    if range_header and byte_range is None:
+        raise HTTPException(
+            status_code=416,
+            detail="Invalid range",
+            headers={"Content-Range": f"bytes */{attachment.plain_size_bytes}"},
+        )
+    if byte_range is not None:
+        start, end = byte_range
+        length = end - start + 1
+        return StreamingResponse(
+            _file_iterator(content_path, start=start, length=length),
+            status_code=206,
+            media_type=media_type,
+            headers={
+                **common_headers,
+                "Content-Length": str(length),
+                "Content-Range": f"bytes {start}-{end}/{attachment.plain_size_bytes}",
+            },
+        )
 
     return StreamingResponse(
         _file_iterator(content_path),
-        media_type="application/octet-stream",
+        media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            **common_headers,
             "Content-Length": str(attachment.plain_size_bytes),
-            "X-AMToDo-Content-SHA256": attachment.plain_sha256,
-            "X-AMToDo-Updated-At": str(attachment.updated_at),
         },
     )
 
 
-def _file_iterator(path: Path, chunk_size: int = 65536):
+def _parse_range_header(range_header: str | None, file_size: int) -> tuple[int, int] | None:
+    if not range_header:
+        return None
+    unit, _, value = range_header.partition("=")
+    if unit.strip().lower() != "bytes" or "," in value:
+        return None
+    start_s, sep, end_s = value.strip().partition("-")
+    if sep != "-":
+        return None
+    try:
+        if start_s == "":
+            suffix = int(end_s)
+            if suffix <= 0:
+                return None
+            start = max(file_size - suffix, 0)
+            end = file_size - 1
+        else:
+            start = int(start_s)
+            end = int(end_s) if end_s else file_size - 1
+    except ValueError:
+        return None
+    if start < 0 or end < start or start >= file_size:
+        return None
+    return start, min(end, file_size - 1)
+
+
+def _download_media_type(stored_mime_type: str | None, filename: str) -> str:
+    if stored_mime_type and stored_mime_type != "application/octet-stream":
+        return stored_mime_type
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed or stored_mime_type or "application/octet-stream"
+
+
+def _file_iterator(path: Path, chunk_size: int = 65536, start: int = 0, length: int | None = None):
+    remaining = length
     with open(path, "rb") as f:
-        while chunk := f.read(chunk_size):
+        if start:
+            f.seek(start)
+        while remaining is None or remaining > 0:
+            read_size = chunk_size if remaining is None else min(chunk_size, remaining)
+            chunk = f.read(read_size)
+            if not chunk:
+                break
+            if remaining is not None:
+                remaining -= len(chunk)
             yield chunk

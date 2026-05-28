@@ -18,6 +18,7 @@ from db.engine import create_database
 from models.factory import get_user_tables
 from models.user import User
 from server.app import create_app
+from server.attachment_routes import _download_media_type
 from services import AttachmentService
 from services.uow import UnitOfWork
 
@@ -162,7 +163,23 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         )
         assert download_response.status_code == 200
         assert download_response.content == plain_content
+        assert download_response.headers["content-type"].startswith("text/plain")
+        assert download_response.headers["accept-ranges"] == "bytes"
         assert "X-AMToDo-Content-SHA256" in download_response.headers
+
+        range_response = client.get(
+            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
+            headers={"Range": "bytes=7-10"},
+        )
+        assert range_response.status_code == 206
+        assert range_response.content == plain_content[7:11]
+        assert range_response.headers["content-range"] == f"bytes 7-10/{len(plain_content)}"
+        assert range_response.headers["content-length"] == "4"
+
+
+def test_download_media_type_guesses_from_filename_when_upload_mime_is_generic() -> None:
+    assert _download_media_type("application/octet-stream", "clip.mp4") == "video/mp4"
+    assert _download_media_type("", "photo.jpg") == "image/jpeg"
 
 
 def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
