@@ -98,6 +98,7 @@ export const en: Record<string, string> = {
   "common.cancelUpload": "Cancel Upload",
   "common.cancelDownload": "Cancel Download",
   "common.uploadingPercent": "Uploading {{percent}}%",
+  "common.uploadProcessing": "Processing on server...",
   "common.downloadingPercent": "Downloading {{percent}}%",
   "common.attachmentCount": "{{count}} attachments",
   "common.photoCaptureFailed": "Failed to capture photo",

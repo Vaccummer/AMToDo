@@ -4,7 +4,7 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   percent: number;
-  phase?: "uploading";
+  phase?: "uploading" | "processing";
 }
 
 export interface UploadResult<T = unknown> {
@@ -58,6 +58,7 @@ async function uploadWithFetch<T = unknown>(
   }
 
   onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
+  onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
   return JSON.parse(text) as UploadResult<T>;
 }
 
@@ -103,7 +104,7 @@ async function uploadWithNativeHttp<T = unknown>(
     throw new Error(message);
   }
 
-  onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
+  onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
   return response.data as UploadResult<T>;
 }
 
@@ -175,11 +176,12 @@ export function uploadWithProgress<T = unknown>(
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
         onProgress?.({
           loaded: e.loaded,
           total: e.total,
-          percent: Math.round((e.loaded / e.total) * 100),
-          phase: "uploading",
+          percent,
+          phase: percent >= 100 ? "processing" : "uploading",
         });
       }
     };

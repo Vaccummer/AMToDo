@@ -61,7 +61,7 @@ export async function uploadNativeAttachmentWithProgress<T = unknown>(
       loaded: progress.loaded,
       total,
       percent: progress.percent,
-      phase: "uploading",
+      phase: progress.percent >= 100 ? "processing" : "uploading",
     });
   });
 
@@ -88,7 +88,7 @@ export async function uploadNativeAttachmentWithProgress<T = unknown>(
       headers,
     });
     if (aborted) throw new Error("Upload aborted");
-    onProgress?.({ loaded: total, total, percent: 100, phase: "uploading" });
+    onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
     return result;
   } finally {
     abortSignal?.removeEventListener("abort", abort);

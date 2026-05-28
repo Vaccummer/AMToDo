@@ -159,6 +159,11 @@ export function AttachmentManager({
     });
   }
 
+  function uploadProgressText(progress: UploadProgress): string {
+    if (progress.phase === "processing") return t("common.uploadProcessing");
+    return t("common.uploadingPercent", { percent: progress.percent });
+  }
+
   function rememberAttachmentUrl(attachment: AnyAttachment, url: string) {
     if (!isPreviewable(attachment)) return;
     setAttachmentUrls((prev) => {
@@ -858,7 +863,9 @@ export function AttachmentManager({
           </div>
           <div className="attach-row-info">
             <span className="attach-row-name">{key.split("-")[0]}</span>
-            <span className="attach-row-size uploading">{t("common.uploadingPercent", { percent: progress.percent })}</span>
+            <span className={`attach-row-size ${progress.phase === "processing" ? "processing" : "uploading"}`}>
+              {uploadProgressText(progress)}
+            </span>
           </div>
         </div>
       ))}
@@ -1018,6 +1025,7 @@ export function AttachmentManager({
                         ? (dlProgress ? t("common.downloadingPercent", { percent: dlProgress.percent }) : t("common.downloading"))
                         : formatSize(attachment.plain_size_bytes)}
                   </span>
+                  {loadError ? <span className="attachment-error-text">{loadError}</span> : null}
                 </div>
 
                 {/* Primary action button — three states */}
@@ -1052,7 +1060,6 @@ export function AttachmentManager({
                 )}
               </div>
 
-              {loadError ? <div className="attachment-error-text">{loadError}</div> : null}
             </div>
           );
         })}

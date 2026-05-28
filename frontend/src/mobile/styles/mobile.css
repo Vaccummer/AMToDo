@@ -2121,6 +2121,21 @@
   font-size: 12px;
 }
 
+.mobile-shell .attach-row-size.processing {
+  color: #b45309;
+}
+
+.mobile-shell .attachment-error-text {
+  display: block;
+  padding: 0;
+  color: var(--status-danger-base);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mobile-shell .attach-row.uploading .ring-progress {
   width: 36px;
   height: 36px;

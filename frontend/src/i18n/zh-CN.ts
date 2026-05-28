@@ -98,6 +98,7 @@ export const zhCN: Record<string, string> = {
   "common.cancelUpload": "取消上传",
   "common.cancelDownload": "取消下载",
   "common.uploadingPercent": "上传中 {{percent}}%",
+  "common.uploadProcessing": "服务器处理中...",
   "common.downloadingPercent": "下载中 {{percent}}%",
   "common.attachmentCount": "{{count}} 个附件",
   "common.photoCaptureFailed": "拍照失败",
