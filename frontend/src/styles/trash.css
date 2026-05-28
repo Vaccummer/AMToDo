@@ -37,8 +37,22 @@
 
 .mobile-shell .trash-filter-bar,
 .mobile-shell .trash-search-bar {
-  background: var(--components-titlebar-bg);
-  border-bottom-color: rgba(100, 220, 210, 0.08);
+  background: var(--status-primary-base);
+  border-bottom-color: color-mix(in srgb, #fff 14%, transparent);
+}
+
+.mobile-shell .trash-filter-bar .filter-tabs {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-shell .trash-filter-bar .filter-tabs button {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.mobile-shell .trash-filter-bar .filter-tabs button.active {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--status-primary-base);
 }
 
 .filter-tabs {

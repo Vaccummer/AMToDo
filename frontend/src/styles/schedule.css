@@ -671,7 +671,7 @@
 
 /* F4 Top Block: merged month header + day strip */
 .top-block {
-  background: var(--components-titlebar-bg);
+  background: var(--status-primary-base);
   padding: 16px 12px 8px;
   flex-shrink: 0;
 }
