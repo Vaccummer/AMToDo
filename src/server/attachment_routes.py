@@ -273,12 +273,13 @@ async def stream_download_attachment(
     }
 
     range_header = request.headers.get("range")
-    byte_range = _parse_range_header(range_header, attachment.plain_size_bytes)
+    file_size = content_path.stat().st_size
+    byte_range = _parse_range_header(range_header, file_size)
     if range_header and byte_range is None:
         raise HTTPException(
             status_code=416,
             detail="Invalid range",
-            headers={"Content-Range": f"bytes */{attachment.plain_size_bytes}"},
+            headers={"Content-Range": f"bytes */{file_size}"},
         )
     if byte_range is not None:
         start, end = byte_range
@@ -290,7 +291,7 @@ async def stream_download_attachment(
             headers={
                 **common_headers,
                 "Content-Length": str(length),
-                "Content-Range": f"bytes {start}-{end}/{attachment.plain_size_bytes}",
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
             },
         )
 
@@ -299,7 +300,7 @@ async def stream_download_attachment(
         media_type=media_type,
         headers={
             **common_headers,
-            "Content-Length": str(attachment.plain_size_bytes),
+            "Content-Length": str(file_size),
         },
     )
 

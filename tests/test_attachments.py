@@ -182,6 +182,58 @@ def test_download_media_type_guesses_from_filename_when_upload_mime_is_generic()
     assert _download_media_type("", "photo.jpg") == "image/jpeg"
 
 
+def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+    content = b"actual file bytes"
+
+    with TestClient(app) as client:
+        init_response = client.post(
+            "/api/v1/attachment/init-upload",
+            json={
+                "owner_type": "todo",
+                "owner_id": todo_id,
+                "filename": "mismatch.txt",
+                "mime_type": "text/plain",
+                "plain_size": len(content),
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        upload_token = init_response.json()["token"]
+        upload_response = client.put(
+            f"/api/v1/attachment/upload?token={upload_token}",
+            content=content,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        attachment = upload_response.json()["attachment"]
+
+        with UnitOfWork(app.state.db, user_id) as uow:
+            stored = uow.attachments.get(attachment["id"])
+            stored.plain_size_bytes = len(content) + 100
+            uow.attachments.update(stored)
+
+        download_init_response = client.post(
+            "/api/v1/attachment/init-download",
+            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        download_token = download_init_response.json()["token"]
+
+        download_response = client.get(
+            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
+        )
+        assert download_response.status_code == 200
+        assert download_response.content == content
+        assert download_response.headers["content-length"] == str(len(content))
+
+        range_response = client.get(
+            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
+            headers={"Range": "bytes=7-10"},
+        )
+        assert range_response.status_code == 206
+        assert range_response.headers["content-range"] == f"bytes 7-10/{len(content)}"
+
+
 def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Create token, wait > TTL, attempt upload -> 404."""
     app = _make_app(tmp_path, monkeypatch)
