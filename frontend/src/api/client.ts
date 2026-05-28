@@ -141,6 +141,16 @@ type AttachmentDownloadInitResponse = {
   plain_size_bytes?: number;
 };
 
+export type AttachmentDownloadChunkResponse = {
+  ok: boolean;
+  offset: number;
+  bytes_read: number;
+  next_offset: number;
+  file_size: number;
+  done: boolean;
+  data: string;
+};
+
 export type ScheduleAttachmentMetadata = {
   id: number;
   user_id: number;
@@ -725,6 +735,10 @@ export class AMToDoApi {
     };
   }
 
+  async downloadTodoAttachmentChunk(todoId: number, attachmentId: number, offset: number, length: number): Promise<AttachmentDownloadChunkResponse> {
+    return this.downloadAttachmentChunk("todo", todoId, attachmentId, offset, length);
+  }
+
   async removeTodoOrphanedAttachments(todoId: number): Promise<AttachmentListResponse> {
     return this.post("/api/v1/attachment/remove-orphaned", { todo_id: todoId });
   }
@@ -796,6 +810,10 @@ export class AMToDoApi {
       fileSize: init.file_size,
       plainSizeBytes: init.plain_size_bytes,
     };
+  }
+
+  async downloadScheduleAttachmentChunk(scheduleId: number, attachmentId: number, offset: number, length: number): Promise<AttachmentDownloadChunkResponse> {
+    return this.downloadAttachmentChunk("schedule", scheduleId, attachmentId, offset, length);
   }
 
   async removeScheduleOrphanedAttachments(scheduleId: number): Promise<ScheduleAttachmentListResponse> {
@@ -1116,6 +1134,23 @@ export class AMToDoApi {
       "/api/v1/attachment/init-download",
       payload,
     );
+  }
+
+  private async downloadAttachmentChunk(
+    ownerType: AttachmentOwnerType,
+    ownerId: number,
+    attachmentId: number,
+    offset: number,
+    length: number,
+  ): Promise<AttachmentDownloadChunkResponse> {
+    await this.ensureConnected();
+    return this.wsClient!.send<AttachmentDownloadChunkResponse>("attachment.download_chunk", {
+      owner_type: ownerType,
+      owner_id: ownerId,
+      attachment_id: attachmentId,
+      offset,
+      length,
+    });
   }
 
   private async initAttachmentToken(

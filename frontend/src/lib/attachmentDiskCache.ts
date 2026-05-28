@@ -13,11 +13,11 @@
  */
 
 import { Filesystem, Directory } from "@capacitor/filesystem";
-import type { ProgressStatus } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 
 import write_blob from "capacitor-blob-writer";
 import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
+import type { AttachmentDownloadChunkResponse } from "../api/client";
 import type { DownloadProgress } from "./chunked-download";
 
 type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
@@ -26,11 +26,27 @@ const CACHE_DIR = "attachment-cache";
 // In-memory metadata index for fast cache invalidation
 const metaIndex = new Map<string, { updated_at: number; plain_size_bytes: number }>();
 
-/** e.g. "3/attachment/todo/42" */
-function cachePathFor(meta: CacheableMeta): string {
+const WS_CHUNK_SIZE = 256 * 1024;
+type DownloadChunkFn = (offset: number, length: number) => Promise<AttachmentDownloadChunkResponse>;
+
+/** e.g. "3/attachment/todo/42.mp4" */
+export function getAttachmentCachePath(meta: CacheableMeta): string {
   const ownerType = "todo_id" in meta ? "todo" : "schedule";
   const ownerId = "todo_id" in meta ? (meta as AttachmentMetadata).todo_id : (meta as ScheduleAttachmentMetadata).schedule_id;
+  return `${meta.user_id}/attachment/${ownerType}/${meta.id}${extensionFor(meta.filename)}`;
+}
+
+function legacyCachePathFor(meta: CacheableMeta): string {
+  const ownerType = "todo_id" in meta ? "todo" : "schedule";
   return `${meta.user_id}/attachment/${ownerType}/${meta.id}`;
+}
+
+function extensionFor(filename: string): string {
+  const name = filename.split(/[\\/]/).pop() || "";
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot === name.length - 1) return "";
+  const ext = name.slice(dot).toLowerCase().replace(/[^a-z0-9.]/g, "");
+  return ext.length > 16 ? "" : ext;
 }
 
 export function isNative(): boolean {
@@ -116,7 +132,7 @@ async function writeContent(
 }
 
 async function nativeDownloadToDisk(
-  url: string,
+  downloadChunk: DownloadChunkFn,
   meta: CacheableMeta,
   cachePath: string,
   onProgress?: (progress: DownloadProgress) => void,
@@ -128,40 +144,48 @@ async function nativeDownloadToDisk(
   await ensureParentDir(cachePath);
   try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* no existing partial */ }
 
-  let lastProgress: ProgressStatus | null = null;
-  const listener = await Filesystem.addListener("progress", (progress) => {
-    if (progress.url && progress.url !== url) return;
-    lastProgress = progress;
-    const total = Math.max(progress.contentLength || meta.plain_size_bytes || 0, 0);
-    const loaded = Math.max(progress.bytes || 0, 0);
-    onProgress?.({
-      loaded,
-      total,
-      percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
-    });
-  });
-
   try {
-    await Filesystem.downloadFile({
-      url,
-      path: outPath,
-      directory: Directory.Cache,
-      recursive: true,
-      progress: true,
-      connectTimeout: 30_000,
-      readTimeout: 600_000,
-    });
+    const expected = Math.max(meta.plain_size_bytes || 0, 0);
+    if (expected === 0) {
+      await Filesystem.writeFile({ path: outPath, data: "", directory: Directory.Cache, recursive: true });
+    }
+
+    let loaded = 0;
+    let total = expected;
+    let done = total === 0;
+    while (!done) {
+      if (abortSignal?.aborted) throw new Error("Download aborted");
+      const chunk = await downloadChunk(loaded, WS_CHUNK_SIZE);
+      if (!chunk.ok) throw new Error("WebSocket chunk download failed");
+      if (chunk.offset !== loaded) throw new Error("Download chunk offset mismatch");
+      total = Math.max(chunk.file_size || 0, total);
+
+      const data = chunk.data;
+      const chunkSize = chunk.bytes_read || base64ByteLength(data);
+      if (chunkSize === 0) throw new Error("Download incomplete: empty range response");
+      if (loaded === 0) {
+        await Filesystem.writeFile({ path: outPath, data, directory: Directory.Cache, recursive: true });
+      } else {
+        await Filesystem.appendFile({ path: outPath, data, directory: Directory.Cache });
+      }
+      loaded = chunk.next_offset || (loaded + chunkSize);
+      done = chunk.done;
+      onProgress?.({
+        loaded,
+        total,
+        percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 100,
+      });
+    }
     if (abortSignal?.aborted) throw new Error("Download aborted");
 
     const stat = await Filesystem.stat({ path: outPath, directory: Directory.Cache });
-    const expected = Math.max(lastProgress?.contentLength || 0, meta.plain_size_bytes || 0);
-    if (expected > 0 && stat.size < expected) {
+    if (total > 0 && stat.size < total) {
       try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
-      throw new Error(`Download incomplete: received ${stat.size} of ${expected} bytes`);
+      throw new Error(`Download incomplete: received ${stat.size} of ${total} bytes`);
     }
     onProgress?.({
       loaded: stat.size,
-      total: expected || stat.size,
+      total: total || stat.size,
       percent: 100,
     });
 
@@ -171,8 +195,6 @@ async function nativeDownloadToDisk(
   } catch (err) {
     try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
     throw err;
-  } finally {
-    await listener.remove();
   }
 }
 
@@ -189,18 +211,22 @@ export async function getAttachmentUri(
   onProgress?: (progress: DownloadProgress) => void,
   abortSignal?: AbortSignal,
   downloadUrl?: string,
+  downloadChunk?: DownloadChunkFn,
 ): Promise<{ uri: string; cacheHit: boolean }> {
-  const path = cachePathFor(metadata);
+  const path = getAttachmentCachePath(metadata);
 
   const cachedUri = await getCachedUri(path, metadata);
   if (cachedUri) {
     onProgress?.({ loaded: metadata.plain_size_bytes, total: metadata.plain_size_bytes, percent: 100 });
     return { uri: cachedUri, cacheHit: true };
   }
+  try {
+    await Filesystem.deleteFile({ path: `${CACHE_DIR}/${legacyCachePathFor(metadata)}`, directory: Directory.Cache });
+  } catch { /* discard old extensionless cache files */ }
 
-  // Native path: direct native file download to cache (constant JS memory)
-  if (isNative() && downloadUrl) {
-    const attempt = () => nativeDownloadToDisk(downloadUrl, metadata, path, onProgress, abortSignal);
+  // Native path: authenticated WebSocket chunk download to cache (constant JS memory)
+  if (isNative() && downloadChunk) {
+    const attempt = () => nativeDownloadToDisk(downloadChunk, metadata, path, onProgress, abortSignal);
     try {
       const uri = await attempt();
       return { uri, cacheHit: false };
@@ -245,7 +271,7 @@ function bufferToBase64(buf: ArrayBuffer | Uint8Array): string {
  */
 export async function getCachedAttachmentUri(metadata: CacheableMeta): Promise<string | null> {
   if (!isNative()) return null;
-  return getCachedUri(cachePathFor(metadata), metadata);
+  return getCachedUri(getAttachmentCachePath(metadata), metadata);
 }
 
 /**
@@ -253,9 +279,11 @@ export async function getCachedAttachmentUri(metadata: CacheableMeta): Promise<s
  */
 export async function deleteCachedAttachment(metadata: CacheableMeta): Promise<void> {
   if (!isNative()) return;
-  const path = cachePathFor(metadata);
+  const path = getAttachmentCachePath(metadata);
   try { await Filesystem.deleteFile({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache }); } catch { /* */ }
   metaIndex.delete(path);
+  try { await Filesystem.deleteFile({ path: `${CACHE_DIR}/${legacyCachePathFor(metadata)}`, directory: Directory.Cache }); } catch { /* */ }
+  metaIndex.delete(legacyCachePathFor(metadata));
 }
 
 /**
@@ -264,7 +292,7 @@ export async function deleteCachedAttachment(metadata: CacheableMeta): Promise<v
  */
 export async function getNativeFilePath(metadata: CacheableMeta): Promise<string | null> {
   if (!isNative()) return null;
-  const path = cachePathFor(metadata);
+  const path = getAttachmentCachePath(metadata);
   try {
     await Filesystem.stat({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
   } catch {
@@ -272,6 +300,13 @@ export async function getNativeFilePath(metadata: CacheableMeta): Promise<string
   }
   const uri = await Filesystem.getUri({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
   return uri.uri;
+}
+
+function base64ByteLength(data: string): number {
+  const trimmed = data.replace(/\s/g, "");
+  if (!trimmed) return 0;
+  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0;
+  return Math.floor((trimmed.length * 3) / 4) - padding;
 }
 
 /**

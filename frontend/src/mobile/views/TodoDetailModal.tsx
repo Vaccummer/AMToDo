@@ -433,6 +433,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             uploadNativeFile={(file, onProgress, signal) => api.uploadTodoNativeAttachment(todo.id, file, onProgress, signal)}
             downloadFile={(attachmentId, onProgress, signal) => api.downloadTodoAttachment(todo.id, attachmentId, onProgress, signal)}
             getDownloadUrl={(attachmentId) => api.getTodoAttachmentDownloadUrl(todo.id, attachmentId)}
+            downloadChunk={(attachmentId, offset, length) => api.downloadTodoAttachmentChunk(todo.id, attachmentId, offset, length)}
             removeFile={(attachmentId) => api.removeTodoAttachment(todo.id, attachmentId)}
             renameFile={(attachmentId, filename) => api.renameTodoAttachment(todo.id, attachmentId, filename)}
             listAttachments={() => api.listTodoAttachments(todo.id)}

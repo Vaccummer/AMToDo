@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
-import type { AMToDoApi, AttachmentDownloadUrl, AttachmentMetadata, ScheduleAttachmentMetadata } from "../../api/client";
+import type { AMToDoApi, AttachmentDownloadChunkResponse, AttachmentDownloadUrl, AttachmentMetadata, ScheduleAttachmentMetadata } from "../../api/client";
 import { useConfirm } from "./ConfirmDialog";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
-import { getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, getCacheFolderPath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
+import { getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
 import type { NativeAttachmentFile } from "../../lib/native-attachment";
 import { isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
@@ -23,6 +23,7 @@ export type AttachmentManagerProps = {
   uploadNativeFile?: (file: NativeAttachmentFile, onProgress: (p: UploadProgress) => void, signal?: AbortSignal) => Promise<unknown>;
   downloadFile: (attachmentId: number, onProgress: (p: DownloadProgress) => void, signal?: AbortSignal) => Promise<ArrayBuffer>;
   getDownloadUrl: (attachmentId: number) => Promise<AttachmentDownloadUrl>;
+  downloadChunk?: (attachmentId: number, offset: number, length: number) => Promise<AttachmentDownloadChunkResponse>;
   removeFile: (attachmentId: number) => Promise<unknown>;
   renameFile: (attachmentId: number, filename: string) => Promise<{ attachment: AnyAttachment }>;
   listAttachments: () => Promise<{ attachments: AnyAttachment[] }>;
@@ -87,6 +88,7 @@ export function AttachmentManager({
   uploadNativeFile,
   downloadFile,
   getDownloadUrl,
+  downloadChunk,
   removeFile,
   renameFile,
   listAttachments,
@@ -145,7 +147,11 @@ export function AttachmentManager({
   }
 
   function getCachePath(attachment: AnyAttachment): string {
-    return `attachment-cache/${attachment.user_id}/attachment/${ownerType}/${attachment.id}`;
+    return `attachment-cache/${getAttachmentCachePath(attachment)}`;
+  }
+
+  function chunkDownloader(attachmentId: number) {
+    return downloadChunk ? (offset: number, length: number) => downloadChunk(attachmentId, offset, length) : undefined;
   }
 
   function markDownloaded(attachmentId: number) {
@@ -209,6 +215,7 @@ export function AttachmentManager({
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
           downloadUrlValue(dlInfo),
+          chunkDownloader(attachment.id),
         );
         url = result.uri;
       } else {
@@ -529,6 +536,7 @@ export function AttachmentManager({
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
           downloadUrlValue(dlInfo),
+          chunkDownloader(attachment.id),
         );
         url = uri;
       } else {
@@ -592,6 +600,7 @@ export function AttachmentManager({
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
           downloadUrlValue(dlInfo),
+          chunkDownloader(attachment.id),
         );
         url = uri;
       } else {
@@ -678,6 +687,7 @@ export function AttachmentManager({
           (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
           ac.signal,
           downloadUrlValue(dlInfo),
+          chunkDownloader(attachment.id),
         );
         rememberAttachmentUrl(attachment, uri);
       } else {
@@ -784,6 +794,7 @@ export function AttachmentManager({
               (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
               ac.signal,
               downloadUrlValue(dlInfo),
+              chunkDownloader(attachment.id),
             );
           } else {
             await getAttachmentBlob(
