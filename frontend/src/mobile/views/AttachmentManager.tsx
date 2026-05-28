@@ -93,11 +93,13 @@ export function AttachmentManager({
   const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 });
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [downloadedIds, setDownloadedIds] = useState<Set<number>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [pickerAttachment, setPickerAttachment] = useState<AnyAttachment | null>(null);
   const [swipedAttachId, setSwipedAttachId] = useState<number | null>(null);
   const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [captureDraft, setCaptureDraft] = useState<{ file: File; ext: string; defaultBase: string; name: string } | null>(null);
 
   const zoomRef = useRef({
     scale: 1, x: 0, y: 0,
@@ -114,6 +116,7 @@ export function AttachmentManager({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureNameInputRef = useRef<HTMLInputElement>(null);
   const attachSwipeRef = useRef({ id: 0, startX: 0, startY: 0, moved: false, cancelled: false });
 
   const previewItems = useMemo(
@@ -128,6 +131,26 @@ export function AttachmentManager({
 
   function getCachePath(attachment: AnyAttachment): string {
     return `attachment-cache/${attachment.user_id}/attachment/${ownerType}/${attachment.id}`;
+  }
+
+  function markDownloaded(attachmentId: number) {
+    downloadedRef.current.add(attachmentId);
+    setDownloadedIds((prev) => {
+      if (prev.has(attachmentId)) return prev;
+      const next = new Set(prev);
+      next.add(attachmentId);
+      return next;
+    });
+  }
+
+  function markNotDownloaded(attachmentId: number) {
+    downloadedRef.current.delete(attachmentId);
+    setDownloadedIds((prev) => {
+      if (!prev.has(attachmentId)) return prev;
+      const next = new Set(prev);
+      next.delete(attachmentId);
+      return next;
+    });
   }
 
   const loadAttachments = useCallback(async () => {
@@ -146,7 +169,7 @@ export function AttachmentManager({
           const cachedUri = await getCachedAttachmentUri(attachment);
           if (ac.signal.aborted) return;
           if (cachedUri) {
-            downloadedRef.current.add(attachment.id);
+            markDownloaded(attachment.id);
             if (attachment.preview_kind !== "none") {
               setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: cachedUri }));
             }
@@ -160,6 +183,14 @@ export function AttachmentManager({
   useEffect(() => {
     loadAttachments().catch(() => {});
   }, [loadAttachments]);
+
+  useEffect(() => {
+    if (!captureDraft) return;
+    requestAnimationFrame(() => {
+      captureNameInputRef.current?.focus();
+      captureNameInputRef.current?.select();
+    });
+  }, [captureDraft]);
 
   // Sync picker open state to parent ref
   useEffect(() => {
@@ -329,12 +360,22 @@ export function AttachmentManager({
     const ext = file.name.split(".").pop() || (file.type.startsWith("video/") ? "mp4" : "jpg");
     const isVideo = file.type.startsWith("video/");
     const defaultBase = isVideo ? `video_${Date.now()}` : `photo_${Date.now()}`;
-    const name = prompt(t("common.photoNamePrompt"), defaultBase);
-    if (name === null) return;
-    const base = name.trim() || defaultBase;
-    const finalName = `${base}.${ext}`;
-    const renamed = new File([file], finalName, { type: file.type });
+    setCaptureDraft({ file, ext, defaultBase, name: defaultBase });
+  }
+
+  async function confirmCaptureUpload() {
+    if (!captureDraft) return;
+    const raw = captureDraft.name.trim() || captureDraft.defaultBase;
+    const suffix = `.${captureDraft.ext}`;
+    const base = raw.toLowerCase().endsWith(suffix.toLowerCase()) ? raw.slice(0, -suffix.length) : raw;
+    const finalName = `${base}.${captureDraft.ext}`;
+    const renamed = new File([captureDraft.file], finalName, { type: captureDraft.file.type });
+    setCaptureDraft(null);
     await uploadFiles([renamed]);
+  }
+
+  function cancelCaptureUpload() {
+    setCaptureDraft(null);
   }
 
   // ── Open / Download ──
@@ -392,7 +433,7 @@ export function AttachmentManager({
         );
         url = URL.createObjectURL(blob);
       }
-      downloadedRef.current.add(attachment.id);
+      markDownloaded(attachment.id);
       setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
 
       if (isPreviewable(attachment)) {
@@ -454,7 +495,7 @@ export function AttachmentManager({
         );
         url = URL.createObjectURL(blob);
       }
-      downloadedRef.current.add(attachment.id);
+      markDownloaded(attachment.id);
       setAttachmentUrls((prev) => ({ ...prev, [attachment.id]: url }));
       if (isPreviewable(attachment)) {
         setPreview(attachment);
@@ -498,7 +539,7 @@ export function AttachmentManager({
   async function clearAttachmentCache(attachment: AnyAttachment) {
     try {
       await deleteCachedAttachment(attachment);
-      downloadedRef.current.delete(attachment.id);
+      markNotDownloaded(attachment.id);
       setAttachmentUrls((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
       setSavedIds((prev) => { const next = new Set(prev); next.delete(attachment.id); return next; });
     } catch { /* ignore */ }
@@ -532,7 +573,7 @@ export function AttachmentManager({
           ac.signal,
         );
       }
-      downloadedRef.current.add(attachment.id);
+      markDownloaded(attachment.id);
     } catch (err: unknown) {
       if (ac.signal.aborted) return;
     } finally {
@@ -618,7 +659,7 @@ export function AttachmentManager({
             (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
             ac.signal,
           );
-          downloadedRef.current.add(attachment.id);
+          markDownloaded(attachment.id);
         } catch (err: unknown) {
           if (ac.signal.aborted) return;
           return;
@@ -775,7 +816,7 @@ export function AttachmentManager({
           const isDownloading = downloadingIds.current.has(attachment.id);
           const dlProgress = downloadProgressMap[attachment.id];
           const ext = attachment.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE";
-          const isDownloaded = downloadedRef.current.has(attachment.id);
+          const isDownloaded = downloadedIds.has(attachment.id);
           const isSaved = savedIds.has(attachment.id);
           const isSwiped = swipedAttachId === attachment.id;
           const isRenaming = renamingId === attachment.id;
@@ -1019,6 +1060,49 @@ export function AttachmentManager({
         );
       })() : null}
       {confirmDialog}
+      {captureDraft ? (
+        <div className="capture-name-backdrop" onClick={cancelCaptureUpload}>
+          <div className="capture-name-card" role="dialog" aria-label={t("common.photoNamePrompt")} onClick={(e) => e.stopPropagation()}>
+            <div className="capture-name-header">
+              <div className="capture-name-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+              </div>
+              <div>
+                <div className="capture-name-title">{t("common.photoNamePrompt")}</div>
+                <div className="capture-name-subtitle">.{captureDraft.ext}</div>
+              </div>
+            </div>
+            <label className="capture-name-label" htmlFor="capture-name-input">{t("common.filename")}</label>
+            <div className="capture-name-input-wrap">
+              <input
+                ref={captureNameInputRef}
+                id="capture-name-input"
+                className="capture-name-input"
+                value={captureDraft.name}
+                onChange={(e) => setCaptureDraft((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmCaptureUpload();
+                  if (e.key === "Escape") cancelCaptureUpload();
+                }}
+              />
+              <span className="capture-name-ext">.{captureDraft.ext}</span>
+            </div>
+            <div className="capture-name-actions">
+              <button type="button" className="capture-name-btn capture-name-btn-primary" onClick={confirmCaptureUpload}>
+                {t("common.confirm")}
+              </button>
+              <button type="button" className="capture-name-btn capture-name-btn-cancel" onClick={cancelCaptureUpload}>
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {pickerAttachment && (
         <DirectoryPickerModal
           filename={pickerAttachment.filename}
