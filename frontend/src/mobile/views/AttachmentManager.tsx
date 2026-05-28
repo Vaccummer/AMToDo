@@ -8,7 +8,7 @@ import { getAttachmentBlob } from "../../lib/attachmentCache";
 import { getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, getCacheFolderPath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
 import type { NativeAttachmentFile } from "../../lib/native-attachment";
 import { isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
-import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { FileOpener } from "@capacitor-community/file-opener";
 import { getMimeType } from "../../lib/mime-types";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
@@ -178,24 +178,43 @@ export function AttachmentManager({
     if (attachment.is_orphaned) return;
     if (downloadingIds.current.has(attachment.id)) return;
     const existingUrl = attachmentUrls[attachment.id];
-    if (existingUrl?.startsWith("blob:")) {
+    if (existingUrl) {
       setPreview(attachment);
       return;
     }
     const ac = new AbortController();
     downloadingIds.current.add(attachment.id);
     downloadAbortMapRef.current.set(attachment.id, ac);
+    setDownloadProgressMap((prev) => ({
+      ...prev,
+      [attachment.id]: { loaded: 0, total: attachment.plain_size_bytes, percent: 0 },
+    }));
     try {
-      const { blob } = await getAttachmentBlob(
-        (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-        attachment,
-        getCacheKey(attachment),
-        (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
-        ac.signal,
-      );
+      let url: string;
+      if (isNativePlatform()) {
+        const dlUrl = await getDownloadUrl(attachment.id);
+        const result = await getAttachmentUri(
+          (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
+          attachment,
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+          dlUrl,
+        );
+        url = result.uri;
+      } else {
+        const { blob } = await getAttachmentBlob(
+          (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
+          attachment,
+          getCacheKey(attachment),
+          (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+          ac.signal,
+        );
+        const type = attachment.mime_type && attachment.mime_type !== "application/octet-stream" ? attachment.mime_type : getMimeType(attachment.filename);
+        url = URL.createObjectURL(blob.type === type ? blob : blob.slice(0, blob.size, type));
+      }
       if (ac.signal.aborted) return;
-      const type = attachment.mime_type && attachment.mime_type !== "application/octet-stream" ? attachment.mime_type : getMimeType(attachment.filename);
-      rememberAttachmentUrl(attachment, URL.createObjectURL(blob.type === type ? blob : blob.slice(0, blob.size, type)));
+      markDownloaded(attachment.id);
+      rememberAttachmentUrl(attachment, url);
       setPreview(attachment);
       setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
     } catch (err: unknown) {
@@ -289,20 +308,30 @@ export function AttachmentManager({
     let cancelled = false;
     (async () => {
       try {
-        const { blob } = await getAttachmentBlob(
-          (onProgress, abortSignal) => downloadFile(preview.id, onProgress!, abortSignal),
-          preview,
-          getCacheKey(preview),
-        );
-        if (cancelled) return;
-        if (blob.size > 500 * 1024) {
-          const text = await blob.slice(0, 500 * 1024).text();
-          setTextPreviewContent(text + "\n\n... " + t("common.textPreviewTruncated"));
+        let text: string;
+        if (isNativePlatform()) {
+          const result = await Filesystem.readFile({
+            path: getCachePath(preview),
+            directory: Directory.Cache,
+            encoding: Encoding.UTF8,
+          });
+          text = String(result.data);
         } else {
-          const text = await blob.text();
-          if (!text.includes("\0")) {
-            setTextPreviewContent(text);
+          const { blob } = await getAttachmentBlob(
+            (onProgress, abortSignal) => downloadFile(preview.id, onProgress!, abortSignal),
+            preview,
+            getCacheKey(preview),
+          );
+          text = blob.size > 500 * 1024
+            ? await blob.slice(0, 500 * 1024).text()
+            : await blob.text();
+          if (blob.size > 500 * 1024) {
+            text += "\n\n... " + t("common.textPreviewTruncated");
           }
+        }
+        if (cancelled) return;
+        if (!text.includes("\0")) {
+          setTextPreviewContent(text);
         }
       } catch { /* ignore */ }
     })();
@@ -619,9 +648,14 @@ export function AttachmentManager({
     if (attachment.is_orphaned || downloadingIds.current.has(attachment.id)) return;
     if (downloadedRef.current.has(attachment.id)) return;
 
+    setSwipedAttachId(null);
     const ac = new AbortController();
     downloadingIds.current.add(attachment.id);
     downloadAbortMapRef.current.set(attachment.id, ac);
+    setDownloadProgressMap((prev) => ({
+      ...prev,
+      [attachment.id]: { loaded: 0, total: attachment.plain_size_bytes, percent: 0 },
+    }));
     try {
       if (isNativePlatform()) {
         const dlUrl = await getDownloadUrl(attachment.id);
@@ -646,6 +680,8 @@ export function AttachmentManager({
       markDownloaded(attachment.id);
     } catch (err: unknown) {
       if (ac.signal.aborted) return;
+      const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
+      setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
     } finally {
       downloadingIds.current.delete(attachment.id);
       downloadAbortMapRef.current.delete(attachment.id);
@@ -726,16 +762,30 @@ export function AttachmentManager({
         downloadingIds.current.add(attachment.id);
         downloadAbortMapRef.current.set(attachment.id, ac);
         try {
-          await getAttachmentBlob(
-            (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
-            attachment,
-            getCacheKey(attachment),
-            (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
-            ac.signal,
-          );
+          if (isNativePlatform()) {
+            const dlUrl = await getDownloadUrl(attachment.id);
+            await getAttachmentUri(
+              (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
+              attachment,
+              (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+              ac.signal,
+              dlUrl,
+            );
+          } else {
+            await getAttachmentBlob(
+              (onProgress, abortSignal) => downloadFile(attachment.id, onProgress!, abortSignal!),
+              attachment,
+              getCacheKey(attachment),
+              (progress) => setDownloadProgressMap((prev) => ({ ...prev, [attachment.id]: progress })),
+              ac.signal,
+            );
+          }
           markDownloaded(attachment.id);
+          setAttachmentErrors((prev) => { const next = { ...prev }; delete next[attachment.id]; return next; });
         } catch (err: unknown) {
           if (ac.signal.aborted) return;
+          const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
+          setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
           return;
         } finally {
           downloadingIds.current.delete(attachment.id);
