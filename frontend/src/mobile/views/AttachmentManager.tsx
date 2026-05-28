@@ -6,6 +6,8 @@ import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
 import { getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, getCacheFolderPath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
+import type { NativeAttachmentFile } from "../../lib/native-attachment";
+import { isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { FileOpener } from "@capacitor-community/file-opener";
 import { getMimeType } from "../../lib/mime-types";
@@ -18,6 +20,7 @@ export type AttachmentManagerProps = {
   ownerId: number;
   api: AMToDoApi;
   uploadFile: (file: File, onProgress: (p: UploadProgress) => void, signal?: AbortSignal) => Promise<unknown>;
+  uploadNativeFile?: (file: NativeAttachmentFile, onProgress: (p: UploadProgress) => void, signal?: AbortSignal) => Promise<unknown>;
   downloadFile: (attachmentId: number, onProgress: (p: DownloadProgress) => void, signal?: AbortSignal) => Promise<ArrayBuffer>;
   getDownloadUrl: (attachmentId: number) => Promise<string>;
   removeFile: (attachmentId: number) => Promise<unknown>;
@@ -67,6 +70,7 @@ export function AttachmentManager({
   ownerId,
   api,
   uploadFile,
+  uploadNativeFile,
   downloadFile,
   getDownloadUrl,
   removeFile,
@@ -250,6 +254,64 @@ export function AttachmentManager({
       uploadAbortRef.current = null;
       setAttachmentBusy(false);
     }
+  }
+
+  async function uploadNativeFiles(files: NativeAttachmentFile[]) {
+    if (!uploadNativeFile) return;
+    const selected = Array.from(files);
+    if (selected.length === 0) return;
+
+    for (const file of selected) {
+      if (file.size >= 0 && file.size > api.maxAttachmentSize) {
+        setUploadError(t("common.fileTooLarge", { name: file.name, size: formatSize(file.size), max: formatSize(api.maxAttachmentSize) }));
+        return;
+      }
+    }
+
+    const ac = new AbortController();
+    uploadAbortRef.current = ac;
+    setAttachmentBusy(true);
+    setUploadError(null);
+    try {
+      for (const file of selected) {
+        const total = Math.max(file.size, 0);
+        const key = `${file.name}-${file.size}`;
+        setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total, percent: 0, phase: "uploading" } }));
+        try {
+          await uploadNativeFile(file, (progress) => {
+            setUploadProgress((prev) => ({ ...prev, [key]: progress }));
+          }, ac.signal);
+        } finally {
+          setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        }
+      }
+      try {
+        const updatedAttachments = await loadAttachments();
+        onAttachmentsChanged?.(updatedAttachments.length);
+      } catch {
+        // List refresh failed but upload succeeded; user can pull-to-refresh
+      }
+    } catch (err: unknown) {
+      if (!ac.signal.aborted) {
+        setUploadError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
+      }
+    } finally {
+      uploadAbortRef.current = null;
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function handleSelectFiles() {
+    if (uploadNativeFile && isNativeAttachmentUploadAvailable()) {
+      try {
+        const files = await pickNativeAttachmentFiles({ accept: "*/*", multiple: true });
+        await uploadNativeFiles(files);
+      } catch (err: unknown) {
+        setUploadError(err instanceof Error ? err.message : t("common.attachmentUploadFailed"));
+      }
+      return;
+    }
+    fileInputRef.current?.click();
   }
 
   function cancelUpload() {
@@ -659,7 +721,7 @@ export function AttachmentManager({
         </button>
         <input ref={videoInputRef} type="file" accept="video/*" capture="environment" hidden onChange={handleCameraCapture} />
         <div className="attach-divider-v" />
-        <button type="button" className="attach-icon-btn" onClick={() => fileInputRef.current?.click()} aria-label={t("common.selectFile")}>
+        <button type="button" className="attach-icon-btn" onClick={handleSelectFiles} aria-label={t("common.selectFile")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
           </svg>
