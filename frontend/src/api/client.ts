@@ -4,6 +4,8 @@ import type { UploadProgress } from "../lib/chunked-upload";
 import { uploadWithProgress } from "../lib/chunked-upload";
 import type { DownloadProgress } from "../lib/chunked-download";
 import { downloadWithProgress } from "../lib/chunked-download";
+import type { NativeAttachmentFile } from "../lib/native-attachment";
+import { uploadNativeAttachmentWithProgress } from "../lib/native-attachment";
 
 export type HealthResponse = {
   status: string;
@@ -679,6 +681,18 @@ export class AMToDoApi {
     ) as unknown as Promise<AttachmentResponse>;
   }
 
+  async uploadTodoNativeAttachment(todoId: number, file: NativeAttachmentFile, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<AttachmentResponse> {
+    const token = await this.initAttachmentUploadMetadata("todo", todoId, file.name, file.mimeType, file.size);
+
+    return uploadNativeAttachmentWithProgress<AttachmentMetadata>(
+      `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
+      file,
+      {},
+      onProgress,
+      abortSignal,
+    ) as unknown as Promise<AttachmentResponse>;
+  }
+
   async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
     const token = await this.initAttachmentDownload("todo", todoId, attachmentId);
 
@@ -731,6 +745,18 @@ export class AMToDoApi {
       `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
       file,
       { "Content-Type": file.type || "application/octet-stream" },
+      onProgress,
+      abortSignal,
+    ) as unknown as Promise<ScheduleAttachmentResponse>;
+  }
+
+  async uploadScheduleNativeAttachment(scheduleId: number, file: NativeAttachmentFile, onProgress?: (progress: UploadProgress) => void, abortSignal?: AbortSignal): Promise<ScheduleAttachmentResponse> {
+    const token = await this.initAttachmentUploadMetadata("schedule", scheduleId, file.name, file.mimeType, file.size);
+
+    return uploadNativeAttachmentWithProgress<ScheduleAttachmentMetadata>(
+      `${this.baseUrl}/api/v1/attachment/upload?token=${token}`,
+      file,
+      {},
       onProgress,
       abortSignal,
     ) as unknown as Promise<ScheduleAttachmentResponse>;
@@ -1034,12 +1060,22 @@ export class AMToDoApi {
     ownerId: number,
     file: File,
   ): Promise<string> {
+    return this.initAttachmentUploadMetadata(ownerType, ownerId, file.name, file.type || null, file.size);
+  }
+
+  private async initAttachmentUploadMetadata(
+    ownerType: AttachmentOwnerType,
+    ownerId: number,
+    filename: string,
+    mimeType: string | null,
+    plainSize: number,
+  ): Promise<string> {
     const payload = {
       owner_type: ownerType,
       owner_id: ownerId,
-      filename: file.name,
-      mime_type: file.type || null,
-      plain_size: file.size,
+      filename,
+      mime_type: mimeType,
+      plain_size: Math.max(plainSize, 0),
     };
     return this.initAttachmentToken("attachment.init_upload", "/api/v1/attachment/init-upload", payload);
   }

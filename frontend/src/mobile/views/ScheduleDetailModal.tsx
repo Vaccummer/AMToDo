@@ -428,6 +428,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             ownerId={schedule.id}
             api={api}
             uploadFile={(file, onProgress, signal) => api.uploadScheduleAttachment(schedule.id, file, onProgress, signal)}
+            uploadNativeFile={(file, onProgress, signal) => api.uploadScheduleNativeAttachment(schedule.id, file, onProgress, signal)}
             downloadFile={(attachmentId, onProgress, signal) => api.downloadScheduleAttachment(schedule.id, attachmentId, onProgress, signal)}
             getDownloadUrl={(attachmentId) => api.getScheduleAttachmentDownloadUrl(schedule.id, attachmentId)}
             removeFile={(attachmentId) => api.removeScheduleAttachment(schedule.id, attachmentId)}

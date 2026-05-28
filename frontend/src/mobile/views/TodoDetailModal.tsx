@@ -430,6 +430,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             ownerId={todo.id}
             api={api}
             uploadFile={(file, onProgress, signal) => api.uploadTodoAttachment(todo.id, file, onProgress, signal)}
+            uploadNativeFile={(file, onProgress, signal) => api.uploadTodoNativeAttachment(todo.id, file, onProgress, signal)}
             downloadFile={(attachmentId, onProgress, signal) => api.downloadTodoAttachment(todo.id, attachmentId, onProgress, signal)}
             getDownloadUrl={(attachmentId) => api.getTodoAttachmentDownloadUrl(todo.id, attachmentId)}
             removeFile={(attachmentId) => api.removeTodoAttachment(todo.id, attachmentId)}
