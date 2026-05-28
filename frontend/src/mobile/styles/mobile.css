@@ -269,11 +269,11 @@
 /* ── Mobile Hero: Glass Card + Ring (Concept D) ── */
 
 .mobile-shell .todo-view {
-  background: var(--status-primary-base, #1a7f72);
+  background: #283434;
 }
 
 .mobile-shell .mobile-hero {
-  background: var(--status-primary-base, #1a7f72);
+  background: #283434;
   padding: 14px 20px 12px;
   flex-shrink: 0;
   overflow: hidden;
@@ -3372,6 +3372,8 @@
   justify-content: space-between;
   padding: 18px 20px 12px;
   border-bottom: 1px solid var(--global-border-light);
+  gap: 12px;
+  box-sizing: border-box;
 }
 
 .dirpicker-title {
@@ -3379,20 +3381,26 @@
   font-size: 17px;
   font-weight: 600;
   color: var(--global-text-primary);
+  min-width: 0;
 }
 
 .dirpicker-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  gap: 4px;
+  min-width: 62px;
   height: 32px;
+  padding: 0 8px;
   border: none;
   background: transparent;
   border-radius: 8px;
   color: var(--global-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
 
 .dirpicker-close:active {
@@ -3615,7 +3623,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left));
+  padding: 10px calc(24px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left));
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--global-border-light);
   background: var(--global-surface-bg);
@@ -3669,9 +3677,9 @@
   justify-content: center;
   gap: 6px;
   flex-shrink: 0;
-  min-width: 84px;
+  min-width: 72px;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--status-primary-base, var(--global-accent)), #14967e);
@@ -3692,7 +3700,7 @@
 }
 
 .dirpicker-save-btn-text {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -3711,7 +3719,7 @@
 }
 
 .mobile-shell .dirpicker-header {
-  padding-top: calc(18px + env(safe-area-inset-top));
+  padding: calc(18px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 12px calc(20px + env(safe-area-inset-left));
 }
 
 .mobile-shell .dirpicker-card button,
