@@ -265,15 +265,16 @@ async def stream_download_attachment(
     # 3. Stream file back. Browsers need MIME + byte ranges for reliable media previews.
     safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
     media_type = _download_media_type(attachment.mime_type, attachment.filename)
+    file_size = content_path.stat().st_size
     common_headers = {
         "Accept-Ranges": "bytes",
         "Content-Disposition": f'attachment; filename="{safe_name}"',
         "X-AMToDo-Content-SHA256": attachment.plain_sha256,
+        "X-AMToDo-Content-Length": str(file_size),
         "X-AMToDo-Updated-At": str(attachment.updated_at),
     }
 
     range_header = request.headers.get("range")
-    file_size = content_path.stat().st_size
     byte_range = _parse_range_header(range_header, file_size)
     if range_header and byte_range is None:
         raise HTTPException(
@@ -298,10 +299,7 @@ async def stream_download_attachment(
     return StreamingResponse(
         _file_iterator(content_path),
         media_type=media_type,
-        headers={
-            **common_headers,
-            "Content-Length": str(file_size),
-        },
+        headers=common_headers,
     )
 
 
