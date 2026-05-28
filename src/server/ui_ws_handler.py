@@ -941,7 +941,11 @@ class UiMessageRouter:
             changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
             svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
             # Validate attachment exists
-            svc.show(owner_id, attachment_id)
+            attachment = svc.show(owner_id, attachment_id)
+            content_path = svc.storage_path(attachment)
+            if not content_path.is_file():
+                raise ValidationError("attachment file was not found")
+            file_size = content_path.stat().st_size
 
         if self.download_token_store is None:
             raise ValidationError("download token store not configured")
@@ -952,7 +956,12 @@ class UiMessageRouter:
             user_id=self.user_id,
             attachment_id=attachment_id,
         )
-        return {"ok": True, "token": token}
+        return {
+            "ok": True,
+            "token": token,
+            "file_size": file_size,
+            "plain_size_bytes": attachment.plain_size_bytes,
+        }
 
     def _handle_attachment_remove(self, p: dict) -> dict:
         with self._uow() as uow:

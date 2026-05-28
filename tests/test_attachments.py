@@ -155,7 +155,10 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
             headers={"Authorization": f"Bearer {token}"},
         )
         assert download_init_response.status_code == 200
-        download_token = download_init_response.json()["token"]
+        download_init = download_init_response.json()
+        assert download_init["file_size"] == len(plain_content)
+        assert download_init["plain_size_bytes"] == len(plain_content)
+        download_token = download_init["token"]
 
         # Step 5: GET download
         download_response = client.get(
@@ -219,7 +222,10 @@ def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pyte
             json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
             headers={"Authorization": f"Bearer {token}"},
         )
-        download_token = download_init_response.json()["token"]
+        download_init = download_init_response.json()
+        assert download_init["file_size"] == len(content)
+        assert download_init["plain_size_bytes"] == len(content) + 100
+        download_token = download_init["token"]
 
         download_response = client.get(
             f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
@@ -235,6 +241,43 @@ def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pyte
         )
         assert range_response.status_code == 206
         assert range_response.headers["content-range"] == f"bytes 7-10/{len(content)}"
+
+
+def test_init_download_rejects_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app = _make_app(tmp_path, monkeypatch)
+    token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
+    content = b"stored then deleted"
+
+    with TestClient(app) as client:
+        init_response = client.post(
+            "/api/v1/attachment/init-upload",
+            json={
+                "owner_type": "todo",
+                "owner_id": todo_id,
+                "filename": "missing.txt",
+                "mime_type": "text/plain",
+                "plain_size": len(content),
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        upload_token = init_response.json()["token"]
+        upload_response = client.put(
+            f"/api/v1/attachment/upload?token={upload_token}",
+            content=content,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        attachment = upload_response.json()["attachment"]
+
+        with UnitOfWork(app.state.db, user_id) as uow:
+            stored = uow.attachments.get(attachment["id"])
+            (Path(app.state.settings.attachment_root) / stored.storage_path).unlink()
+
+        download_init_response = client.post(
+            "/api/v1/attachment/init-download",
+            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert download_init_response.status_code == 404
 
 
 def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
