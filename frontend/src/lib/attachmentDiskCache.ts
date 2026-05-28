@@ -13,6 +13,7 @@
  */
 
 import { Filesystem, Directory } from "@capacitor/filesystem";
+import type { ProgressStatus } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 
 import write_blob from "capacitor-blob-writer";
@@ -114,55 +115,65 @@ async function writeContent(
   return Capacitor.convertFileSrc(uri.uri);
 }
 
-/**
- * Stream-download from network and append bytes to disk incrementally.
- * Peak JS memory ≈ single chunk size (~64KB), not the full file.
- */
-async function streamingDownloadToDisk(
+async function nativeDownloadToDisk(
   url: string,
   meta: CacheableMeta,
   cachePath: string,
   onProgress?: (progress: DownloadProgress) => void,
   abortSignal?: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(url, { signal: abortSignal });
-  if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-  if (!response.body) throw new Error("ReadableStream not supported");
+  if (abortSignal?.aborted) throw new Error("Download aborted");
 
-  const contentLength = Number(response.headers.get("Content-Length") || 0);
-  const reader = response.body.getReader();
-
-  // Prepare output file
-  await ensureParentDir(cachePath);
   const outPath = `${CACHE_DIR}/${cachePath}`;
+  await ensureParentDir(cachePath);
+  try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* no existing partial */ }
 
-  let bytesRead = 0;
+  let lastProgress: ProgressStatus | null = null;
+  const listener = await Filesystem.addListener("progress", (progress) => {
+    if (progress.url && progress.url !== url) return;
+    lastProgress = progress;
+    const total = Math.max(progress.contentLength || 0, 0);
+    const loaded = Math.max(progress.bytes || 0, 0);
+    onProgress?.({
+      loaded,
+      total,
+      percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
+    });
+  });
 
   try {
-    while (true) {
-      const { done, value: chunk } = await reader.read();
-      if (done) break;
-      await Filesystem.appendFile({ path: outPath, data: bufferToBase64(chunk), directory: Directory.Cache });
-      bytesRead += chunk.length;
-      onProgress?.({
-        loaded: bytesRead,
-        total: contentLength,
-        percent: contentLength ? Math.round((bytesRead / contentLength) * 100) : 0,
-      });
+    await Filesystem.downloadFile({
+      url,
+      path: outPath,
+      directory: Directory.Cache,
+      recursive: true,
+      progress: true,
+      connectTimeout: 30_000,
+      readTimeout: 600_000,
+    });
+    if (abortSignal?.aborted) throw new Error("Download aborted");
+
+    const stat = await Filesystem.stat({ path: outPath, directory: Directory.Cache });
+    const expected = Math.max(lastProgress?.contentLength || 0, 0);
+    if (expected > 0 && stat.size < expected) {
+      try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
+      throw new Error(`Download incomplete: received ${stat.size} of ${expected} bytes`);
     }
-  } finally {
-    reader.releaseLock();
-  }
+    onProgress?.({
+      loaded: stat.size,
+      total: expected || stat.size,
+      percent: 100,
+    });
 
-  // Validate download completeness
-  if (contentLength > 0 && bytesRead < contentLength) {
+    metaIndex.set(cachePath, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
+    const resultUri = await Filesystem.getUri({ path: outPath, directory: Directory.Cache });
+    return Capacitor.convertFileSrc(resultUri.uri);
+  } catch (err) {
     try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
-    throw new Error(`Download incomplete: received ${bytesRead} of ${contentLength} bytes`);
+    throw err;
+  } finally {
+    await listener.remove();
   }
-
-  metaIndex.set(cachePath, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
-  const resultUri = await Filesystem.getUri({ path: outPath, directory: Directory.Cache });
-  return Capacitor.convertFileSrc(resultUri.uri);
 }
 
 // ── Public API ──
@@ -187,9 +198,9 @@ export async function getAttachmentUri(
     return { uri: cachedUri, cacheHit: true };
   }
 
-  // Native path: single-pass streaming download (constant memory)
+  // Native path: direct native file download to cache (constant JS memory)
   if (isNative() && downloadUrl) {
-    const attempt = () => streamingDownloadToDisk(downloadUrl, metadata, path, onProgress, abortSignal);
+    const attempt = () => nativeDownloadToDisk(downloadUrl, metadata, path, onProgress, abortSignal);
     try {
       const uri = await attempt();
       return { uri, cacheHit: false };
@@ -198,8 +209,7 @@ export async function getAttachmentUri(
         const uri = await attempt();
         return { uri, cacheHit: false };
       }
-      // Some Android WebViews report generic "Network error" for fetch-based
-      // binary transfers. Fall through to the caller's native HTTP fallback.
+      throw err;
     }
   }
 
