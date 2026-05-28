@@ -93,9 +93,6 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
     const onPopState = () => {
       // If the directory picker is open, close it instead of the detail modal
       if (pickerOpenRef.current) {
-        history.pushState({ modal: "todo-detail" }, "");
-        // Dispatch a custom event to tell the picker to close
-        window.dispatchEvent(new CustomEvent("dirpicker-close"));
         return;
       }
       closedViaPopRef.current = true;

@@ -671,7 +671,7 @@
 
 /* F4 Top Block: merged month header + day strip */
 .top-block {
-  background: var(--status-primary-base);
+  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 50%, #1a2820 100%);
   padding: 16px 12px 8px;
   flex-shrink: 0;
 }

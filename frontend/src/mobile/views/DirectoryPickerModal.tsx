@@ -34,6 +34,20 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const closedViaPopRef = useRef(false);
+
+  useEffect(() => {
+    history.pushState({ modal: "directory-picker" }, "");
+    const onPopState = () => {
+      closedViaPopRef.current = true;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      if (!closedViaPopRef.current) history.back();
+    };
+  }, []);
 
   // Listen for close event from parent's back gesture handler
   useEffect(() => {
@@ -230,7 +244,8 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
         <div className="dirpicker-header">
           <h2 className="dirpicker-title">{t("common.selectSavePath")}</h2>
           <button type="button" className="dirpicker-close" onClick={onClose} aria-label={t("common.close")}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <span>{t("common.cancel")}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
@@ -375,7 +390,7 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
-                      <span className="dirpicker-save-btn-text">{t("common.saveFile")}</span>
+                      <span className="dirpicker-save-btn-text">{t("common.save")}</span>
                     </>
                   )}
                 </button>

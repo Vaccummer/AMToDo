@@ -64,17 +64,25 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
   const { ask, dialog: confirmDialog } = useConfirm();
 
   // System gesture navigation: push history entry so Android back gesture closes the modal
+  const pickerOpenRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
     history.pushState({ modal: "schedule-detail" }, "");
-    const onPopState = () => { onCloseRef.current(); };
+    const onPopState = () => {
+      if (pickerOpenRef.current) return;
+      onCloseRef.current();
+    };
     window.addEventListener("popstate", onPopState);
 
     // Also listen for Capacitor backButton as fallback
     let capacitorHandle: { remove: () => Promise<void> } | undefined;
     import("@capacitor/app").then(({ App }) => {
       App.addListener("backButton", () => {
+        if (pickerOpenRef.current) {
+          history.back();
+          return;
+        }
         onCloseRef.current();
       }).then((h) => { capacitorHandle = h; });
     }).catch(() => {});
@@ -437,6 +445,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
               onUpdate({ ...schedule, attachment_count: count });
             }}
             modalClass="schedule-modal"
+            pickerOpenRef={pickerOpenRef}
           />
           </>}
 
