@@ -671,7 +671,7 @@
 
 /* F4 Top Block: merged month header + day strip */
 .top-block {
-  background: linear-gradient(160deg, #1a2820 0%, #1a3a32 50%, #1a2820 100%);
+  background: rgba(250, 247, 242, 0.96);
   padding: 16px 12px 8px;
   flex-shrink: 0;
 }
@@ -687,7 +687,7 @@
 .month-title {
   font-size: 20px;
   font-weight: 800;
-  color: #fff;
+  color: #342f2a;
   letter-spacing: -0.5px;
 }
 
@@ -695,9 +695,9 @@
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(229, 223, 215, 0.9);
+  background: rgba(255, 255, 255, 0.65);
+  color: rgba(52, 47, 42, 0.55);
   font-size: 18px;
   display: grid;
   place-items: center;
@@ -709,7 +709,7 @@
 }
 
 .month-btn:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .day-strip {
@@ -738,7 +738,7 @@
 .day-cell .d-name {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(52, 47, 42, 0.36);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -746,7 +746,7 @@
 .day-cell .d-num {
   font-size: 16px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(52, 47, 42, 0.58);
 }
 
 .day-cell .d-bar {
@@ -775,7 +775,7 @@
 }
 
 .day-cell.has-event .d-bar {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(52, 47, 42, 0.16);
 }
 
 .day-cell.is-today.has-event .d-bar {
@@ -783,20 +783,20 @@
 }
 
 .day-cell.active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(26, 127, 114, 0.1);
 }
 
 .day-cell.active .d-name {
-  color: #fff;
+  color: var(--status-primary-base, #1a7f72);
 }
 
 .day-cell.active .d-num {
-  color: #fff;
+  color: var(--status-primary-base, #1a7f72);
   font-weight: 800;
 }
 
 .day-cell.active .d-bar {
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--status-primary-base, #1a7f72);
 }
 
 .day-cell.active.is-today {
