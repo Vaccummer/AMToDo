@@ -147,6 +147,7 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
 
   // Breadcrumb segments
   const pathSegments = currentPath ? currentPath.split("/") : [];
+  const currentFolderLabel = pathSegments.at(-1) || t("common.internalStorage");
 
   async function handleCreateFolder() {
     const name = newFolderName.trim();
@@ -364,18 +365,21 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                 </svg>
                 <span className="dirpicker-save-path-text">
-                  {t("common.internalStorage")}{currentPath ? ` / ${currentPath.replace(/\//g, " / ")}` : ""}
+                  {currentFolderLabel}
                 </span>
               </div>
               <div className="dirpicker-save-row">
-                <input
-                  type="text"
-                  className="dirpicker-filename-input"
-                  value={editFilename}
-                  onChange={(e) => setEditFilename(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-                  placeholder={t("common.filename")}
-                />
+                <label className="dirpicker-filename-field">
+                  <span className="dirpicker-filename-label">{t("common.filename")}</span>
+                  <input
+                    type="text"
+                    className="dirpicker-filename-input"
+                    value={editFilename}
+                    onChange={(e) => setEditFilename(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                    placeholder={t("common.filename")}
+                  />
+                </label>
                 <button
                   type="button"
                   className="dirpicker-save-btn"

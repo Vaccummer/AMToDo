@@ -23,7 +23,7 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  background: linear-gradient(160deg, #283434 0%, #2a3e3e 40%, #283434 100%);
+  background: #f5efe4;
   overflow: hidden;
   container-type: size;
   container-name: search;
@@ -32,7 +32,7 @@
 /* ── Top Section (dark gradient area) ── */
 
 .mobile-shell .ms-top-section {
-  background: linear-gradient(160deg, #283434 0%, #2a3e3e 40%, #283434 100%);
+  background: #f5efe4;
   padding: 10px 16px 14px;
   flex-shrink: 0;
 }
@@ -60,7 +60,7 @@
 .mobile-shell .ms-filter-toggle svg {
   width: 18px;
   height: 18px;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(52, 47, 42, 0.45);
 }
 
 .mobile-shell .ms-filter-toggle:active {
@@ -68,7 +68,7 @@
 }
 
 .mobile-shell .ms-filter-toggle.active svg {
-  color: #8ab4aa;
+  color: var(--status-primary-base, #1a7f72);
 }
 
 .mobile-shell .ms-filter-toggle.active::after {
@@ -79,8 +79,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #8ab4aa;
-  border: 1.5px solid rgba(40, 52, 52, 0.9);
+  background: var(--status-primary-base, #1a7f72);
+  border: 1.5px solid #f5efe4;
 }
 
 /* Search field: icon + input + Go button */
@@ -89,8 +89,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(229, 223, 215, 0.9);
   border-radius: 14px;
   padding: 11px 14px;
   margin-bottom: 10px;
@@ -98,14 +98,14 @@
 }
 
 .mobile-shell .ms-search-field:focus-within {
-  border-color: rgba(136, 152, 176, 0.4);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(26, 127, 114, 0.35);
+  background: #fff;
 }
 
 .mobile-shell .ms-search-field svg {
   width: 18px;
   height: 18px;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(52, 47, 42, 0.42);
   flex-shrink: 0;
 }
 
@@ -115,14 +115,14 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #fff;
+  color: var(--global-text-primary, #342f2a);
   font-size: 15px;
   font-family: inherit;
   -webkit-appearance: none;
 }
 
 .mobile-shell .ms-search-field input::placeholder {
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(52, 47, 42, 0.34);
 }
 
 .mobile-shell .ms-search-field input[type="search"]::-webkit-search-cancel-button {
@@ -130,7 +130,7 @@
   height: 14px;
   width: 14px;
   margin-left: 4px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2.5' stroke-linecap='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") center / contain no-repeat;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(52,47,42,0.5)' stroke-width='2.5' stroke-linecap='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") center / contain no-repeat;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -139,7 +139,7 @@
 
 .mobile-shell .ms-segmented-control {
   display: flex;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.64);
   border-radius: 10px;
   padding: 3px;
   gap: 2px;
@@ -152,7 +152,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(52, 47, 42, 0.5);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -166,8 +166,8 @@
 }
 
 .mobile-shell .ms-segment.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: #fff;
+  color: var(--status-primary-base, #1a7f72);
 }
 
 /* ── Results Scroll Area ── */
