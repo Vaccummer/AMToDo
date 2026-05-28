@@ -8,6 +8,7 @@ import type { UISettings } from "../../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../../themes";
 import { Dropdown } from "./Dropdown";
 import { useConfirm } from "./ConfirmDialog";
+import { setMainStatusBar, setSettingsStatusBar } from "../statusBar";
 
 // ── Mobile-specific text (not shared with desktop i18n) ──
 
@@ -302,18 +303,11 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     window.addEventListener("popstate", handlePopState);
 
     // Match status bar to settings background
-    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-      StatusBar.setStyle({ style: Style.Light }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: "#f5f2ec" }).catch(() => {});
-    }).catch(() => {});
+    setSettingsStatusBar();
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      // Restore status bar to theme color
-      import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-        StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-        StatusBar.setBackgroundColor({ color: "#1a2820" }).catch(() => {});
-      }).catch(() => {});
+      setMainStatusBar();
     };
   }, [onClose]);
 
