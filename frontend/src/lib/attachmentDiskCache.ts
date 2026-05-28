@@ -198,7 +198,8 @@ export async function getAttachmentUri(
         const uri = await attempt();
         return { uri, cacheHit: false };
       }
-      throw err;
+      // Some Android WebViews report generic "Network error" for fetch-based
+      // binary transfers. Fall through to the caller's native HTTP fallback.
     }
   }
 
