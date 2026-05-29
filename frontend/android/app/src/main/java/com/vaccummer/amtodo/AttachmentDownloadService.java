@@ -23,10 +23,12 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class AttachmentDownloadService extends Service {
     public static final String ACTION_START = "com.vaccummer.amtodo.attachment_download.START";
@@ -49,7 +51,7 @@ public class AttachmentDownloadService extends Service {
 
     private static final String CHANNEL_ID = "amtodo_attachment_downloads";
     private static final String TAG = "AMToDoDownload";
-    private static final int SERVICE_NOTIFICATION_ID = 2001;
+    private static final int DOWNLOAD_NOTIFICATION_BASE_ID = 2001;
     private static final int BUFFER_SIZE = 128 * 1024;
     private static final int MAX_RESUME_ATTEMPTS = 5;
     private static final long RANGE_CHUNK_SIZE = 64L * 1024L;
@@ -57,6 +59,12 @@ public class AttachmentDownloadService extends Service {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, HttpURLConnection> activeConnections = new ConcurrentHashMap<>();
     private final Map<String, Boolean> cancelled = new ConcurrentHashMap<>();
+    private final Map<String, Integer> notificationIds = new ConcurrentHashMap<>();
+    private final Map<String, DownloadNotificationState> notificationStates = new ConcurrentHashMap<>();
+    private final AtomicInteger nextNotificationId = new AtomicInteger(DOWNLOAD_NOTIFICATION_BASE_ID);
+    private final Object notificationLock = new Object();
+    @Nullable
+    private String foregroundDownloadId = null;
 
     @Override
     public void onCreate() {
@@ -80,7 +88,10 @@ public class AttachmentDownloadService extends Service {
             long totalSize = intent.getLongExtra(EXTRA_TOTAL_SIZE, 0L);
             ArrayList<String> headerKeys = intent.getStringArrayListExtra(EXTRA_HEADER_KEYS);
             ArrayList<String> headerValues = intent.getStringArrayListExtra(EXTRA_HEADER_VALUES);
-            startForeground(SERVICE_NOTIFICATION_ID, buildNotification(title, 0, totalSize, 0));
+            if (downloadId == null || downloadId.isEmpty()) {
+                return START_NOT_STICKY;
+            }
+            registerDownloadNotification(downloadId, title, totalSize);
             executor.execute(() -> runDownload(downloadId, url, cachePath, title, totalSize, headerKeys, headerValues));
             return START_REDELIVER_INTENT;
         }
@@ -189,12 +200,12 @@ public class AttachmentDownloadService extends Service {
             if (downloadId != null) {
                 activeConnections.remove(downloadId);
                 cancelled.remove(downloadId);
+                unregisterDownloadNotification(downloadId);
             }
             if (connection != null) {
                 connection.disconnect();
             }
-            if (activeConnections.isEmpty()) {
-                stopForeground(false);
+            if (!hasActiveDownloads()) {
                 stopSelf();
             }
         }
@@ -267,7 +278,7 @@ public class AttachmentDownloadService extends Service {
         long loaded = startOffset;
         boolean append = startOffset > 0;
         broadcastProgress(downloadId, loaded, total);
-        updateNotification(title, loaded, total);
+        updateNotification(downloadId, title, loaded, total);
         try (
             InputStream input = new BufferedInputStream(connection.getInputStream());
             FileOutputStream fos = new FileOutputStream(partFile, append);
@@ -284,7 +295,7 @@ public class AttachmentDownloadService extends Service {
                 if (now - lastNotifyAt > 250 || (total > 0 && loaded >= total)) {
                     lastNotifyAt = now;
                     broadcastProgress(downloadId, loaded, total);
-                    updateNotification(title, loaded, total);
+                    updateNotification(downloadId, title, loaded, total);
                 }
             }
             output.flush();
@@ -348,11 +359,90 @@ public class AttachmentDownloadService extends Service {
         sendBroadcast(intent);
     }
 
-    private void updateNotification(String title, long loaded, long total) {
+    private boolean hasActiveDownloads() {
+        return !notificationStates.isEmpty();
+    }
+
+    private void registerDownloadNotification(String downloadId, String title, long total) {
+        synchronized (notificationLock) {
+            int notificationId = nextNotificationId.getAndIncrement();
+            notificationIds.put(downloadId, notificationId);
+            DownloadNotificationState state = new DownloadNotificationState(title, 0L, Math.max(total, 0L));
+            notificationStates.put(downloadId, state);
+            Notification notification = buildNotification(state.title, state.loaded, state.total, 0);
+            if (foregroundDownloadId == null) {
+                foregroundDownloadId = downloadId;
+                startForeground(notificationId, notification);
+            } else {
+                notifyDownload(notificationId, notification);
+            }
+        }
+    }
+
+    private void unregisterDownloadNotification(String downloadId) {
+        synchronized (notificationLock) {
+            Integer oldNotificationId = notificationIds.remove(downloadId);
+            notificationStates.remove(downloadId);
+            boolean wasForeground = downloadId.equals(foregroundDownloadId);
+            if (wasForeground) {
+                promoteNextForegroundDownload(oldNotificationId);
+            } else if (oldNotificationId != null) {
+                cancelNotification(oldNotificationId);
+            }
+        }
+    }
+
+    private void promoteNextForegroundDownload(@Nullable Integer oldNotificationId) {
+        Iterator<Map.Entry<String, DownloadNotificationState>> iterator = notificationStates.entrySet().iterator();
+        if (iterator.hasNext()) {
+            Map.Entry<String, DownloadNotificationState> next = iterator.next();
+            String nextDownloadId = next.getKey();
+            Integer nextNotificationId = notificationIds.get(nextDownloadId);
+            if (nextNotificationId != null) {
+                DownloadNotificationState state = next.getValue();
+                foregroundDownloadId = nextDownloadId;
+                startForeground(
+                    nextNotificationId,
+                    buildNotification(state.title, state.loaded, state.total, percent(state.loaded, state.total))
+                );
+                if (oldNotificationId != null && !oldNotificationId.equals(nextNotificationId)) {
+                    cancelNotification(oldNotificationId);
+                }
+                return;
+            }
+        }
+        foregroundDownloadId = null;
+        stopForeground(true);
+    }
+
+    private void updateNotification(String downloadId, String title, long loaded, long total) {
+        Integer notificationId = notificationIds.get(downloadId);
+        if (notificationId == null) return;
+        notificationStates.put(downloadId, new DownloadNotificationState(title, loaded, total));
+        Notification notification = buildNotification(title, loaded, total, percent(loaded, total));
+        if (downloadId.equals(foregroundDownloadId)) {
+            startForeground(notificationId, notification);
+        } else {
+            notifyDownload(notificationId, notification);
+        }
+    }
+
+    private void notifyDownload(int notificationId, Notification notification) {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
-            nm.notify(SERVICE_NOTIFICATION_ID, buildNotification(title, loaded, total, total > 0 ? Math.round((loaded * 100.0f) / total) : 0));
+            nm.notify(notificationId, notification);
         }
+    }
+
+    private void cancelNotification(int notificationId) {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(notificationId);
+        }
+    }
+
+    private int percent(long loaded, long total) {
+        return total > 0 ? Math.round((loaded * 100.0f) / total) : 0;
     }
 
     private Notification buildNotification(String title, long loaded, long total, int percent) {
@@ -391,5 +481,17 @@ public class AttachmentDownloadService extends Service {
         );
         channel.setDescription("显示 AMToDo 附件后台下载进度");
         nm.createNotificationChannel(channel);
+    }
+
+    private static final class DownloadNotificationState {
+        final String title;
+        final long loaded;
+        final long total;
+
+        DownloadNotificationState(String title, long loaded, long total) {
+            this.title = title;
+            this.loaded = loaded;
+            this.total = total;
+        }
     }
 }

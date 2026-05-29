@@ -71,6 +71,21 @@ class WebSocketManager:
             logger.info("All connections closed for user_id=%d (%d conns)",
                         user_id, len(user_conns))
 
+    async def close_all(self, *, code: int = 1001, reason: str = "server shutting down") -> None:
+        """Close every active connection across all users."""
+        all_conns = self._connections
+        self._connections = {}
+        closed = 0
+        for user_conns in all_conns.values():
+            for ws in user_conns.values():
+                try:
+                    await ws.close(code=code, reason=reason)
+                    closed += 1
+                except Exception:
+                    pass
+        if closed:
+            logger.info("All WebSocket connections closed (%d conns)", closed)
+
     async def push_to_user(self, user_id: int, data: dict) -> int:
         """Broadcast *data* (JSON-serialised) to every active connection of *user_id*.
 

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import asyncio
+from contextlib import suppress
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -25,6 +28,7 @@ async def ui_ws_endpoint(websocket: WebSocket) -> None:
     token_map: dict[str, int] = app.state.token_map
     db = app.state.db
     settings = app.state.settings
+    shutdown_event = getattr(app.state, "shutdown_event", None)
 
     access_token = _token_from_subprotocol(websocket)
     if not access_token:
@@ -51,7 +55,9 @@ async def ui_ws_endpoint(websocket: WebSocket) -> None:
 
     try:
         while True:
-            raw = await websocket.receive_text()
+            raw = await _receive_text_or_shutdown(websocket, shutdown_event)
+            if raw is None:
+                return
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -141,6 +147,31 @@ def _lookup_user_id(db, token_map: dict[str, int], access_token: str) -> int | N
 
 async def _send_json(ws: WebSocket, data: dict[str, object]) -> None:
     await ws.send_text(json.dumps(data))
+
+
+async def _receive_text_or_shutdown(ws: WebSocket, shutdown_event: Any) -> str | None:
+    if shutdown_event is None:
+        return await ws.receive_text()
+
+    receive_task = asyncio.create_task(ws.receive_text())
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+    done, pending = await asyncio.wait(
+        {receive_task, shutdown_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    if shutdown_task in done:
+        receive_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await receive_task
+        await _safe_close(ws, 1001, "server shutting down")
+        return None
+
+    for task in pending:
+        task.cancel()
+    with suppress(asyncio.CancelledError):
+        await shutdown_task
+    return await receive_task
 
 
 async def _safe_close(ws: WebSocket, code: int, reason: str) -> None:

@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import logging.config
 import os
+import signal
 import sys
 import tomllib
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -168,8 +170,12 @@ async def lifespan(app: FastAPI) -> "AsyncIterator[None]":
     yield
 
     # Shutdown: cancel background tasks and dispose engine
+    await ws_mgr.close_all(code=1001, reason="server shutting down")
     for t in _bg_tasks:
         t.cancel()
+    if _bg_tasks:
+        with suppress(_asyncio.CancelledError):
+            await _asyncio.gather(*_bg_tasks, return_exceptions=True)
     db.engine.dispose()
 
 def _setup_rate_limit_middleware(app: FastAPI, settings: AppSettings) -> None:
@@ -392,8 +398,31 @@ def main() -> None:
     hypercorn_config.accesslog = logging.getLogger("uvicorn.access")
     hypercorn_config.errorlog = logging.getLogger("uvicorn.error")
 
+    async def _serve_with_shutdown() -> None:
+        loop = asyncio.get_running_loop()
+        shutdown_event = asyncio.Event()
+        app.state.shutdown_event = shutdown_event
+
+        def _request_shutdown() -> None:
+            if not shutdown_event.is_set():
+                shutdown_event.set()
+
+        def _signal_handler(*_: object) -> None:
+            loop.call_soon_threadsafe(_request_shutdown)
+
+        for signal_name in ("SIGINT", "SIGTERM", "SIGBREAK"):
+            if not hasattr(signal, signal_name):
+                continue
+            signum = getattr(signal, signal_name)
+            try:
+                loop.add_signal_handler(signum, _request_shutdown)
+            except (NotImplementedError, RuntimeError):
+                signal.signal(signum, _signal_handler)
+
+        await serve(app, hypercorn_config, shutdown_trigger=shutdown_event.wait)
+
     try:
-        asyncio.run(serve(app, hypercorn_config))
+        asyncio.run(_serve_with_shutdown())
     except Exception:
         logging.getLogger("amtodo").critical("Server failed to start", exc_info=True)
         print("FATAL: Server failed to start", file=sys.stderr)
