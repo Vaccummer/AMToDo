@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -110,3 +111,38 @@ def test_unified_websocket_route_accepts_bearer_subprotocol(tmp_path: Path) -> N
             subprotocols=["amtodo.v1", f"bearer.{token}"],
         ) as ws:
             assert ws.accepted_subprotocol == "amtodo.v1"
+
+
+def test_unified_websocket_closes_when_server_shutdown_is_requested(tmp_path: Path) -> None:
+    settings = AppSettings(
+        database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}",
+        admin_token="admin-secret",
+    )
+    app = create_app(settings)
+    token = secrets.token_urlsafe(32)
+
+    class ImmediateShutdown:
+        async def wait(self) -> None:
+            return None
+
+    app.state.shutdown_event = ImmediateShutdown()
+
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        db = app.state.db
+        with db.session() as session:
+            user = User(name="ws-test", token=token, created_at=SystemClock().now_epoch())
+            session.add(user)
+            session.commit()
+            user_id = user.id
+
+        app.state.token_map[token] = user_id
+        get_user_tables(user_id)
+        db.create_schema()
+
+        with client.websocket_connect(
+            "/api/v1/ws",
+            subprotocols=["amtodo.v1", f"bearer.{token}"],
+        ) as ws:
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                ws.receive_text()
+            assert exc_info.value.code == 1001
