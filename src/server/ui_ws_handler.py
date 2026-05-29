@@ -52,7 +52,6 @@ class UiMessageRouter:
         attachment_root: Path,
         clock: Clock | None = None,
         upload_token_store: Any = None,
-        download_token_store: Any = None,
     ) -> None:
         self.user_id = user_id
         self.db = db
@@ -60,7 +59,6 @@ class UiMessageRouter:
         self.attachment_root = attachment_root
         self.clock = clock or SystemClock()
         self.upload_token_store = upload_token_store
-        self.download_token_store = download_token_store
         self._handlers: dict[str, Any] = {}
         self._register_all()
 
@@ -115,7 +113,6 @@ class UiMessageRouter:
         self._handlers["attachment.list"] = self._handle_attachment_list
         self._handlers["attachment.get"] = self._handle_attachment_get
         self._handlers["attachment.init_upload"] = self._handle_init_upload
-        self._handlers["attachment.init_download"] = self._handle_init_download
         self._handlers["attachment.download_chunk"] = self._handle_download_chunk
         self._handlers["attachment.remove"] = self._handle_attachment_remove
         self._handlers["attachment.remove_orphaned"] = self._handle_attachment_remove_orphaned
@@ -933,37 +930,6 @@ class UiMessageRouter:
             plain_sha256=p.get("plain_sha256"),
         )
         return {"ok": True, "token": token}
-
-    def _handle_init_download(self, p: dict) -> dict:
-        owner_type = p["owner_type"]
-        owner_id = p["owner_id"]
-        attachment_id = p["attachment_id"]
-
-        with self._uow() as uow:
-            changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
-            svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
-            # Validate attachment exists
-            attachment = svc.show(owner_id, attachment_id)
-            content_path = svc.storage_path(attachment)
-            if not content_path.is_file():
-                raise ValidationError("attachment file was not found")
-            file_size = content_path.stat().st_size
-
-        if self.download_token_store is None:
-            raise ValidationError("download token store not configured")
-
-        token = self.download_token_store.create(
-            owner_type=owner_type,
-            owner_id=owner_id,
-            user_id=self.user_id,
-            attachment_id=attachment_id,
-        )
-        return {
-            "ok": True,
-            "token": token,
-            "file_size": file_size,
-            "plain_size_bytes": attachment.plain_size_bytes,
-        }
 
     def _handle_download_chunk(self, p: dict) -> dict:
         owner_type = p["owner_type"]

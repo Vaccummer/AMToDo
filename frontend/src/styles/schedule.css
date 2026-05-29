@@ -757,21 +757,21 @@
 }
 
 .day-cell.is-today {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px #4ade80;
+  background: rgba(245, 215, 140, 0.16);
+  box-shadow: inset 0 0 0 1.5px rgba(196, 163, 58, 0.72);
 }
 
 .day-cell.is-today .d-name {
-  color: #4ade80;
+  color: #9a6d08;
 }
 
 .day-cell.is-today .d-num {
-  color: #4ade80;
+  color: #8a6d1b;
   font-weight: 800;
 }
 
 .day-cell.is-today .d-bar {
-  background: #4ade80;
+  background: #c4a33a;
 }
 
 .day-cell.has-event .d-bar {
@@ -779,7 +779,7 @@
 }
 
 .day-cell.is-today.has-event .d-bar {
-  background: #4ade80;
+  background: #c4a33a;
 }
 
 .day-cell.active {
@@ -800,20 +800,20 @@
 }
 
 .day-cell.active.is-today {
-  background: rgba(74, 222, 128, 0.15);
-  box-shadow: none;
+  background: rgba(245, 215, 140, 0.28);
+  box-shadow: inset 0 0 0 1.5px rgba(196, 163, 58, 0.8);
 }
 
 .day-cell.active.is-today .d-name {
-  color: #4ade80;
+  color: #8a6d1b;
 }
 
 .day-cell.active.is-today .d-num {
-  color: #4ade80;
+  color: #6f5414;
 }
 
 .day-cell.active.is-today .d-bar {
-  background: #4ade80;
+  background: #c4a33a;
 }
 
 /* Today Summary Banner */
@@ -822,9 +822,11 @@
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
+  margin: 10px 10px 12px;
   background: #fff;
-  border: none;
-  border-bottom: 1px solid rgba(229, 223, 215, 0.4);
+  border: 1px solid rgba(229, 223, 215, 0.68);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(52, 47, 42, 0.04);
 }
 
 .ts-banner-ongoing {

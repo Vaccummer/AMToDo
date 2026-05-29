@@ -163,12 +163,6 @@ class AttachmentInitUploadRequest(BaseModel):
     plain_sha256: str | None = None
 
 
-class AttachmentInitDownloadRequest(BaseModel):
-    owner_type: Literal["todo", "schedule"]
-    owner_id: int
-    attachment_id: int
-
-
 # ── Unified Attachments ──
 
 class AttachmentListRequest(BaseModel):

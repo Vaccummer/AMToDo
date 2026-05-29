@@ -130,15 +130,9 @@ export type AttachmentListResponse = {
 
 export type AttachmentDownloadUrl = string | {
   url: string;
+  headers?: Record<string, string>;
   fileSize?: number;
   plainSizeBytes?: number;
-};
-
-type AttachmentDownloadInitResponse = {
-  ok: boolean;
-  token: string;
-  file_size?: number;
-  plain_size_bytes?: number;
 };
 
 export type AttachmentDownloadChunkResponse = {
@@ -717,21 +711,18 @@ export class AMToDoApi {
   }
 
   async downloadTodoAttachment(todoId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    const init = await this.initAttachmentDownload("todo", todoId, attachmentId);
-
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
+      this.attachmentDownloadUrl("todo", todoId, attachmentId),
       onProgress,
       abortSignal,
+      this.authHeaders(),
     );
   }
 
   async getTodoAttachmentDownloadUrl(todoId: number, attachmentId: number): Promise<AttachmentDownloadUrl> {
-    const init = await this.initAttachmentDownload("todo", todoId, attachmentId);
     return {
-      url: `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
-      fileSize: init.file_size,
-      plainSizeBytes: init.plain_size_bytes,
+      url: this.attachmentDownloadUrl("todo", todoId, attachmentId),
+      headers: this.authHeaders(),
     };
   }
 
@@ -794,21 +785,18 @@ export class AMToDoApi {
   }
 
   async downloadScheduleAttachment(scheduleId: number, attachmentId: number, onProgress?: (progress: DownloadProgress) => void, abortSignal?: AbortSignal): Promise<ArrayBuffer> {
-    const init = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
-
     return downloadWithProgress(
-      `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
+      this.attachmentDownloadUrl("schedule", scheduleId, attachmentId),
       onProgress,
       abortSignal,
+      this.authHeaders(),
     );
   }
 
   async getScheduleAttachmentDownloadUrl(scheduleId: number, attachmentId: number): Promise<AttachmentDownloadUrl> {
-    const init = await this.initAttachmentDownload("schedule", scheduleId, attachmentId);
     return {
-      url: `${this.baseUrl}/api/v1/attachment/${attachmentId}/download?token=${init.token}`,
-      fileSize: init.file_size,
-      plainSizeBytes: init.plain_size_bytes,
+      url: this.attachmentDownloadUrl("schedule", scheduleId, attachmentId),
+      headers: this.authHeaders(),
     };
   }
 
@@ -1119,23 +1107,6 @@ export class AMToDoApi {
     return this.initAttachmentToken("attachment.init_upload", "/api/v1/attachment/init-upload", payload);
   }
 
-  private async initAttachmentDownload(
-    ownerType: AttachmentOwnerType,
-    ownerId: number,
-    attachmentId: number,
-  ): Promise<AttachmentDownloadInitResponse> {
-    const payload = {
-      owner_type: ownerType,
-      owner_id: ownerId,
-      attachment_id: attachmentId,
-    };
-    return this.initAttachmentTokenResponse<AttachmentDownloadInitResponse>(
-      "attachment.init_download",
-      "/api/v1/attachment/init-download",
-      payload,
-    );
-  }
-
   private async downloadAttachmentChunk(
     ownerType: AttachmentOwnerType,
     ownerId: number,
@@ -1185,6 +1156,14 @@ export class AMToDoApi {
       }
     }
     return this.postHttp<T>(httpPath, payload);
+  }
+
+  private attachmentDownloadUrl(ownerType: AttachmentOwnerType, ownerId: number, attachmentId: number): string {
+    return `${this.baseUrl}/api/v1/attachment/${ownerType}/${ownerId}/${attachmentId}/download`;
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.token ? { Authorization: `Bearer ${this.token}` } : {};
   }
 
   private async postHttp<T>(path: string, body: Record<string, unknown>): Promise<T> {

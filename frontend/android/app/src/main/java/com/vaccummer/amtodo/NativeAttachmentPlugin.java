@@ -1,14 +1,19 @@
 package com.vaccummer.amtodo;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.OpenableColumns;
 
 import androidx.activity.result.ActivityResult;
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -32,6 +37,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,6 +50,40 @@ public class NativeAttachmentPlugin extends Plugin {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, HttpURLConnection> activeUploads = new ConcurrentHashMap<>();
+    private final Map<String, PluginCall> activeDownloads = new ConcurrentHashMap<>();
+    private BroadcastReceiver downloadReceiver;
+
+    @Override
+    public void load() {
+        downloadReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || intent.getAction() == null) return;
+                handleDownloadEvent(intent);
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(AttachmentDownloadService.ACTION_PROGRESS);
+        filter.addAction(AttachmentDownloadService.ACTION_COMPLETE);
+        filter.addAction(AttachmentDownloadService.ACTION_ERROR);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getContext().registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            getContext().registerReceiver(downloadReceiver, filter);
+        }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (downloadReceiver != null) {
+            try {
+                getContext().unregisterReceiver(downloadReceiver);
+            } catch (Exception ignored) {
+            }
+            downloadReceiver = null;
+        }
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void pickFiles(PluginCall call) {
@@ -124,6 +164,88 @@ public class NativeAttachmentPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("ok", true);
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void download(PluginCall call) {
+        String downloadId = call.getString("downloadId");
+        String url = call.getString("url");
+        String cachePath = call.getString("cachePath");
+        String title = call.getString("title", "AMToDo 下载附件");
+        Long totalSize = call.getLong("totalSize");
+        JSObject headers = call.getObject("headers", new JSObject());
+
+        if (downloadId == null || downloadId.isEmpty()) {
+            call.reject("downloadId is required");
+            return;
+        }
+        if (url == null || url.isEmpty()) {
+            call.reject("url is required");
+            return;
+        }
+        if (cachePath == null || cachePath.isEmpty()) {
+            call.reject("cachePath is required");
+            return;
+        }
+
+        activeDownloads.put(downloadId, call);
+        Intent intent = new Intent(getContext(), AttachmentDownloadService.class);
+        intent.setAction(AttachmentDownloadService.ACTION_START);
+        intent.putExtra(AttachmentDownloadService.EXTRA_DOWNLOAD_ID, downloadId);
+        intent.putExtra(AttachmentDownloadService.EXTRA_URL, url);
+        intent.putExtra(AttachmentDownloadService.EXTRA_CACHE_PATH, cachePath);
+        intent.putExtra(AttachmentDownloadService.EXTRA_TITLE, title);
+        intent.putExtra(AttachmentDownloadService.EXTRA_TOTAL_SIZE, totalSize == null ? 0L : totalSize);
+        try {
+            putHeadersExtra(intent, headers);
+        } catch (JSONException ex) {
+            activeDownloads.remove(downloadId);
+            call.reject("Invalid download headers", ex);
+            return;
+        }
+        ContextCompat.startForegroundService(getContext(), intent);
+    }
+
+    @PluginMethod
+    public void cancelDownload(PluginCall call) {
+        String downloadId = call.getString("downloadId");
+        if (downloadId != null) {
+            activeDownloads.remove(downloadId);
+            Intent intent = new Intent(getContext(), AttachmentDownloadService.class);
+            intent.setAction(AttachmentDownloadService.ACTION_CANCEL);
+            intent.putExtra(AttachmentDownloadService.EXTRA_DOWNLOAD_ID, downloadId);
+            getContext().startService(intent);
+        }
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    private void handleDownloadEvent(Intent intent) {
+        String downloadId = intent.getStringExtra(AttachmentDownloadService.EXTRA_DOWNLOAD_ID);
+        if (downloadId == null || downloadId.isEmpty()) return;
+        String action = intent.getAction();
+        if (AttachmentDownloadService.ACTION_PROGRESS.equals(action)) {
+            JSObject data = new JSObject();
+            data.put("downloadId", downloadId);
+            data.put("loaded", intent.getLongExtra(AttachmentDownloadService.EXTRA_LOADED, 0L));
+            data.put("total", intent.getLongExtra(AttachmentDownloadService.EXTRA_TOTAL, 0L));
+            data.put("percent", intent.getIntExtra(AttachmentDownloadService.EXTRA_PERCENT, 0));
+            notifyListeners("downloadProgress", data);
+            return;
+        }
+
+        PluginCall call = activeDownloads.remove(downloadId);
+        if (call == null) return;
+        if (AttachmentDownloadService.ACTION_COMPLETE.equals(action)) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            ret.put("uri", intent.getStringExtra(AttachmentDownloadService.EXTRA_URI));
+            call.resolve(ret);
+        } else if (AttachmentDownloadService.ACTION_ERROR.equals(action)) {
+            String message = intent.getStringExtra(AttachmentDownloadService.EXTRA_MESSAGE);
+            call.reject(message == null || message.isEmpty() ? "Download failed" : message);
+        }
     }
 
     private void uploadInBackground(
@@ -231,6 +353,22 @@ public class NativeAttachmentPlugin extends Plugin {
                 connection.setRequestProperty(key, value);
             }
         }
+    }
+
+    private void putHeadersExtra(Intent intent, JSObject headers) throws JSONException {
+        ArrayList<String> headerKeys = new ArrayList<>();
+        ArrayList<String> headerValues = new ArrayList<>();
+        Iterator<String> keys = headers.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            String value = headers.getString(key);
+            if (key != null && !key.isEmpty() && value != null) {
+                headerKeys.add(key);
+                headerValues.add(value);
+            }
+        }
+        intent.putStringArrayListExtra(AttachmentDownloadService.EXTRA_HEADER_KEYS, headerKeys);
+        intent.putStringArrayListExtra(AttachmentDownloadService.EXTRA_HEADER_VALUES, headerValues);
     }
 
     private void addPickedFile(JSArray files, Uri uri, int flags) {

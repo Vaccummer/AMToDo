@@ -21,7 +21,6 @@ from server.attachment_helpers import make_attachment_service
 from server.deps import get_clock, get_settings, get_uow
 from server.schemas import (
     AttachmentGetRequest,
-    AttachmentInitDownloadRequest,
     AttachmentInitUploadRequest,
     AttachmentListRequest,
     AttachmentRemoveOrphanedRequest,
@@ -72,35 +71,6 @@ def init_upload_attachment(
         plain_sha256=body.plain_sha256,
     )
     return {"ok": True, "token": token}
-
-
-@router.post("/attachment/init-download")
-def init_download_attachment(
-    body: AttachmentInitDownloadRequest,
-    request: Request,
-    uow: UowDep,
-    clock: ClockDep,
-) -> dict[str, object]:
-    """Create a one-time token for an authenticated attachment download."""
-    service = make_attachment_service(uow, clock, request, body.owner_type)
-    attachment = service.show(body.owner_id, body.attachment_id)
-    content_path = service.storage_path(attachment)
-    if not content_path.is_file():
-        raise HTTPException(404, "File not found")
-    file_size = content_path.stat().st_size
-    download_token_store = request.app.state.download_token_store
-    token = download_token_store.create(
-        owner_type=body.owner_type,
-        owner_id=body.owner_id,
-        user_id=uow.user_id,
-        attachment_id=body.attachment_id,
-    )
-    return {
-        "ok": True,
-        "token": token,
-        "file_size": file_size,
-        "plain_size_bytes": attachment.plain_size_bytes,
-    }
 
 
 @router.post("/attachment/list")
@@ -243,35 +213,29 @@ async def stream_upload_attachment(request: Request, token: str):
     return JSONResponse(result)
 
 
-@router.get("/attachment/{attachment_id}/download")
-async def stream_download_attachment(
+@router.get("/attachment/{owner_type}/{owner_id}/{attachment_id}/download")
+async def stream_download_attachment_bearer(
+    owner_type: str,
+    owner_id: int,
     attachment_id: int,
-    token: str,
     request: Request,
+    uow: UowDep,
+    clock: ClockDep,
 ):
-    """Stream-download an attachment using a one-time download token."""
-    download_token_store = request.app.state.download_token_store
-
-    # 1. Validate token
-    tok = download_token_store.get(token)
-    if not tok:
-        raise HTTPException(404, "Invalid or expired token")
-
-    # 2. Resolve attachment
-    from clock import SystemClock
-
-    clock = SystemClock()
-    db = request.app.state.db
-
-    with UnitOfWork(db, tok.user_id) as uow:
-        svc = make_attachment_service(uow, clock, request, tok.owner_type)
-        attachment = svc.show(tok.owner_id, tok.attachment_id)
-        content_path = svc.storage_path(attachment)
-
+    """Stream-download an attachment using the user's Bearer token."""
+    if owner_type not in {"todo", "schedule"}:
+        raise HTTPException(404, "Invalid attachment owner type")
+    svc = make_attachment_service(uow, clock, request, owner_type)
+    attachment = svc.show(owner_id, attachment_id)
+    content_path = svc.storage_path(attachment)
     if not content_path.exists():
         raise HTTPException(404, "File not found")
 
-    # 3. Stream file back. Browsers need MIME + byte ranges for reliable media previews.
+    return _stream_attachment_file(attachment, content_path, request)
+
+
+def _stream_attachment_file(attachment, content_path: Path, request: Request) -> StreamingResponse:
+    """Build a full or byte-range streaming response for an attachment file."""
     safe_name = attachment.filename.encode("ascii", errors="replace").decode("ascii")
     media_type = _download_media_type(attachment.mime_type, attachment.filename)
     file_size = content_path.stat().st_size

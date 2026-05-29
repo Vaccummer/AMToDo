@@ -8,8 +8,9 @@ export async function downloadWithProgress(
   url: string,
   onProgress?: (progress: DownloadProgress) => void,
   abortSignal?: AbortSignal,
+  headers?: Record<string, string>,
 ): Promise<ArrayBuffer> {
-  const resp = await fetch(url, { signal: abortSignal });
+  const resp = await fetch(url, { signal: abortSignal, headers });
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
 
   const contentLength = Number(resp.headers.get("Content-Length") || 0);

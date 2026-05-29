@@ -27,6 +27,20 @@ type SortOrder = "asc" | "desc";
 type TodoStatusFilter = "open" | "overdue" | "late-done" | "done";
 
 const TODO_STATUS_FILTERS: TodoStatusFilter[] = ["open", "overdue", "late-done", "done"];
+const NOT_SEARCHED_STATUS_TEXT = new Set(["尚未搜索", "Not searched yet"]);
+const NO_MATCH_STATUS_TEXT = new Set(["没有匹配结果", "No results found"]);
+const SEARCHING_STATUS_TEXT = new Set(["搜索中", "Searching..."]);
+const INVALID_ID_STATUS_TEXT = new Set(["请输入有效的数字 ID", "Please enter valid numeric IDs"]);
+const CONNECTION_FAILED_STATUS_TEXT = new Set(["连接失败", "Connection Failed"]);
+
+function getTodoStatusFilterOptions(t: (key: string) => string) {
+  return [
+    { value: "open", label: t("search.statusOpen") },
+    { value: "overdue", label: t("search.statusOverdue") },
+    { value: "late-done", label: t("search.statusLateDone") },
+    { value: "done", label: t("search.statusDone") }
+  ];
+}
 
 type SearchConfig = {
   mode: SearchMode;
@@ -459,6 +473,17 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   const results = resultsMap[mode].results;
   const total = resultsMap[mode].total;
   const status = resultsMap[mode].status;
+  function isNotSearchedStatus(value: string): boolean {
+    return NOT_SEARCHED_STATUS_TEXT.has(value);
+  }
+  function displayStatus(value: string): string {
+    if (NOT_SEARCHED_STATUS_TEXT.has(value)) return t("search.notSearched");
+    if (NO_MATCH_STATUS_TEXT.has(value)) return t("search.noMatch");
+    if (SEARCHING_STATUS_TEXT.has(value)) return t("search.searching");
+    if (INVALID_ID_STATUS_TEXT.has(value)) return t("search.invalidId");
+    if (CONNECTION_FAILED_STATUS_TEXT.has(value)) return t("common.connectionFailed");
+    return value;
+  }
   function setResults(items: ResultItem[] | ((prev: ResultItem[]) => ResultItem[])) {
     setResultsMap((prev) => {
       const current = prev[mode].results;
@@ -900,23 +925,23 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
   function getTodoCardStatus(todo: TodoItem): { label: string; className: string } {
     const overdue = isOverdueTodo(todo);
     const lateDone = Boolean(todo.completed && todo.due_at !== null && todo.completed_at !== null && todo.completed_at > todo.due_at);
-    if (overdue && !todo.completed) return { label: "逾期", className: "overdue" };
-    if (lateDone) return { label: "逾期完成", className: "late-done" };
-    if (todo.completed) return { label: "已完成", className: "done" };
+    if (overdue && !todo.completed) return { label: t("common.overdue"), className: "overdue" };
+    if (lateDone) return { label: t("common.overdueCompleted"), className: "late-done" };
+    if (todo.completed) return { label: t("common.completed"), className: "done" };
     return { label: "", className: "pending" };
   }
 
   function getScheduleCardStatus(schedule: ScheduleItem): { label: string; className: string } {
     const now = Math.floor(Date.now() / 1000);
-    if (schedule.end_at && schedule.end_at < now) return { label: "已完成", className: "done" };
-    if (schedule.start_at && schedule.start_at > now) return { label: "进行中", className: "pending" };
-    return { label: "进行中", className: "pending" };
+    if (schedule.end_at && schedule.end_at < now) return { label: t("common.completed"), className: "done" };
+    if (schedule.start_at && schedule.start_at > now) return { label: t("common.inProgress"), className: "pending" };
+    return { label: t("common.inProgress"), className: "pending" };
   }
 
   function getNotifyCardStatus(notify: NotificationItem): { label: string; className: string } {
     const now = Math.floor(Date.now() / 1000);
-    if (notify.trigger_at < now) return { label: "已完成", className: "done" };
-    return { label: "进行中", className: "pending" };
+    if (notify.trigger_at < now) return { label: t("common.completed"), className: "done" };
+    return { label: t("common.inProgress"), className: "pending" };
   }
 
   /* ============================================================
@@ -975,12 +1000,12 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
       {/* Results area */}
       <div className="ms-results-scroll">
         {/* Results meta: count + sort */}
-        {results.length > 0 || (status && status !== t("search.notSearched")) ? (
+        {results.length > 0 || (status && !isNotSearchedStatus(status)) ? (
           <div className="ms-results-meta">
             <span className="ms-results-count">
               {connectionStatus && (connectionStatus.status === "offline" || connectionStatus.status === "token-error")
                 ? (connectionStatus.status === "offline" ? t("common.connectionFailed") : t("common.authFailed"))
-                : status || `${results.length}/${total} ${t("common.items")}`}
+                : displayStatus(status) || `${results.length}/${total} ${t("common.items")}`}
             </span>
             <div className="ms-sort-controls">
               <Dropdown
@@ -1081,7 +1106,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                         <svg width="14" height="14" viewBox="0 0 1024 1024" className="ms-card-date-icon" aria-hidden="true">
                           <path d="M983.637333 302.933333A502.101333 502.101333 0 0 0 719.957333 40.106667C751.786667 15.189333 792.149333 0 836.010667 0 939.861333 0 1024 83.882667 1024 187.306667c0 43.690667-15.104 83.797333-40.362667 115.626666z m-7.68 207.104a459.264 459.264 0 0 1-126.72 316.928l64.853334 64.597334a47.36 47.36 0 1 1-67.157334 66.901333l-69.632-69.461333a462.762667 462.762667 0 0 1-265.386666 83.285333 462.762667 462.762667 0 0 1-264.704-82.944l-69.290667 68.949333a47.872 47.872 0 0 1-67.84-67.584l64.341333-64.170666A459.264 459.264 0 0 1 47.957333 510.037333C47.957333 254.805333 255.744 47.786667 512 47.786667c256.256 0 464.042667 207.018667 464.042667 462.250666z m-271.957333 47.786667a47.872 47.872 0 1 0 0-95.573333H560.042667V255.146667a47.872 47.872 0 0 0-96.085334 0v254.976c0 26.453333 21.504 47.786667 48.042667 47.786666h192zM41.216 309.504A189.781333 189.781333 0 0 1 0 191.146667 191.658667 191.658667 0 0 1 192 0c44.8 0 85.930667 15.36 118.613333 40.96A512.853333 512.853333 0 0 0 41.216 309.504z" fill="#FA6935" />
                         </svg>
-                        <span className="ms-card-date-text">{todo.due_at !== null ? formatSearchTodoDate(todo.due_at) : "无截止日期"}</span>
+                        <span className="ms-card-date-text">{todo.due_at !== null ? formatSearchTodoDate(todo.due_at) : t("common.noDueDate")}</span>
                       </span>
                     ) : null}
                     {todo.completed_at ? (
@@ -1139,11 +1164,11 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                           <span className="ms-card-schedule-id">No.{schedule.id}</span>
                         </div>
                         <div className="ms-card-schedule-time-row">
-                          <span className="ms-card-schedule-time-label">起</span>
+                          <span className="ms-card-schedule-time-label">{t("common.startShort")}</span>
                           <span className="ms-card-schedule-time-value">{formatScheduleDate(schedule.start_at)}</span>
                         </div>
                         <div className="ms-card-schedule-time-row">
-                          <span className="ms-card-schedule-time-label">止</span>
+                          <span className="ms-card-schedule-time-label">{t("common.endShort")}</span>
                           <span className="ms-card-schedule-time-value">{formatScheduleDate(schedule.end_at)}</span>
                         </div>
                         <div className="ms-card-schedule-footer">
@@ -1214,7 +1239,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
 
           {/* Empty states */}
           {results.length === 0 && (
-            status === t("search.notSearched") ? (
+            isNotSearchedStatus(status) ? (
               <div className="ms-empty-initial">
                 <span className="ms-empty-title">{t("search.searchDimension")}</span>
                 <span className="ms-empty-desc">{t("search.searchDimensionHint")}</span>
@@ -1400,12 +1425,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
                     <button type="button" className="ms-filter-group-reset" onClick={resetTodoFilters}>{t("common.reset")}</button>
                   </div>
                   <div className="ms-filter-chips">
-                    {[
-                      { value: "open", label: "未完成" },
-                      { value: "overdue", label: "已逾期" },
-                      { value: "late-done", label: "逾期完成" },
-                      { value: "done", label: "已完成" }
-                    ].map((opt) => (
+                    {getTodoStatusFilterOptions(t).map((opt) => (
                       <button
                         key={opt.value}
                         type="button"

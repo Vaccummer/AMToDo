@@ -41,6 +41,24 @@
   border-bottom-color: var(--global-surface-line);
 }
 
+.mobile-shell .filter-tabs {
+  border: 1px solid rgba(209, 199, 186, 0.62);
+  background: rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.mobile-shell .filter-tabs button {
+  background: rgba(255, 255, 255, 0.32);
+  color: rgba(52, 47, 42, 0.62);
+}
+
+.mobile-shell .filter-tabs button.active {
+  background: var(--status-primary-base);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(52, 47, 42, 0.08);
+}
+
 .filter-tabs {
   display: inline-flex;
   border: 1px solid var(--global-surface-warm-4);

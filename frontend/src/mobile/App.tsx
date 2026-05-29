@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, type HealthResponse, type TodoItem, type ScheduleItem, type NotificationItem } from "../api/client";
+import { AMToDoApi, type HealthResponse, type UserResponse, type TodoItem, type ScheduleItem, type NotificationItem } from "../api/client";
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "../api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "../api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "../config";
 import { type UISettings, DEFAULT_SETTINGS, parseSettings } from "../lib/settings";
 import { dateKeyFromEpoch, setDefaultTimezone } from "../lib/time";
 import { applyTheme, getTheme, DEFAULT_THEME } from "../themes";
+import { isBackgroundWsAvailable, requestBackgroundWsNotificationPermission, startBackgroundWs, stopBackgroundWs } from "../lib/background-ws";
 import { I18nProvider, createTranslator } from "../i18n";
 import { SettingsModal } from "./views/SettingsModal";
 import { ScheduleView } from "./views/ScheduleView";
@@ -55,6 +56,7 @@ export function App() {
   const [trashKey, setTrashKey] = useState(0);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserResponse["user"] | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("checking");
   const [pendingAction, setPendingAction] = useState<{
     type: "todo" | "schedule" | "notify";
@@ -202,6 +204,7 @@ export function App() {
       connectionManagerRef.current.reportIdle();
       setApi(new AMToDoApi(settings.server_url, settings.access_token));
       setHealth(null);
+      setCurrentUser(null);
       setConnectionStatus("offline");
       return;
     }
@@ -226,6 +229,10 @@ export function App() {
 
       const limits = result.limits;
 
+      const userResult = await baseApi.verifyTokenHttp();
+      if (cancelled) return;
+      setCurrentUser(userResult.user);
+
       // Phase 2: Connect UI WebSocket
       const wsClient = new UiWsClient(
         settings.server_url,
@@ -249,6 +256,7 @@ export function App() {
 
       const unsubNotif = wsClient.onNotification((notification) => {
         if (cancelled) return;
+        if (isBackgroundWsAvailable()) return;
         handleWsNotification(notification);
       });
 
@@ -299,6 +307,7 @@ export function App() {
         const kind = error instanceof TypeError ? "network" : "token";
         mgr.reportHealthError(kind, message);
         setHealth(null);
+        setCurrentUser(null);
         setHealthError(message);
         setConnectionStatus("offline");
         scheduleRetry();
@@ -316,7 +325,30 @@ export function App() {
     };
   }, [settings.server_url, settings.access_token, settings.ws_enabled]);
 
-  // Disconnect WS when app goes to background, reconnect on foreground
+  useEffect(() => {
+    if (!isBackgroundWsAvailable()) return;
+    if (!settings.ws_enabled || !settings.server_url || !settings.access_token) {
+      stopBackgroundWs().catch(() => {});
+      return;
+    }
+    if (settings.notification_enabled) {
+      requestBackgroundWsNotificationPermission().catch(() => false);
+    }
+    startBackgroundWs({
+      serverUrl: settings.server_url,
+      accessToken: settings.access_token,
+      reconnectIntervalMs: settings.ws_reconnect_interval_ms,
+    }).catch((err: unknown) => {
+      connectionManagerRef.current.reportHealthError(
+        "network",
+        err instanceof Error ? err.message : "Background WebSocket start failed"
+      );
+    });
+  }, [settings.server_url, settings.access_token, settings.ws_enabled, settings.ws_reconnect_interval_ms, settings.notification_enabled]);
+
+  // Keep the UI WebSocket alive while backgrounded; Android native services now
+  // handle long-running background work, and the UI connection can resume if the
+  // system or network closes it.
   useEffect(() => {
     let listenerHandle: { remove: () => Promise<void> } | undefined;
     let aborted = false;
@@ -336,8 +368,6 @@ export function App() {
               );
             });
           }
-        } else {
-          ws.disconnect();
         }
       }).then((handle) => {
         if (!aborted) listenerHandle = handle;
@@ -383,6 +413,11 @@ export function App() {
       global_hotkey: s.global_hotkey,
       notification_silent: String(s.notification_silent),
       notification_timeout: s.notification_timeout,
+      ws_enabled: String(s.ws_enabled),
+      ws_reconnect_retries: String(s.ws_reconnect_retries),
+      reconnect_max_attempts: String(s.reconnect_max_attempts),
+      notify_on_disconnect: String(s.notify_on_disconnect),
+      ws_reconnect_interval_ms: String(s.ws_reconnect_interval_ms),
     }).catch(() => {});
   }, []);
 
@@ -394,6 +429,46 @@ export function App() {
     trash: tApp("tab.trash"),
     settings: tApp("settings.title"),
   };
+
+  function connectionBlockInfo() {
+    switch (connStatus.status) {
+      case "online":
+        return null;
+      case "checking":
+        return {
+          title: tApp("mobile.connection.connectingTitle"),
+          desc: tApp("mobile.connection.connectingDesc"),
+          tone: "working" as const,
+        };
+      case "reconnecting":
+        return {
+          title: tApp("mobile.connection.reconnectingTitle"),
+          desc: connStatus.errorMessage || tApp("mobile.connection.reconnectingDesc"),
+          tone: "working" as const,
+        };
+      case "token-error":
+        return {
+          title: tApp("mobile.connection.tokenTitle"),
+          desc: connStatus.errorMessage || tApp("mobile.connection.tokenDesc"),
+          tone: "error" as const,
+        };
+      case "idle":
+        return {
+          title: tApp("mobile.connection.idleTitle"),
+          desc: tApp("mobile.connection.idleDesc"),
+          tone: "idle" as const,
+        };
+      case "offline":
+      default:
+        return {
+          title: tApp("mobile.connection.offlineTitle"),
+          desc: connStatus.errorMessage || healthError || tApp("mobile.connection.offlineDesc"),
+          tone: "error" as const,
+        };
+    }
+  }
+
+  const connectionBlock = activeTab !== "settings" ? connectionBlockInfo() : null;
 
   return (
     <I18nProvider locale={settings.language}>
@@ -409,6 +484,9 @@ export function App() {
             onDateChange={handleTodoDateChange}
             pendingAction={pendingAction?.type === "todo" ? pendingAction : null}
             onPendingActionConsumed={() => setPendingAction(null)}
+            connectionStatus={connStatus}
+            onOpenSettings={() => navigateTab("settings")}
+            isActive={activeTab === "schedule"}
           />
         </div>
         <div style={{ display: activeTab === "schedule" ? "contents" : "none" }}>
@@ -424,17 +502,54 @@ export function App() {
             onNavigate={handleMentionNavigate}
             pendingAction={pendingAction?.type === "schedule" || pendingAction?.type === "notify" ? pendingAction : null}
             onPendingActionConsumed={() => setPendingAction(null)}
+            connectionStatus={connStatus}
+            onOpenSettings={() => navigateTab("settings")}
+            isActive={activeTab === "todo"}
           />
         </div>
         <div style={{ display: activeTab === "search" ? "contents" : "none" }}>
-          <SearchView api={api} onNavigate={(target, dateKey) => {
+          <SearchView api={api} connectionStatus={connStatus} onOpenSettings={() => navigateTab("settings")} onNavigate={(target, dateKey) => {
             if (dateKey) navigateTab(target as Tab);
           }} />
         </div>
         {/* Trash: remount on entry via key */}
         {activeTab === "trash" && (
-          <TrashView key={trashKey} api={api} onItemClick={(type, item) => setEditingTrashItem({ type, item })} />
+          <TrashView
+            key={trashKey}
+            api={api}
+            connectionStatus={connStatus}
+            onOpenSettings={() => navigateTab("settings")}
+            onItemClick={(type, item) => setEditingTrashItem({ type, item })}
+          />
         )}
+
+        {connectionBlock ? (
+          <div className={`mobile-connection-block ${connectionBlock.tone}`} role="status" aria-live="polite">
+            <div className="mobile-connection-block-card">
+              <div className="mobile-connection-block-icon">
+                {connectionBlock.tone === "working" ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M21 12a9 9 0 0 1-9 9m0-18a9 9 0 0 1 9 9" />
+                    <path d="M3 12a9 9 0 0 1 9-9m0 18a9 9 0 0 1-9-9" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                )}
+              </div>
+              <div className="mobile-connection-block-body">
+                <div className="mobile-connection-block-title">{connectionBlock.title}</div>
+                <div className="mobile-connection-block-desc">{connectionBlock.desc}</div>
+              </div>
+              <button type="button" className="mobile-connection-block-btn" onClick={() => navigateTab("settings")}>
+                {tApp("mobile.connection.openSettings")}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </main>
 
       <nav className="mobile-tab-bar">
@@ -456,6 +571,8 @@ export function App() {
         <SettingsModal
           settings={settings}
           connectionStatus={connStatus}
+          health={health}
+          currentUser={currentUser}
           onUpdateField={(fields) => {
             setSettings((prev) => {
               const next = { ...prev, ...fields };

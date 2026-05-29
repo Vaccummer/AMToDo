@@ -21,14 +21,14 @@ type Props = {
 };
 
 export function DatePicker({ value, onChange, placeholder, hasError, theme = "green", panelAlign = "left", id }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const WEEKDAY_LABELS = [t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat"), t("common.weekdaySun")];
 
   function fmtDisplay(dateKey: string): string {
     if (!dateKey) return "";
     const [y, m, d] = dateKey.split("-").map(Number);
-    const weekday = formatDateKeyWeekday(dateKey);
+    const weekday = formatDateKeyWeekday(dateKey, locale);
     const yy = String(y).slice(-2);
     return `${yy}/${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")} ${weekday}`;
   }
@@ -85,8 +85,8 @@ export function DatePicker({ value, onChange, placeholder, hasError, theme = "gr
   }, [open]);
 
   const monthLabel = useMemo(
-    () => monthLabelFromDateKey(dateKeyFromParts(viewYear, viewMonth, 1)),
-    [viewYear, viewMonth]
+    () => monthLabelFromDateKey(dateKeyFromParts(viewYear, viewMonth, 1), locale),
+    [locale, viewYear, viewMonth]
   );
 
   const days = useMemo(() => {

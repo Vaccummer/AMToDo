@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from config import DEFAULT_DOWNLOAD_TOKEN_TTL_SECONDS, DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, server_root
+from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, server_root
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
@@ -233,17 +233,14 @@ def create_app(settings: AppSettings) -> FastAPI:
     resolved_attachment_root.mkdir(parents=True, exist_ok=True)
     app.state.attachment_root = resolved_attachment_root
 
-    # Upload/download token stores for streaming attachment transfer
-    from services.upload_tokens import DownloadTokenStore, UploadTokenStore
+    # Upload token store for authenticated streaming attachment uploads.
+    from services.upload_tokens import UploadTokenStore
 
     temp_root = Path(DEFAULT_UPLOAD_TEMP_ROOT)
     temp_root.mkdir(parents=True, exist_ok=True)
     app.state.upload_token_store = UploadTokenStore(
         temp_root=temp_root,
         ttl_seconds=DEFAULT_UPLOAD_TOKEN_TTL_SECONDS,
-    )
-    app.state.download_token_store = DownloadTokenStore(
-        ttl_seconds=DEFAULT_DOWNLOAD_TOKEN_TTL_SECONDS,
     )
 
     if settings.rate_limit_requests > 0:

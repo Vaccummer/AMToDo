@@ -1,5 +1,21 @@
 /* ── Mobile Shell ── */
 
+html,
+body,
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .mobile-shell {
   width: 100vw;
   height: 100dvh;
@@ -69,12 +85,111 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .mobile-content > * {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* ── Connection blocking overlay ── */
+
+.mobile-connection-block {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--global-surface-bg, #faf7f2) 78%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  pointer-events: auto;
+}
+
+.mobile-connection-block-card {
+  width: min(360px, 100%);
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(209, 199, 186, 0.72);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 36px rgba(52, 47, 42, 0.14);
+}
+
+.mobile-connection-block-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #4a6fa5;
+  background: rgba(74, 111, 165, 0.1);
+  border: 1px solid rgba(74, 111, 165, 0.18);
+}
+
+.mobile-connection-block.error .mobile-connection-block-icon {
+  color: #c2586d;
+  background: rgba(194, 88, 109, 0.1);
+  border-color: rgba(194, 88, 109, 0.2);
+}
+
+.mobile-connection-block.idle .mobile-connection-block-icon {
+  color: #8c8277;
+  background: rgba(140, 130, 119, 0.1);
+  border-color: rgba(140, 130, 119, 0.2);
+}
+
+.mobile-connection-block.working .mobile-connection-block-icon svg {
+  animation: mobile-connection-spin 1.2s linear infinite;
+}
+
+.mobile-connection-block-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.mobile-connection-block-body {
+  min-width: 0;
+}
+
+.mobile-connection-block-title {
+  color: var(--global-text-primary, #342f2a);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.mobile-connection-block-desc {
+  margin-top: 5px;
+  color: var(--global-text-secondary, #5c5650);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mobile-connection-block-btn {
+  grid-column: 1 / -1;
+  height: 40px;
+  border: none;
+  border-radius: 11px;
+  background: var(--status-primary-base, #1a7f72);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-connection-block-btn:active {
+  transform: scale(0.98);
+}
+
+@keyframes mobile-connection-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── Bottom Tab Bar (Concept E: Dark Frosted) ── */
@@ -303,9 +418,14 @@
 
 /* TODAY highlight */
 .mobile-shell .hero-card.is-today {
-  background: rgba(26, 127, 114, 0.1);
-  border-color: rgba(26, 127, 114, 0.25);
-  box-shadow: 0 0 0 1px rgba(26, 127, 114, 0.12);
+  background: linear-gradient(135deg, var(--status-primary-base, #1a7f72), #14967e);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: none;
+  color: #fff;
+}
+
+.mobile-shell .hero-card.is-today::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, transparent 48%);
 }
 
 .mobile-shell .hero-left {
@@ -327,7 +447,7 @@
 }
 
 .mobile-shell .hero-card.is-today .hero-weekday {
-  color: rgba(26, 127, 114, 0.9);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .mobile-shell .hero-date-big {
@@ -340,18 +460,65 @@
 }
 
 .mobile-shell .hero-card.is-today .hero-date-big {
-  color: var(--status-primary-base, #1a7f72);
+  color: #fff;
 }
 
 .mobile-shell .hero-month-year {
   font-size: 12px;
   color: rgba(26, 127, 114, 0.55);
   font-weight: 500;
-  margin-top: 2px;
 }
 
 .mobile-shell .hero-card.is-today .hero-month-year {
-  color: rgba(26, 127, 114, 0.65);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mobile-shell .hero-month-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.mobile-shell .hero-calendar-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  display: inline-grid;
+  place-items: center;
+  color: rgba(26, 127, 114, 0.72);
+  background: rgba(26, 127, 114, 0.1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-shell .hero-calendar-btn:active {
+  transform: scale(0.94);
+}
+
+.mobile-shell .hero-calendar-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mobile-shell .hero-card.is-today .hero-calendar-btn {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mobile-shell .hero-card.is-today .hero-ring-bg {
+  stroke: rgba(255, 255, 255, 0.22);
+}
+
+.mobile-shell .hero-card.is-today .hero-ring-fill {
+  stroke: #f5d78c;
+}
+
+.mobile-shell .hero-card.is-today .hero-ring-center {
+  color: #fff;
 }
 
 .mobile-shell .hero-right {
@@ -1110,6 +1277,41 @@
   font-size: 0.75rem;
   color: #9a9ab0;
   line-height: 1.35;
+}
+
+.mobile-shell .settings-cache-metric-row {
+  align-items: center;
+  min-height: 68px;
+  cursor: default;
+}
+
+.mobile-shell .settings-cache-metric-row:active {
+  background: transparent;
+}
+
+.mobile-shell .settings-cache-metric-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mobile-shell .settings-cache-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: #9a9ab0;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.mobile-shell .settings-cache-metric span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Row right */
@@ -3672,6 +3874,7 @@
   font-size: 14px;
   outline: none;
   box-sizing: border-box;
+  cursor: text;
 }
 
 .dirpicker-filename-field {
@@ -3682,14 +3885,19 @@
   align-items: center;
   column-gap: 8px;
   padding: 0 12px;
-  border: 1px solid var(--global-border);
+  border: 1.5px solid var(--global-surface-border, #d1c7ba);
   border-radius: 10px;
-  background: var(--global-bg);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 1px 2px rgba(52, 47, 42, 0.04);
   box-sizing: border-box;
+  cursor: text;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .dirpicker-filename-field:focus-within {
-  border-color: var(--global-accent);
+  border-color: var(--status-primary-base, var(--global-accent));
+  background: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-primary-base, #1a7f72) 13%, transparent);
 }
 
 .dirpicker-filename-label {

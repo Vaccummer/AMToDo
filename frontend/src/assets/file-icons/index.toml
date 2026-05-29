@@ -1,0 +1,208 @@
+[option]
+default = '''
+<svg t="1779973756209" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="21871" width="256" height="256"><path d="M0 0h1024v1024H0V0z" fill="#202425" opacity=".01" p-id="21872"></path><path d="M102.4 68.266667a34.133333 34.133333 0 0 1 34.133333-34.133334h750.933334a34.133333 34.133333 0 0 1 34.133333 34.133334v634.402133a34.133333 34.133333 0 0 1-10.001067 24.132267l-253.064533 253.064533a34.133333 34.133333 0 0 1-24.132267 10.001067H136.533333a34.133333 34.133333 0 0 1-34.133333-34.133334V68.266667z" fill="#11AA66" p-id="21873"></path><path d="M238.933333 238.933333a34.133333 34.133333 0 0 1 34.133334-34.133333h477.866666a34.133333 34.133333 0 1 1 0 68.266667H273.066667a34.133333 34.133333 0 0 1-34.133334-34.133334z m0 204.8a34.133333 34.133333 0 0 1 34.133334-34.133333h477.866666a34.133333 34.133333 0 1 1 0 68.266667H273.066667a34.133333 34.133333 0 0 1-34.133334-34.133334z m34.133334 170.666667a34.133333 34.133333 0 1 0 0 68.266667h204.8a34.133333 34.133333 0 1 0 0-68.266667H273.066667z" fill="#FFFFFF" p-id="21874"></path><path d="M648.533333 750.933333a34.133333 34.133333 0 0 1 34.133334-34.133333h230.7072a3.413333 3.413333 0 0 1 2.389333 5.802667l-261.393067 261.461333a3.413333 3.413333 0 0 1-5.8368-2.423467V750.933333z" fill="#FFAA44" p-id="21875"></path></svg>'''
+
+[map_dict]
+"archive" = [
+  ".7z",
+  ".tar",
+  ".zip",
+  ".rar",
+  ".gz",
+  ".bz2",
+  ".xz",
+  ".tgz",
+  ".tbz2",
+  ".txz",
+  ".zst",
+  ".lz",
+  ".lzma",
+  ".cab",
+  ".iso",
+  ".dmg",
+  ".apk",
+  ".ipa"
+]
+"audio" = [
+  ".mp3",
+  ".wav",
+  ".flac",
+  ".aac",
+  ".m4a",
+  ".ogg",
+  ".opus",
+  ".wma",
+  ".aiff",
+  ".mid",
+  ".midi"
+]
+"binary" = [
+  ".bin",
+  ".dat",
+  ".dump",
+  ".img",
+  ".raw",
+  ".pak",
+  ".blob",
+  ".pickle",
+  ".pkl",
+  ".npy",
+  ".npz"
+]
+"c" = [".c"]
+"code" = [
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".kts",
+  ".swift",
+  ".cs",
+  ".php",
+  ".rb",
+  ".r",
+  ".jl",
+  ".scala",
+  ".dart",
+  ".lua",
+  ".pl",
+  ".pm",
+  ".ex",
+  ".exs",
+  ".erl",
+  ".hrl",
+  ".fs",
+  ".fsx",
+  ".vb",
+  ".m",
+  ".mm",
+  ".zig",
+  ".nim",
+  ".clj",
+  ".cljs",
+  ".hs",
+  ".ml",
+  ".mli",
+  ".tex"
+]
+"config" = [
+  ".toml",
+  ".json",
+  ".jsonc",
+  ".ini",
+  ".cfg",
+  ".conf",
+  ".config",
+  ".properties",
+  ".props",
+  ".env",
+  ".lock",
+  ".editorconfig",
+  ".gitignore",
+  ".gitattributes",
+  ".npmrc",
+  ".yarnrc",
+  ".prettierrc",
+  ".eslintrc",
+  ".babelrc",
+  ".yaml",
+  ".yml"
+]
+"cpp" = [".cpp", ".cc", ".cxx", ".c++"]
+"database" = [
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  ".duckdb",
+  ".mdb",
+  ".accdb",
+  ".sql",
+  ".parquet",
+  ".arrow",
+  ".avro",
+  ".orc"
+]
+"document" = [
+  ".doc",
+  ".docx",
+  ".odt",
+  ".rtf",
+  ".txt",
+  ".text",
+  ".log",
+  ".pages"
+]
+"executable" = [
+  ".exe",
+  ".msi",
+  ".bat",
+  ".cmd",
+  ".com",
+  ".run",
+  ".app",
+  ".appimage",
+  ".deb",
+  ".rpm"
+]
+"font" = [".ttf", ".otf", ".woff", ".woff2", ".eot"]
+"header" = [".h", ".hh", ".hpp", ".hxx", ".h++"]
+"library" = [
+  ".dll",
+  ".so",
+  ".dylib",
+  ".lib",
+  ".a",
+  ".jar",
+  ".war",
+  ".ear",
+  ".class",
+  ".pyc",
+  ".pyd",
+  ".o",
+  ".obj"
+]
+"markdown" = [".md"]
+"notebook" = [".ipynb"]
+"pdf" = [".pdf"]
+"presentation" = [".ppt", ".pptx", ".odp", ".key"]
+"python" = [".py", ".pyw", ".pyi"]
+"script" = [
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".fish",
+  ".ps1",
+  ".psm1",
+  ".psd1",
+  ".vbs",
+  ".awk",
+  ".sed"
+]
+"table" = [
+  ".csv",
+  ".tsv",
+  ".xls",
+  ".xlsx",
+  ".xlsm",
+  ".ods",
+  ".numbers",
+  ".feather",
+  ".h5",
+  ".hdf5"
+]
+"web" = [
+  ".html",
+  ".htm",
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".vue",
+  ".svelte",
+  ".xml",
+  ".xhtml"
+]
