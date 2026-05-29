@@ -1,115 +1,135 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../../api/client";
-import type { HealthResponse } from "../../api/client";
+import type { HealthResponse, UserResponse } from "../../api/client";
 import type { ConnectionStatusSnapshot } from "../../api/connection-status";
 import { clearAttachmentCache, getCacheSize } from "../../lib/attachmentCache";
 import { clearDiskCache, getDiskCacheSize, isNative as isNativePlatform } from "../../lib/attachmentDiskCache";
+import { clearCaptureTempMedia, getCaptureTempMediaSize } from "../../lib/captureTempMediaCache";
 import type { UISettings } from "../../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../../themes";
 import { Dropdown } from "./Dropdown";
 import { useConfirm } from "./ConfirmDialog";
 import { setMainStatusBar, setSettingsStatusBar } from "../statusBar";
+import { useI18n } from "../../i18n";
 
 // ── Mobile-specific text (not shared with desktop i18n) ──
 
-const MOB = {
-  title: "设置",
-  tabConnection: "连接",
-  tabGeneral: "通用",
-  tabNotification: "通知",
+function createMobileSettingsText(t: (key: string, params?: Record<string, string | number>) => string) {
+  return {
+  title: t("settings.title"),
+  tabConnection: t("settings.tabConnection"),
+  tabGeneral: t("settings.tabGeneral"),
+  tabNotification: t("settings.tabNotification"),
   // General
-  appearance: "外观",
-  theme: "主题",
-  chooseTheme: "选择配色方案",
-  language: "语言",
-  fontSize: "字体大小",
-  calendar: "日历",
-  weekStart: "每周起始",
-  sunday: "周日",
-  monday: "周一",
-  scheduler: "时间规划器",
-  scheduleStart: "起始时间",
-  scheduleEnd: "结束时间",
-  slotMinutes: "时间槽间隔",
-  slotLabel: (n: number) => `${n} 分钟`,
-  scheduleWarn: "起始时间须早于结束时间",
-  globalHotkey: "全局快捷键",
-  hotkeyEnabled: "启用快捷键",
-  hotkeyCombo: "快捷键组合",
-  pressHotkey: "请按下快捷键...",
-  clickToRecord: "点击后按下快捷键",
-  hotkeyHint: "需含至少一个修饰键",
-  hotkeyRegFailed: "注册失败",
-  clearHotkey: "清除",
-  cache: "缓存",
-  attachmentCache: "附件缓存",
-  cacheDetail: (count: number, size: string) => `${count} 个文件 · ${size}`,
-  cacheLoading: "加载中...",
-  clearCache: "清除",
-  clearingCache: "清除中...",
-  clearCacheConfirm: "确定清除所有附件缓存？下次查看需重新下载。",
-  timezone: "时区",
+  appearance: t("settings.mobileAppearance"),
+  theme: t("settings.theme"),
+  chooseTheme: t("settings.mobileChooseTheme"),
+  language: t("settings.language"),
+  fontSize: t("settings.mobileFontSize"),
+  calendar: t("settings.mobileCalendar"),
+  weekStart: t("settings.weekStart"),
+  sunday: t("settings.sunday"),
+  monday: t("settings.monday"),
+  scheduler: t("settings.mobileScheduler"),
+  scheduleStart: t("settings.scheduleStart"),
+  scheduleEnd: t("settings.scheduleEnd"),
+  slotMinutes: t("settings.slotMinutes"),
+  slotLabel: (n: number) => t("settings.slotMinutesLabel", { n }),
+  scheduleWarn: t("settings.scheduleStartBeforeEnd"),
+  globalHotkey: t("settings.globalHotkey"),
+  hotkeyEnabled: t("settings.mobileHotkeyEnabled"),
+  hotkeyCombo: t("settings.hotkeyCombo"),
+  pressHotkey: t("settings.pressHotkey"),
+  clickToRecord: t("settings.clickToRecordHotkey"),
+  hotkeyHint: t("settings.hotkeyHint"),
+  hotkeyRegFailed: t("settings.hotkeyRegisterFailed"),
+  clearHotkey: t("settings.clearHotkey"),
+  cache: t("settings.cache"),
+  attachmentCache: t("settings.attachmentCache"),
+  captureTempMedia: t("settings.mobileCaptureTempMedia"),
+  cacheDetail: (count: number, size: string) => t("settings.mobileCacheDetail", { count, size }),
+  cacheFileCount: (count: number) => t("settings.mobileCacheFileCount", { count }),
+  cacheLoading: t("settings.cacheLoading"),
+  clearCache: t("settings.clearCache"),
+  clearCacheAction: t("common.clear"),
+  clearingCache: t("settings.clearingCache"),
+  clearCacheConfirm: t("settings.clearCacheConfirm"),
+  clearCaptureTempConfirm: t("settings.mobileClearCaptureTempConfirm"),
+  timezone: t("settings.timezone"),
   // Connection
-  connToggle: "连接开关",
-  connConnected: "已连接",
-  connDisconnected: "未连接",
-  lanAddress: "内网地址",
-  fetch: "获取",
-  fetching: "获取中...",
-  serverUrl: "服务器地址",
-  serverInfo: "服务器",
-  serverInfoUnavailable: "无法获取服务器信息",
-  serverPending: "待检测",
-  configureConnection: "连接配置",
-  connect: "连接",
-  disconnect: "断开连接",
-  reconnectNow: "立即重连",
-  connecting: "连接中...",
-  interrupted: "连接中途断开",
-  interruptedDesc: "保留上次验证信息，正在自动重连",
-  address: "地址",
-  userCreated: "用户创建",
-  unknownUser: "已验证用户",
-  unverified: "未验证",
-  retryState: "重连状态",
-  currentStep: "当前步骤",
-  unavailable: "不可用",
-  tokenStep: "验证 Token",
-  check: "检测",
-  checking: "检测中...",
-  accessToken: "访问令牌",
-  verify: "验证",
-  verifying: "验证中...",
-  enterToken: "输入令牌",
-  checkServerFirst: "请先检测服务器",
-  maxReconnect: "最大重连",
-  disconnectNotify: "断开提醒",
-  connSuccess: "连接成功",
+  connToggle: t("settings.mobileConnectionSwitch"),
+  connConnected: t("settings.mobileConnected"),
+  connDisconnected: t("settings.mobileDisconnected"),
+  lanAddress: t("settings.lanAddress"),
+  fetch: t("settings.fetch"),
+  fetching: t("settings.fetching"),
+  serverUrl: t("settings.serverUrl"),
+  serverInfo: t("settings.mobileServerInfo"),
+  serverName: t("settings.mobileServerName"),
+  serverVersion: t("settings.mobileServerVersion"),
+  serverInfoUnavailable: t("settings.mobileServerInfoUnavailable"),
+  serverPending: t("settings.mobilePendingCheck"),
+  userName: t("settings.mobileUserName"),
+  userId: t("settings.mobileUserId"),
+  attachmentLimit: t("settings.mobileAttachmentLimit"),
+  configureConnection: t("settings.mobileConfigureConnection"),
+  connect: t("settings.mobileConnect"),
+  disconnect: t("settings.mobileDisconnect"),
+  reconnectNow: t("settings.mobileReconnectNow"),
+  connecting: t("settings.mobileConnecting"),
+  interrupted: t("settings.mobileInterrupted"),
+  interruptedDesc: t("settings.mobileInterruptedDesc"),
+  address: t("settings.mobileAddress"),
+  userCreated: t("settings.mobileUserCreated"),
+  unknownUser: t("settings.mobileUnknownUser"),
+  unverified: t("settings.mobileUnverified"),
+  retryState: t("settings.mobileRetryState"),
+  currentStep: t("settings.currentStep"),
+  unavailable: t("settings.mobileUnavailable"),
+  tokenStep: t("settings.accessToken"),
+  check: t("settings.check"),
+  checking: t("settings.checking"),
+  accessToken: t("settings.accessToken"),
+  verify: t("settings.verify"),
+  verifying: t("settings.verifying"),
+  enterToken: t("settings.mobileEnterToken"),
+  checkServerFirst: t("settings.checkServerFirst"),
+  maxReconnect: t("settings.maxReconnect"),
+  disconnectNotify: t("settings.disconnectNotify"),
+  connSuccess: t("settings.connectionSuccess"),
   connSuccessDesc: (name: string, ver: string) => `${name} v${ver}`,
-  connFailed: "连接失败",
-  connFailedDesc: "请检查地址与网络",
-  responseFormatError: "响应格式异常",
-  verifyingToken: "验证中...",
-  tokenValid: "令牌有效",
-  userLabel: "用户: ",
-  tokenInvalid: "令牌无效",
-  tokenInvalidDesc: "令牌被拒绝，请确认或重新生成",
-  tokenVerifyFailed: "验证失败",
-  detectingConn: "正在检测连接...",
+  connFailed: t("settings.connectionFailed"),
+  connFailedDesc: t("settings.connectionFailedDesc"),
+  responseFormatError: t("settings.responseFormatError"),
+  verifyingToken: t("settings.verifyingToken"),
+  tokenValid: t("settings.tokenValid"),
+  userLabel: t("settings.userLabel"),
+  tokenInvalid: t("settings.tokenInvalid"),
+  tokenInvalidDesc: t("settings.tokenInvalidDesc"),
+  tokenVerifyFailed: t("settings.tokenVerifyFailed"),
+  detectingConn: t("settings.detectingConnection"),
+  connectionOnlineDesc: t("settings.mobileConnectionOnlineDesc"),
+  checkingServerDesc: t("settings.mobileCheckingServerDesc"),
+  verifyingTokenDesc: t("settings.mobileVerifyingTokenDesc"),
+  establishingRealtimeDesc: t("settings.mobileEstablishingRealtimeDesc"),
+  connectionIdleDesc: t("settings.mobileConnectionIdleDesc"),
+  realtimeOnline: t("settings.mobileRealtimeOnline"),
+  maxSuffix: t("settings.mobileMaxSuffix"),
   // Notification
-  notifyTitle: "通知",
-  notifyEnabled: "通知已开启",
-  notifyDisabled: "通知已关闭",
-  notifyEnabledDesc: "通过 WebSocket 实时推送",
-  notifyDisabledDesc: "开启后实时接收通知",
-  notifyToggle: "通知开关",
-  silentMode: "静默模式",
-  silentModeDesc: "不播放提示音",
-  timeout: "弹窗策略",
-  timeoutDesc: "通知弹窗显示方式",
-  autoTimeout: "自动消失",
-  neverTimeout: "常驻显示",
-};
+  notifyTitle: t("settings.tabNotification"),
+  notifyEnabled: t("settings.notificationEnabled"),
+  notifyDisabled: t("settings.notificationDisabled"),
+  notifyEnabledDesc: t("settings.notificationEnabledDesc"),
+  notifyDisabledDesc: t("settings.notificationDisabledDesc"),
+  notifyToggle: t("settings.notificationToggle"),
+  silentMode: t("settings.silentMode"),
+  silentModeDesc: t("settings.silentModeDesc"),
+  timeout: t("settings.timeout"),
+  timeoutDesc: t("settings.timeoutDesc"),
+  autoTimeout: t("settings.autoTimeout"),
+  neverTimeout: t("settings.neverTimeout"),
+  };
+}
 
 // ── SVG Icons ──
 
@@ -185,12 +205,16 @@ type Props = {
   onClose: () => void;
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
+  health?: HealthResponse | null;
+  currentUser?: UserResponse["user"] | null;
   onConnectionToggle?: (enabled: boolean) => void;
 };
 
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, health, currentUser, onConnectionToggle }: Props) {
+  const { t, locale } = useI18n();
+  const MOB = useMemo(() => createMobileSettingsText(t), [t]);
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -205,6 +229,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const [connectionPage, setConnectionPage] = useState<"overview" | "config">("overview");
   const [connDescExpanded, setConnDescExpanded] = useState(false);
   const connectionPageRef = useRef<"overview" | "config">("overview");
+  const onCloseRef = useRef(onClose);
 
   // Connection
   const [wsEnabled, setWsEnabled] = useState(initial.ws_enabled);
@@ -227,6 +252,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // Cache
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
+  const [captureTempSize, setCaptureTempSize] = useState<{ count: number; bytes: number } | null>(null);
+  const [clearingCaptureTemp, setClearingCaptureTemp] = useState(false);
 
   // Notification
   const [notifyEnabled, setNotifyEnabled] = useState(initial.notification_enabled);
@@ -266,13 +293,30 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     }
   }, []);
 
+  const loadCaptureTempSize = useCallback(async () => {
+    if (!isNativePlatform()) {
+      setCaptureTempSize({ count: 0, bytes: 0 });
+      return;
+    }
+    try {
+      setCaptureTempSize(await getCaptureTempMediaSize());
+    } catch {
+      setCaptureTempSize(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
-  }, [loadCacheSize]);
+    loadCaptureTempSize().catch(() => setCaptureTempSize(null));
+  }, [loadCacheSize, loadCaptureTempSize]);
 
   useEffect(() => {
     connectionPageRef.current = connectionPage;
   }, [connectionPage]);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // Auto-revert wsEnabled if connection fails after user toggle
   useEffect(() => {
@@ -292,24 +336,33 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   useEffect(() => {
     // Push a history entry so Android back gesture/button closes the modal
     history.pushState({ settingsModal: true }, "");
-    const handlePopState = () => {
+    const handleBack = (fromPopState: boolean) => {
       if (connectionPageRef.current === "config") {
         setConnectionPage("overview");
-        history.pushState({ settingsModal: true }, "");
+        if (fromPopState) history.pushState({ settingsModal: true }, "");
         return;
       }
-      onClose();
+      onCloseRef.current();
     };
+    const handlePopState = () => handleBack(true);
     window.addEventListener("popstate", handlePopState);
+
+    let capacitorHandle: { remove: () => Promise<void> } | undefined;
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("backButton", () => handleBack(false)).then((handle) => {
+        capacitorHandle = handle;
+      });
+    }).catch(() => {});
 
     // Match status bar to settings background
     setSettingsStatusBar();
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      capacitorHandle?.remove();
       setMainStatusBar();
     };
-  }, [onClose]);
+  }, []);
 
   // ── Connection logic ──
 
@@ -524,6 +577,25 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     }
   }
 
+  async function handleClearCaptureTemp() {
+    const ok = await ask({
+      title: MOB.clearCache,
+      message: MOB.clearCaptureTempConfirm,
+      confirmLabel: MOB.clearCache,
+      danger: true,
+    });
+    if (!ok) return;
+    setClearingCaptureTemp(true);
+    try {
+      await clearCaptureTempMedia();
+      await loadCaptureTempSize();
+    } catch {
+      // ignore
+    } finally {
+      setClearingCaptureTemp(false);
+    }
+  }
+
   useEffect(() => {
     if (hotkeyEnabled && hotkeyValue) {
       window.amtodoShell?.registerHotkey?.(hotkeyValue)?.then?.((result: { ok: boolean; error?: string }) => {
@@ -636,7 +708,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   function formatUserCreated(ts?: number): string {
     if (!ts) return MOB.serverPending;
-    return new Date(ts * 1000).toLocaleDateString("zh-CN", {
+    return new Date(ts * 1000).toLocaleDateString(locale === "en" ? "en" : "zh-CN", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -669,14 +741,16 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   }
 
   const serverOk = urlCheckResult?.kind === "ok" ? urlCheckResult : null;
-  const serverName = serverOk?.name || connectionStatus?.serverName || MOB.serverInfoUnavailable;
-  const serverVersion = serverOk?.version || connectionStatus?.serverVersion || MOB.serverPending;
-  const serverTitle = serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion
-    ? `${serverName} · v${serverVersion}`
-    : MOB.serverInfoUnavailable;
-  const hasReliableServerInfo = Boolean(serverOk || connectionStatus?.serverName || connectionStatus?.serverVersion);
-  const userText = tokenResult?.ok ? `${tokenResult.userName} · #${tokenResult.userId}` : (connectionStatus?.status === "online" ? MOB.unknownUser : MOB.unverified);
-  const userCreatedText = tokenResult?.ok ? formatUserCreated(tokenResult.createdAt) : MOB.serverPending;
+  const serverName = serverOk?.name || health?.name || connectionStatus?.serverName || MOB.serverInfoUnavailable;
+  const serverVersion = serverOk?.version || health?.version || connectionStatus?.serverVersion || MOB.serverPending;
+  const hasReliableServerInfo = Boolean(serverOk || health || connectionStatus?.serverName || connectionStatus?.serverVersion);
+  const verifiedUser = tokenResult?.ok
+    ? { id: tokenResult.userId, name: tokenResult.userName, created_at: tokenResult.createdAt }
+    : currentUser;
+  const userNameText = verifiedUser?.name || (connectionStatus?.status === "online" ? MOB.unknownUser : MOB.unverified);
+  const userIdText = verifiedUser ? `No.${verifiedUser.id}` : MOB.serverPending;
+  const userCreatedText = verifiedUser ? formatUserCreated(verifiedUser.created_at) : MOB.serverPending;
+  const maxAttachmentSizeBytes = serverOk?.maxAttachmentSizeBytes ?? health?.limits?.max_attachment_size_bytes;
   const viewState = getConnectionViewState();
   const isWorking = viewState === "connecting";
   const canStartConnection = !isWorking;
@@ -724,13 +798,13 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   }
 
   function connectionDescription(): string {
-    if (viewState === "online") return "HTTP 健康检查通过，WebSocket 实时通道在线";
+    if (viewState === "online") return MOB.connectionOnlineDesc;
     if (viewState === "connecting") {
-      if (!hasReliableServerInfo) return "正在检测服务器，服务器信息暂不可用";
-      return tokenVerifying ? "服务器已响应，正在验证访问令牌" : "正在建立实时连接";
+      if (!hasReliableServerInfo) return MOB.checkingServerDesc;
+      return tokenVerifying ? MOB.verifyingTokenDesc : MOB.establishingRealtimeDesc;
     }
     if (viewState === "interrupted") return MOB.interruptedDesc;
-    if (viewState === "idle") return "连接未启用，点击连接开始验证服务器和令牌";
+    if (viewState === "idle") return MOB.connectionIdleDesc;
     return connectionStatus?.errorMessage || (tokenResult?.ok === false ? tokenResult.message : MOB.connFailedDesc);
   }
 
@@ -772,17 +846,29 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         ) : null}
 
         <div className="settings-conn-grid">
-          <div className="settings-conn-tile wide">
-            <span>{MOB.serverInfo}</span>
-            <strong>{hasReliableServerInfo ? serverTitle : MOB.serverInfoUnavailable}</strong>
+          <div className="settings-conn-tile">
+            <span>{MOB.serverName}</span>
+            <strong>{hasReliableServerInfo ? serverName : MOB.serverInfoUnavailable}</strong>
           </div>
           <div className="settings-conn-tile">
-            <span>{MOB.userLabel.replace(/[:：]\s*$/, "")}</span>
-            <strong>{userText}</strong>
+            <span>{MOB.serverVersion}</span>
+            <strong>{hasReliableServerInfo ? `v${serverVersion}` : MOB.serverPending}</strong>
+          </div>
+          <div className="settings-conn-tile">
+            <span>{MOB.userName}</span>
+            <strong>{userNameText}</strong>
+          </div>
+          <div className="settings-conn-tile">
+            <span>{MOB.userId}</span>
+            <strong>{userIdText}</strong>
           </div>
           <div className="settings-conn-tile">
             <span>{MOB.userCreated}</span>
             <strong>{userCreatedText}</strong>
+          </div>
+          <div className="settings-conn-tile">
+            <span>{MOB.attachmentLimit}</span>
+            <strong>{maxAttachmentSizeBytes ? formatSize(maxAttachmentSizeBytes) : MOB.serverPending}</strong>
           </div>
           <div className="settings-conn-tile wide">
             <span>{MOB.address}</span>
@@ -792,12 +878,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
         <div className="settings-conn-meta">
           <div className="settings-conn-meta-row">
-            <span>{MOB.attachmentCache}</span>
-            <strong>{serverOk?.maxAttachmentSizeBytes ? formatSize(serverOk.maxAttachmentSizeBytes) : MOB.serverPending}</strong>
-          </div>
-          <div className="settings-conn-meta-row">
             <span>{MOB.retryState}</span>
-            <strong>{viewState === "interrupted" ? `${reconnectMaxAttempts} max` : (viewState === "online" ? "实时通道在线" : MOB.serverPending)}</strong>
+            <strong>{viewState === "interrupted" ? `${reconnectMaxAttempts} ${MOB.maxSuffix}` : (viewState === "online" ? MOB.realtimeOnline : MOB.serverPending)}</strong>
           </div>
         </div>
 
@@ -956,7 +1038,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         <div className="settings-modal-header">
           <div className="settings-modal-header-left">
             {connectionPage === "config" ? (
-              <button type="button" className="settings-modal-back" onClick={() => setConnectionPage("overview")} aria-label="返回">
+              <button type="button" className="settings-modal-back" onClick={() => setConnectionPage("overview")} aria-label={t("common.previous")}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="15 18 9 12 15 6" />
                 </svg>
@@ -965,7 +1047,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className="settings-modal-dot" />
             <h2 className="settings-modal-title">{connectionPage === "config" ? MOB.configureConnection : MOB.title}</h2>
           </div>
-          <button type="button" className="settings-modal-close" onClick={onClose} aria-label="关闭">
+          <button type="button" className="settings-modal-close" onClick={onClose} aria-label={t("common.close")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -1025,23 +1107,47 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 <span className="settings-sw-knob" />
               </button>
             </div>
-            <div className="settings-row">
-              <span className="settings-row-label">{MOB.attachmentCache}</span>
-              <div className="settings-row-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="settings-row-hint" style={{ margin: 0 }}>
-                  {cacheSize
-                    ? MOB.cacheDetail(cacheSize.count, formatSize(cacheSize.bytes))
-                    : MOB.cacheLoading}
-                </span>
-                <button
-                  type="button"
-                  className="settings-cache-clear-btn"
-                  disabled={clearingCache || !cacheSize || cacheSize.count === 0}
-                  onClick={handleClearCache}
-                >
-                  {clearingCache ? MOB.clearingCache : MOB.clearCache}
-                </button>
+            <div className="settings-row settings-cache-metric-row">
+              <div className="settings-cache-metric-main">
+                <span className="settings-row-label">{MOB.attachmentCache}</span>
+                {cacheSize ? (
+                  <span className="settings-cache-metric">
+                    <span>{formatSize(cacheSize.bytes)}</span>
+                    <span>{MOB.cacheFileCount(cacheSize.count)}</span>
+                  </span>
+                ) : (
+                  <span className="settings-row-hint">{MOB.cacheLoading}</span>
+                )}
               </div>
+              <button
+                type="button"
+                className="settings-cache-clear-btn"
+                disabled={clearingCache || !cacheSize || cacheSize.count === 0}
+                onClick={handleClearCache}
+              >
+                {clearingCache ? MOB.clearingCache : MOB.clearCacheAction}
+              </button>
+            </div>
+            <div className="settings-row settings-cache-metric-row">
+              <div className="settings-cache-metric-main">
+                <span className="settings-row-label">{MOB.captureTempMedia}</span>
+                {captureTempSize ? (
+                  <span className="settings-cache-metric">
+                    <span>{formatSize(captureTempSize.bytes)}</span>
+                    <span>{MOB.cacheFileCount(captureTempSize.count)}</span>
+                  </span>
+                ) : (
+                  <span className="settings-row-hint">{MOB.cacheLoading}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="settings-cache-clear-btn"
+                disabled={clearingCaptureTemp || !captureTempSize || captureTempSize.count === 0}
+                onClick={handleClearCaptureTemp}
+              >
+                {clearingCaptureTemp ? MOB.clearingCache : MOB.clearCacheAction}
+              </button>
             </div>
           </div> : null}
 

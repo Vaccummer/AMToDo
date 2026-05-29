@@ -17,9 +17,10 @@ type Props = {
   onSelect: (dateKey: string) => void;
   onClose: () => void;
   weekStart?: number;
+  inline?: boolean;
 };
 
-export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect, onClose, weekStart = 0 }: Props) {
+export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect, onClose, weekStart = 0, inline = false }: Props) {
   const { t } = useI18n();
 
   const WEEKDAY_LABELS_SUN = [t("common.weekdaySun"), t("common.weekdayMon"), t("common.weekdayTue"), t("common.weekdayWed"), t("common.weekdayThu"), t("common.weekdayFri"), t("common.weekdaySat")];
@@ -121,7 +122,7 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
     onClose();
   }
 
-  return createPortal(
+  const popup = (
     <div
       className="calendar-popup calendar-popup-mobile"
       ref={popupRef}
@@ -176,7 +177,8 @@ export function CalendarPopup({ selectedDateKey, todayKey, anchorRect, onSelect,
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
+
+  return inline ? popup : createPortal(popup, document.body);
 }

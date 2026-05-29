@@ -2,8 +2,8 @@
  * Disk-based attachment cache using @capacitor/filesystem.
  *
  * Directory layout:
- *   attachment-cache/{user_id}/attachment/todo/{attachment_id}
- *   attachment-cache/{user_id}/attachment/schedule/{attachment_id}
+ *   attachment-cache/{user_id}/attachment/todo/{todo_id}/{attachment_id}
+ *   attachment-cache/{user_id}/attachment/schedule/{schedule_id}/{attachment_id}
  *
  * Flow:
  * 1. Check disk cache → if exists, return file URI
@@ -19,6 +19,7 @@ import write_blob from "capacitor-blob-writer";
 import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
 import type { AttachmentDownloadChunkResponse } from "../api/client";
 import type { DownloadProgress } from "./chunked-download";
+import { downloadNativeAttachmentWithProgress, isNativeAttachmentDownloadAvailable } from "./native-attachment";
 
 type CacheableMeta = AttachmentMetadata | ScheduleAttachmentMetadata;
 
@@ -29,16 +30,27 @@ const metaIndex = new Map<string, { updated_at: number; plain_size_bytes: number
 const WS_CHUNK_SIZE = 256 * 1024;
 type DownloadChunkFn = (offset: number, length: number) => Promise<AttachmentDownloadChunkResponse>;
 
-/** e.g. "3/attachment/todo/42.mp4" */
+/** e.g. "3/attachment/todo/12/42.mp4" */
 export function getAttachmentCachePath(meta: CacheableMeta): string {
   const ownerType = "todo_id" in meta ? "todo" : "schedule";
   const ownerId = "todo_id" in meta ? (meta as AttachmentMetadata).todo_id : (meta as ScheduleAttachmentMetadata).schedule_id;
-  return `${meta.user_id}/attachment/${ownerType}/${meta.id}${extensionFor(meta.filename)}`;
+  return `${meta.user_id}/attachment/${ownerType}/${ownerId}/${meta.id}${extensionFor(meta.filename)}`;
 }
 
-function legacyCachePathFor(meta: CacheableMeta): string {
+function legacyCachePathsFor(meta: CacheableMeta): string[] {
   const ownerType = "todo_id" in meta ? "todo" : "schedule";
-  return `${meta.user_id}/attachment/${ownerType}/${meta.id}`;
+  return [
+    `${meta.user_id}/attachment/${ownerType}/${meta.id}${extensionFor(meta.filename)}`,
+    `${meta.user_id}/attachment/${ownerType}/${meta.id}`,
+  ];
+}
+
+function cacheFilePath(path: string): string {
+  return `${CACHE_DIR}/${path}`;
+}
+
+function partialCacheFilePath(path: string): string {
+  return `${cacheFilePath(path)}.part`;
 }
 
 function extensionFor(filename: string): string {
@@ -53,7 +65,7 @@ export function isNative(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-/** Ensure the full directory tree exists for a cache path like "3/attachment/todo/42" */
+/** Ensure the full directory tree exists for a cache path like "3/attachment/todo/12/42" */
 async function ensureParentDir(filePath: string): Promise<void> {
   // filePath looks like "3/attachment/todo/42" — we need "3/attachment/todo" to exist
   const parts = filePath.split("/");
@@ -76,14 +88,15 @@ async function getCachedUri(path: string, meta: CacheableMeta): Promise<string |
 
   // Invalidate if metadata changed (file re-uploaded)
   if (cached && (cached.updated_at !== meta.updated_at || cached.plain_size_bytes !== meta.plain_size_bytes)) {
-    try { await Filesystem.deleteFile({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache }); } catch { /* */ }
+    try { await Filesystem.deleteFile({ path: cacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
+    try { await Filesystem.deleteFile({ path: partialCacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
     metaIndex.delete(path);
     return null;
   }
 
   // Verify file exists on disk (also handles cold start when metaIndex is empty)
   try {
-    await Filesystem.stat({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
+    await Filesystem.stat({ path: cacheFilePath(path), directory: Directory.Cache });
   } catch {
     metaIndex.delete(path);
     return null;
@@ -94,7 +107,7 @@ async function getCachedUri(path: string, meta: CacheableMeta): Promise<string |
     metaIndex.set(path, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
   }
 
-  const uri = await Filesystem.getUri({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
+  const uri = await Filesystem.getUri({ path: cacheFilePath(path), directory: Directory.Cache });
   return Capacitor.convertFileSrc(uri.uri);
 }
 
@@ -127,7 +140,7 @@ async function writeContent(
 
   metaIndex.set(path, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
 
-  const uri = await Filesystem.getUri({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
+  const uri = await Filesystem.getUri({ path: cacheFilePath(path), directory: Directory.Cache });
   return Capacitor.convertFileSrc(uri.uri);
 }
 
@@ -140,14 +153,16 @@ async function nativeDownloadToDisk(
 ): Promise<string> {
   if (abortSignal?.aborted) throw new Error("Download aborted");
 
-  const outPath = `${CACHE_DIR}/${cachePath}`;
+  const outPath = cacheFilePath(cachePath);
+  const partPath = partialCacheFilePath(cachePath);
   await ensureParentDir(cachePath);
-  try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* no existing partial */ }
+  try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* no existing complete file */ }
+  try { await Filesystem.deleteFile({ path: partPath, directory: Directory.Cache }); } catch { /* no existing partial */ }
 
   try {
     const expected = Math.max(meta.plain_size_bytes || 0, 0);
     if (expected === 0) {
-      await Filesystem.writeFile({ path: outPath, data: "", directory: Directory.Cache, recursive: true });
+      await Filesystem.writeFile({ path: partPath, data: "", directory: Directory.Cache, recursive: true });
     }
 
     let loaded = 0;
@@ -164,9 +179,9 @@ async function nativeDownloadToDisk(
       const chunkSize = chunk.bytes_read || base64ByteLength(data);
       if (chunkSize === 0) throw new Error("Download incomplete: empty range response");
       if (loaded === 0) {
-        await Filesystem.writeFile({ path: outPath, data, directory: Directory.Cache, recursive: true });
+        await Filesystem.writeFile({ path: partPath, data, directory: Directory.Cache, recursive: true });
       } else {
-        await Filesystem.appendFile({ path: outPath, data, directory: Directory.Cache });
+        await Filesystem.appendFile({ path: partPath, data, directory: Directory.Cache });
       }
       loaded = chunk.next_offset || (loaded + chunkSize);
       done = chunk.done;
@@ -178,9 +193,8 @@ async function nativeDownloadToDisk(
     }
     if (abortSignal?.aborted) throw new Error("Download aborted");
 
-    const stat = await Filesystem.stat({ path: outPath, directory: Directory.Cache });
+    const stat = await Filesystem.stat({ path: partPath, directory: Directory.Cache });
     if (total > 0 && stat.size < total) {
-      try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
       throw new Error(`Download incomplete: received ${stat.size} of ${total} bytes`);
     }
     onProgress?.({
@@ -189,11 +203,12 @@ async function nativeDownloadToDisk(
       percent: 100,
     });
 
+    try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* no existing complete file */ }
+    await Filesystem.rename({ from: partPath, to: outPath, directory: Directory.Cache, toDirectory: Directory.Cache });
     metaIndex.set(cachePath, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
     const resultUri = await Filesystem.getUri({ path: outPath, directory: Directory.Cache });
     return Capacitor.convertFileSrc(resultUri.uri);
   } catch (err) {
-    try { await Filesystem.deleteFile({ path: outPath, directory: Directory.Cache }); } catch { /* */ }
     throw err;
   }
 }
@@ -212,6 +227,7 @@ export async function getAttachmentUri(
   abortSignal?: AbortSignal,
   downloadUrl?: string,
   downloadChunk?: DownloadChunkFn,
+  downloadHeaders?: Record<string, string>,
 ): Promise<{ uri: string; cacheHit: boolean }> {
   const path = getAttachmentCachePath(metadata);
 
@@ -220,9 +236,24 @@ export async function getAttachmentUri(
     onProgress?.({ loaded: metadata.plain_size_bytes, total: metadata.plain_size_bytes, percent: 100 });
     return { uri: cachedUri, cacheHit: true };
   }
-  try {
-    await Filesystem.deleteFile({ path: `${CACHE_DIR}/${legacyCachePathFor(metadata)}`, directory: Directory.Cache });
-  } catch { /* discard old extensionless cache files */ }
+  await deleteLegacyCachedAttachment(metadata);
+
+  // Android path: native Foreground Service downloads over HTTPS Range to app cache.
+  // This survives WebView backgrounding and keeps JS memory constant.
+  if (isNative() && downloadUrl && isNativeAttachmentDownloadAvailable()) {
+    const result = await downloadNativeAttachmentWithProgress(
+      downloadUrl,
+      `${CACHE_DIR}/${path}`,
+      metadata.filename,
+      metadata.plain_size_bytes,
+      onProgress,
+      abortSignal,
+      downloadHeaders,
+    );
+    metaIndex.set(path, { updated_at: metadata.updated_at, plain_size_bytes: metadata.plain_size_bytes });
+    onProgress?.({ loaded: metadata.plain_size_bytes, total: metadata.plain_size_bytes, percent: 100 });
+    return { uri: Capacitor.convertFileSrc(result.uri), cacheHit: false };
+  }
 
   // Native path: authenticated WebSocket chunk download to cache (constant JS memory)
   if (isNative() && downloadChunk) {
@@ -274,16 +305,40 @@ export async function getCachedAttachmentUri(metadata: CacheableMeta): Promise<s
   return getCachedUri(getAttachmentCachePath(metadata), metadata);
 }
 
+export async function hasCachedAttachmentOrPartial(metadata: CacheableMeta): Promise<boolean> {
+  if (!isNative()) return false;
+  const paths = [getAttachmentCachePath(metadata), ...legacyCachePathsFor(metadata)];
+  for (const path of paths) {
+    try {
+      await Filesystem.stat({ path: cacheFilePath(path), directory: Directory.Cache });
+      return true;
+    } catch { /* try partial */ }
+    try {
+      await Filesystem.stat({ path: partialCacheFilePath(path), directory: Directory.Cache });
+      return true;
+    } catch { /* try next path */ }
+  }
+  return false;
+}
+
 /**
  * Delete a specific cached attachment from disk.
  */
 export async function deleteCachedAttachment(metadata: CacheableMeta): Promise<void> {
   if (!isNative()) return;
   const path = getAttachmentCachePath(metadata);
-  try { await Filesystem.deleteFile({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache }); } catch { /* */ }
+  try { await Filesystem.deleteFile({ path: cacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
+  try { await Filesystem.deleteFile({ path: partialCacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
   metaIndex.delete(path);
-  try { await Filesystem.deleteFile({ path: `${CACHE_DIR}/${legacyCachePathFor(metadata)}`, directory: Directory.Cache }); } catch { /* */ }
-  metaIndex.delete(legacyCachePathFor(metadata));
+  await deleteLegacyCachedAttachment(metadata);
+}
+
+async function deleteLegacyCachedAttachment(metadata: CacheableMeta): Promise<void> {
+  for (const legacyPath of legacyCachePathsFor(metadata)) {
+    try { await Filesystem.deleteFile({ path: cacheFilePath(legacyPath), directory: Directory.Cache }); } catch { /* */ }
+    try { await Filesystem.deleteFile({ path: partialCacheFilePath(legacyPath), directory: Directory.Cache }); } catch { /* */ }
+    metaIndex.delete(legacyPath);
+  }
 }
 
 /**
@@ -294,11 +349,11 @@ export async function getNativeFilePath(metadata: CacheableMeta): Promise<string
   if (!isNative()) return null;
   const path = getAttachmentCachePath(metadata);
   try {
-    await Filesystem.stat({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
+    await Filesystem.stat({ path: cacheFilePath(path), directory: Directory.Cache });
   } catch {
     return null;
   }
-  const uri = await Filesystem.getUri({ path: `${CACHE_DIR}/${path}`, directory: Directory.Cache });
+  const uri = await Filesystem.getUri({ path: cacheFilePath(path), directory: Directory.Cache });
   return uri.uri;
 }
 

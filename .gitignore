@@ -45,3 +45,4 @@ frontend/*.html
 !frontend/mobile.html
 db/
 tmp/
+icons/

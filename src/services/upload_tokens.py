@@ -1,4 +1,4 @@
-"""Token-based upload/download negotiation for streaming attachment transfer."""
+"""Token-based upload negotiation for streaming attachment transfer."""
 
 from __future__ import annotations
 
@@ -20,16 +20,6 @@ class UploadToken:
     plain_sha256: str | None
     created_at: float
     temp_path: Path
-
-
-@dataclass
-class DownloadToken:
-    token: str
-    owner_type: str           # "todo" | "schedule"
-    owner_id: int
-    user_id: int
-    attachment_id: int
-    created_at: float
 
 
 class UploadTokenStore:
@@ -86,40 +76,3 @@ class UploadTokenStore:
         for t in expired:
             v = self._tokens.pop(t)
             v.temp_path.unlink(missing_ok=True)
-
-
-class DownloadTokenStore:
-    """In-memory download token store with TTL-based cleanup."""
-
-    def __init__(self, ttl_seconds: int = 60):
-        self._tokens: dict[str, DownloadToken] = {}
-        self._ttl = ttl_seconds
-
-    def create(
-        self,
-        owner_type: str,
-        owner_id: int,
-        user_id: int,
-        attachment_id: int,
-    ) -> str:
-        self._evict_expired()
-        token = secrets.token_urlsafe(32)
-        self._tokens[token] = DownloadToken(
-            token=token,
-            owner_type=owner_type,
-            owner_id=owner_id,
-            user_id=user_id,
-            attachment_id=attachment_id,
-            created_at=time.time(),
-        )
-        return token
-
-    def get(self, token: str) -> DownloadToken | None:
-        self._evict_expired()
-        return self._tokens.get(token)
-
-    def _evict_expired(self):
-        now = time.time()
-        expired = [t for t, v in self._tokens.items() if now - v.created_at > self._ttl]
-        for t in expired:
-            self._tokens.pop(t)

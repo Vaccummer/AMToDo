@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMToDo Today Hero Options</title>
+  <style>
+    :root {
+      --bg: #faf7f2;
+      --panel: #ffffff;
+      --text: #342f2a;
+      --muted: #8c8277;
+      --primary: #1a7f72;
+      --primary-2: #14967e;
+      --gold: #c4a33a;
+      --gold-deep: #8a6d1b;
+      --amber: #d97706;
+      --line: #e4ddd3;
+      --shadow: 0 12px 28px rgba(52, 47, 42, 0.08);
+      font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #efe9df;
+      color: var(--text);
+      display: grid;
+      place-items: start center;
+      padding: 24px 12px;
+    }
+
+    .phone {
+      width: min(430px, 100%);
+      min-height: 820px;
+      background: var(--bg);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 28px 60px rgba(48, 42, 36, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+    }
+
+    .status-strip {
+      height: 20px;
+      background: var(--bg);
+    }
+
+    .screen-title {
+      padding: 12px 20px 4px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .intro {
+      padding: 0 20px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .demo-list {
+      display: grid;
+      gap: 16px;
+      padding: 0 0 28px;
+    }
+
+    .demo-section {
+      padding: 0 20px;
+    }
+
+    .section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 2px 7px;
+      color: #74685d;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .section-label span:last-child {
+      color: #a09888;
+      font-weight: 650;
+    }
+
+    .hero {
+      min-height: 88px;
+      border-radius: 16px;
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .left {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      z-index: 1;
+    }
+
+    .weekday {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 2px;
+    }
+
+    .date {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .month {
+      margin-top: 3px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1;
+    }
+
+    .ring {
+      width: 60px;
+      height: 60px;
+      position: relative;
+      flex: none;
+    }
+
+    .ring svg {
+      width: 60px;
+      height: 60px;
+      transform: rotate(-90deg);
+    }
+
+    .ring .bg {
+      fill: none;
+      stroke-width: 4;
+      stroke: rgba(26, 127, 114, 0.16);
+    }
+
+    .ring .fg {
+      fill: none;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke: var(--primary);
+      stroke-dasharray: 110 157;
+    }
+
+    .ring-center {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 850;
+      font-family: "Cascadia Mono", "JetBrains Mono", monospace;
+    }
+
+    .badge {
+      height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .baseline {
+      background: rgba(26, 127, 114, 0.1);
+      border: 1px solid rgba(26, 127, 114, 0.25);
+      box-shadow: 0 0 0 1px rgba(26, 127, 114, 0.12);
+    }
+
+    .baseline::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(26, 127, 114, 0.1), transparent 52%);
+      pointer-events: none;
+    }
+
+    .baseline .weekday,
+    .baseline .date {
+      color: var(--primary);
+    }
+
+    .baseline .month {
+      color: rgba(26, 127, 114, 0.65);
+    }
+
+    .option-a {
+      background:
+        linear-gradient(90deg, rgba(26, 127, 114, 0.16), rgba(255, 255, 255, 0.72)),
+        #fffdf8;
+      border: 1px solid rgba(26, 127, 114, 0.32);
+      box-shadow: var(--shadow), inset 4px 0 0 var(--primary);
+    }
+
+    .option-a .weekday {
+      color: #12685f;
+    }
+
+    .option-a .date {
+      color: #125f56;
+    }
+
+    .option-a .month {
+      color: rgba(18, 95, 86, 0.68);
+    }
+
+    .option-a .badge {
+      background: rgba(26, 127, 114, 0.12);
+      color: #12685f;
+    }
+
+    .option-b {
+      background:
+        radial-gradient(circle at 84% 18%, rgba(255, 255, 255, 0.28), transparent 34%),
+        linear-gradient(135deg, #1a7f72, #14967e);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: 0 16px 34px rgba(26, 127, 114, 0.28);
+      color: #fff;
+    }
+
+    .option-b .weekday,
+    .option-b .month {
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .option-b .date,
+    .option-b .ring-center {
+      color: #fff;
+    }
+
+    .option-b .ring .bg {
+      stroke: rgba(255, 255, 255, 0.22);
+    }
+
+    .option-b .ring .fg {
+      stroke: #f5d78c;
+    }
+
+    .option-c {
+      background:
+        linear-gradient(135deg, rgba(245, 215, 140, 0.22), rgba(250, 247, 242, 0.95)),
+        #fffdf7;
+      border: 1px solid rgba(196, 163, 58, 0.5);
+      box-shadow: 0 10px 24px rgba(138, 109, 27, 0.12);
+    }
+
+    .option-c::after {
+      content: "今天";
+      position: absolute;
+      top: 11px;
+      right: 15px;
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      background: rgba(196, 163, 58, 0.15);
+      color: var(--gold-deep);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .option-c .weekday {
+      color: var(--gold-deep);
+    }
+
+    .option-c .date {
+      color: #6f5414;
+    }
+
+    .option-c .month {
+      color: rgba(111, 84, 20, 0.68);
+    }
+
+    .option-c .ring .bg {
+      stroke: rgba(196, 163, 58, 0.2);
+    }
+
+    .option-c .ring .fg {
+      stroke: var(--gold);
+    }
+
+    .option-d {
+      background: #fff;
+      border: 1px solid rgba(229, 223, 215, 0.9);
+      box-shadow: var(--shadow);
+    }
+
+    .option-d::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 70px;
+      background: linear-gradient(180deg, #1a7f72, #14967e);
+      z-index: -1;
+    }
+
+    .option-d .left {
+      padding-left: 4px;
+    }
+
+    .option-d .weekday,
+    .option-d .date,
+    .option-d .month {
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    }
+
+    .option-d .right {
+      flex: 1;
+      justify-content: flex-end;
+    }
+
+    .option-d .badge {
+      margin-right: 4px;
+      background: rgba(26, 127, 114, 0.1);
+      color: var(--primary);
+    }
+
+    .option-e {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58)),
+        rgba(250, 247, 242, 0.74);
+      border: 1px solid rgba(255, 255, 255, 0.82);
+      box-shadow: 0 14px 32px rgba(52, 47, 42, 0.12), inset 0 0 0 1px rgba(26, 127, 114, 0.16);
+      backdrop-filter: blur(18px);
+    }
+
+    .option-e::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      bottom: 12px;
+      width: 5px;
+      border-radius: 99px;
+      background: linear-gradient(180deg, var(--primary), var(--gold));
+    }
+
+    .option-e .left {
+      padding-left: 14px;
+    }
+
+    .option-e .weekday {
+      color: #12685f;
+    }
+
+    .option-e .date {
+      color: #1f4f49;
+    }
+
+    .option-e .month {
+      color: rgba(31, 79, 73, 0.62);
+    }
+
+    .option-e .badge {
+      background: rgba(245, 215, 140, 0.22);
+      color: #7a5c08;
+    }
+
+    .notes {
+      margin: 4px 20px 20px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(209, 199, 186, 0.5);
+      color: #6b6056;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <div class="status-strip"></div>
+    <div class="screen-title">待办页今日顶部部件方案</div>
+    <div class="intro">这些方案只演示 selectedDateKey 为 todayKey 时的样式。尺寸、信息结构、进度环都贴近当前移动端组件。</div>
+
+    <div class="demo-list">
+      <section class="demo-section">
+        <div class="section-label"><span>当前基准</span><span>绿色弱强调</span></div>
+        <div class="hero baseline">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">2026年5月</span>
+          </div>
+          <div class="right">
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-section">
+        <div class="section-label"><span>方案 A</span><span>左侧色带 + 白底卡片</span></div>
+        <div class="hero option-a">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">2026年5月</span>
+          </div>
+          <div class="right">
+            <span class="badge">今天</span>
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-section">
+        <div class="section-label"><span>方案 B</span><span>整卡主色填充</span></div>
+        <div class="hero option-b">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">2026年5月</span>
+          </div>
+          <div class="right">
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-section">
+        <div class="section-label"><span>方案 C</span><span>金色今日标签</span></div>
+        <div class="hero option-c">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">2026年5月</span>
+          </div>
+          <div class="right">
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-section">
+        <div class="section-label"><span>方案 D</span><span>日期区强块面</span></div>
+        <div class="hero option-d">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">5月</span>
+          </div>
+          <div class="right">
+            <span class="badge">今天的待办</span>
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-section">
+        <div class="section-label"><span>方案 E</span><span>玻璃卡 + 双色指示条</span></div>
+        <div class="hero option-e">
+          <div class="left">
+            <span class="weekday">星期四</span>
+            <span class="date">28</span>
+            <span class="month">2026年5月</span>
+          </div>
+          <div class="right">
+            <span class="badge">今天</span>
+            <div class="ring">
+              <svg viewBox="0 0 60 60">
+                <circle class="bg" cx="30" cy="30" r="25"></circle>
+                <circle class="fg" cx="30" cy="30" r="25"></circle>
+              </svg>
+              <div class="ring-center">7/10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="notes">
+      建议优先看方案 A 或 D。A 更稳，能明确告诉用户“今天”但不压过列表；D 识别度最高，适合你想让日期块成为页面锚点。B 最醒目，但会让顶部更重。
+    </div>
+  </main>
+</body>
+</html>

@@ -41,14 +41,12 @@ async def ui_ws_endpoint(websocket: WebSocket) -> None:
     conn_id = await ws_mgr.connect(websocket, user_id)
 
     upload_token_store = getattr(app.state, "upload_token_store", None)
-    download_token_store = getattr(app.state, "download_token_store", None)
     router_handler = UiMessageRouter(
         user_id,
         db,
         settings,
         app.state.attachment_root,
         upload_token_store=upload_token_store,
-        download_token_store=download_token_store,
     )
 
     try:

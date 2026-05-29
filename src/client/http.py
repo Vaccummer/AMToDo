@@ -605,20 +605,9 @@ class AMTodoClient:
             return {"ok": False, "error": {"type": "ConnectionError", "message": str(exc)}}
 
     def _attachment_download(self, owner_type: str, owner_id: int, attachment_id: int) -> bytes:
-        init = self._user_post(
-            "/api/v1/attachment/init-download",
-            {
-                "owner_type": owner_type,
-                "owner_id": owner_id,
-                "attachment_id": attachment_id,
-            },
-        )
-        if not init.get("ok"):
-            msg = init.get("error", {}).get("message") if isinstance(init.get("error"), dict) else init
-            raise httpx.HTTPError(str(msg))
         response = self._client.get(
-            f"/api/v1/attachment/{attachment_id}/download",
-            params={"token": init["token"]},
+            f"/api/v1/attachment/{owner_type}/{owner_id}/{attachment_id}/download",
+            headers=self._user_headers(),
         )
         response.raise_for_status()
         return response.content

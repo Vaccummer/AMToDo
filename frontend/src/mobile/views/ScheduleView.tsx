@@ -78,6 +78,7 @@ type Props = {
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
+  isActive?: boolean;
 };
 
 const HOUR_HEIGHT = 64;
@@ -143,7 +144,7 @@ type NotifyPointerEditState = {
 
 const MIN_DURATION_SECONDS = 60;
 
-export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange, onNavigate, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotMinutes = 30, weekStart = 0, cachedDateKey, onDateChange, onNavigate, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError, isActive = true }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const naturalWeekStartKey = useMemo(
@@ -218,6 +219,12 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
   const [isDayStripAnimating, setIsDayStripAnimating] = useState(false);
   const agendaSwipeRef = useRef({ startX: 0, startY: 0, moved: false, cancelled: false });
   const [isAgendaAnimating, setIsAgendaAnimating] = useState(false);
+
+  useEffect(() => {
+    if (isActive) return;
+    setShowCalendar(false);
+    setCalendarAnchor(null);
+  }, [isActive]);
 
   function handleDayStripTouchStart(e: React.TouchEvent) {
     const t = e.touches[0];
@@ -1163,6 +1170,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
           onSelect={goToDate}
           onClose={() => setShowCalendar(false)}
           weekStart={weekStart}
+          inline
         />
       ) : null}
 

@@ -390,14 +390,10 @@ def agent_guide() -> dict[str, object]:
                 },
             },
             {
-                "method": "POST",
-                "path": "/attachment/init-download + GET /attachment/{attachment_id}/download?token=<token>",
+                "method": "GET",
+                "path": "/attachment/todo/{todo_id}/{attachment_id}/download",
                 "auth": "user",
-                "description": "Create a download token, then stream-download file bytes.",
-                "body": {
-                    "todo_id": {"type": "int", "required": True},
-                    "attachment_id": {"type": "int", "required": True},
-                },
+                "description": "Stream-download file bytes with Bearer authentication. Supports HTTP byte ranges.",
             },
             {
                 "method": "POST",
@@ -629,14 +625,10 @@ def agent_guide() -> dict[str, object]:
                 },
             },
             {
-                "method": "POST",
-                "path": "/attachment/init-download + GET /attachment/{attachment_id}/download?token=<token>",
+                "method": "GET",
+                "path": "/attachment/schedule/{schedule_id}/{attachment_id}/download",
                 "auth": "user",
-                "description": "Create a download token, then stream-download file bytes.",
-                "body": {
-                    "schedule_id": {"type": "int", "required": True},
-                    "attachment_id": {"type": "int", "required": True},
-                },
+                "description": "Stream-download file bytes with Bearer authentication. Supports HTTP byte ranges.",
             },
             {
                 "method": "POST",

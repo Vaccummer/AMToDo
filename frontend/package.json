@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs\"",
     "build": "tsc --noEmit && vite build",
+    "generate:file-icons": "python scripts/generate-file-icon-map.py",
     "start": "electron electron/main.cjs",
     "preview": "vite preview --host 127.0.0.1",
     "build:mobile": "vite build --mode mobile",

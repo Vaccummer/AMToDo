@@ -10,6 +10,12 @@ export type NativeAttachmentFile = {
 };
 
 type NativeUploadProgress = UploadProgress & { uploadId: string };
+type NativeDownloadProgress = {
+  downloadId: string;
+  loaded: number;
+  total: number;
+  percent: number;
+};
 
 type NativeAttachmentPlugin = {
   pickFiles(options: { accept?: string; multiple?: boolean }): Promise<{ files: NativeAttachmentFile[] }>;
@@ -22,15 +28,32 @@ type NativeAttachmentPlugin = {
     headers: Record<string, string>;
   }): Promise<UploadResult<T>>;
   cancelUpload(options: { uploadId: string }): Promise<{ ok: boolean }>;
+  download(options: {
+    downloadId: string;
+    url: string;
+    cachePath: string;
+    title?: string;
+    totalSize?: number;
+    headers?: Record<string, string>;
+  }): Promise<{ ok: boolean; uri: string }>;
+  cancelDownload(options: { downloadId: string }): Promise<{ ok: boolean }>;
   addListener(
     eventName: "uploadProgress",
     listenerFunc: (progress: NativeUploadProgress) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: "downloadProgress",
+    listenerFunc: (progress: NativeDownloadProgress) => void,
   ): Promise<PluginListenerHandle>;
 };
 
 const NativeAttachment = registerPlugin<NativeAttachmentPlugin>("NativeAttachment");
 
 export function isNativeAttachmentUploadAvailable(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
+export function isNativeAttachmentDownloadAvailable(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
 }
 
@@ -90,6 +113,59 @@ export async function uploadNativeAttachmentWithProgress<T = unknown>(
     if (aborted) throw new Error("Upload aborted");
     onProgress?.({ loaded: total, total, percent: 100, phase: "processing" });
     return result;
+  } finally {
+    abortSignal?.removeEventListener("abort", abort);
+    await listener.remove();
+  }
+}
+
+export async function downloadNativeAttachmentWithProgress(
+  url: string,
+  cachePath: string,
+  title: string,
+  totalSize: number,
+  onProgress?: (progress: { loaded: number; total: number; percent: number }) => void,
+  abortSignal?: AbortSignal,
+  headers: Record<string, string> = {},
+): Promise<{ uri: string }> {
+  const downloadId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let aborted = false;
+
+  const listener = await NativeAttachment.addListener("downloadProgress", (progress) => {
+    if (progress.downloadId !== downloadId) return;
+    onProgress?.({
+      loaded: progress.loaded,
+      total: progress.total,
+      percent: progress.percent,
+    });
+  });
+
+  const abort = () => {
+    aborted = true;
+    NativeAttachment.cancelDownload({ downloadId }).catch(() => {});
+  };
+
+  if (abortSignal?.aborted) {
+    await listener.remove();
+    throw new Error("Download aborted");
+  }
+  abortSignal?.addEventListener("abort", abort, { once: true });
+
+  try {
+    onProgress?.({ loaded: 0, total: Math.max(totalSize, 0), percent: 0 });
+    const result = await NativeAttachment.download({
+      downloadId,
+      url,
+      cachePath,
+      title,
+      totalSize,
+      headers,
+    });
+    if (aborted) throw new Error("Download aborted");
+    onProgress?.({ loaded: Math.max(totalSize, 0), total: Math.max(totalSize, 0), percent: 100 });
+    return { uri: result.uri };
   } finally {
     abortSignal?.removeEventListener("abort", abort);
     await listener.remove();

@@ -5,12 +5,13 @@ import { useConfirm } from "./ConfirmDialog";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
-import { getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
+import { getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, hasCachedAttachmentOrPartial, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
 import type { NativeAttachmentFile } from "../../lib/native-attachment";
 import { isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { FileOpener } from "@capacitor-community/file-opener";
 import { getMimeType } from "../../lib/mime-types";
+import { getFileIconSvg } from "../../lib/file-icon-map";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
 
 type AnyAttachment = AttachmentMetadata | ScheduleAttachmentMetadata;
@@ -59,6 +60,10 @@ function isPreviewable(a: AnyAttachment): boolean {
 
 function downloadUrlValue(info: AttachmentDownloadUrl): string {
   return typeof info === "string" ? info : info.url;
+}
+
+function downloadHeadersValue(info: AttachmentDownloadUrl): Record<string, string> | undefined {
+  return typeof info === "string" ? undefined : info.headers;
 }
 
 function withDownloadSize(attachment: AnyAttachment, info: AttachmentDownloadUrl): AnyAttachment {
@@ -110,6 +115,7 @@ export function AttachmentManager({
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [downloadedIds, setDownloadedIds] = useState<Set<number>>(new Set());
+  const [cacheActionIds, setCacheActionIds] = useState<Set<number>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [pickerAttachment, setPickerAttachment] = useState<AnyAttachment | null>(null);
   const [swipedAttachId, setSwipedAttachId] = useState<number | null>(null);
@@ -156,6 +162,7 @@ export function AttachmentManager({
 
   function markDownloaded(attachmentId: number) {
     downloadedRef.current.add(attachmentId);
+    markCacheActionAvailable(attachmentId);
     setDownloadedIds((prev) => {
       if (prev.has(attachmentId)) return prev;
       const next = new Set(prev);
@@ -172,6 +179,35 @@ export function AttachmentManager({
       next.delete(attachmentId);
       return next;
     });
+  }
+
+  function markCacheActionAvailable(attachmentId: number) {
+    setCacheActionIds((prev) => {
+      if (prev.has(attachmentId)) return prev;
+      const next = new Set(prev);
+      next.add(attachmentId);
+      return next;
+    });
+  }
+
+  function markCacheActionUnavailable(attachmentId: number) {
+    setCacheActionIds((prev) => {
+      if (!prev.has(attachmentId)) return prev;
+      const next = new Set(prev);
+      next.delete(attachmentId);
+      return next;
+    });
+  }
+
+  async function refreshCacheActionState(attachment: AnyAttachment) {
+    if (!isNativePlatform()) return;
+    try {
+      if (await hasCachedAttachmentOrPartial(attachment)) {
+        markCacheActionAvailable(attachment.id);
+      } else {
+        markCacheActionUnavailable(attachment.id);
+      }
+    } catch { /* ignore cache action refresh failures */ }
   }
 
   function uploadProgressText(progress: UploadProgress): string {
@@ -216,6 +252,7 @@ export function AttachmentManager({
           ac.signal,
           downloadUrlValue(dlInfo),
           chunkDownloader(attachment.id),
+          downloadHeadersValue(dlInfo),
         );
         url = result.uri;
       } else {
@@ -238,6 +275,7 @@ export function AttachmentManager({
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+      await refreshCacheActionState(attachment);
     } finally {
       downloadingIds.current.delete(attachment.id);
       downloadAbortMapRef.current.delete(attachment.id);
@@ -273,6 +311,10 @@ export function AttachmentManager({
           if (cachedUri) {
             markDownloaded(attachment.id);
             rememberAttachmentUrl(attachment, cachedUri);
+          } else if (await hasCachedAttachmentOrPartial(attachment)) {
+            markCacheActionAvailable(attachment.id);
+          } else {
+            markCacheActionUnavailable(attachment.id);
           }
         } catch { /* Cache lookup failed */ }
       })
@@ -537,6 +579,7 @@ export function AttachmentManager({
           ac.signal,
           downloadUrlValue(dlInfo),
           chunkDownloader(attachment.id),
+          downloadHeadersValue(dlInfo),
         );
         url = uri;
       } else {
@@ -563,6 +606,7 @@ export function AttachmentManager({
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+      await refreshCacheActionState(attachment);
     } finally {
       downloadingIds.current.delete(attachment.id);
       downloadAbortMapRef.current.delete(attachment.id);
@@ -601,6 +645,7 @@ export function AttachmentManager({
           ac.signal,
           downloadUrlValue(dlInfo),
           chunkDownloader(attachment.id),
+          downloadHeadersValue(dlInfo),
         );
         url = uri;
       } else {
@@ -625,6 +670,7 @@ export function AttachmentManager({
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+      await refreshCacheActionState(attachment);
     } finally {
       downloadingIds.current.delete(attachment.id);
       downloadAbortMapRef.current.delete(attachment.id);
@@ -658,6 +704,7 @@ export function AttachmentManager({
     try {
       await deleteCachedAttachment(attachment);
       markNotDownloaded(attachment.id);
+      markCacheActionUnavailable(attachment.id);
       forgetAttachmentUrl(attachment.id);
       setSavedIds((prev) => { const next = new Set(prev); next.delete(attachment.id); return next; });
     } catch { /* ignore */ }
@@ -688,6 +735,7 @@ export function AttachmentManager({
           ac.signal,
           downloadUrlValue(dlInfo),
           chunkDownloader(attachment.id),
+          downloadHeadersValue(dlInfo),
         );
         rememberAttachmentUrl(attachment, uri);
       } else {
@@ -705,6 +753,7 @@ export function AttachmentManager({
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
       setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+      await refreshCacheActionState(attachment);
     } finally {
       downloadingIds.current.delete(attachment.id);
       downloadAbortMapRef.current.delete(attachment.id);
@@ -795,6 +844,7 @@ export function AttachmentManager({
               ac.signal,
               downloadUrlValue(dlInfo),
               chunkDownloader(attachment.id),
+              downloadHeadersValue(dlInfo),
             );
           } else {
             await getAttachmentBlob(
@@ -811,6 +861,7 @@ export function AttachmentManager({
           if (ac.signal.aborted) return;
           const message = err instanceof Error ? err.message : t("common.attachmentOpenFailed");
           setAttachmentErrors((prev) => ({ ...prev, [attachment.id]: message }));
+          await refreshCacheActionState(attachment);
           return;
         } finally {
           downloadingIds.current.delete(attachment.id);
@@ -971,7 +1022,9 @@ export function AttachmentManager({
           const isSaved = savedIds.has(attachment.id);
           const isSwiped = swipedAttachId === attachment.id;
           const isRenaming = renamingId === attachment.id;
-          const hasClearCacheAction = isDownloaded;
+          const hasClearCacheAction = cacheActionIds.has(attachment.id);
+          const fileIconSvg = getFileIconSvg(attachment.filename);
+          const formatTag = ext.toLowerCase();
 
           function onTouchStart(e: React.TouchEvent) {
             const touch = e.touches[0];
@@ -1076,6 +1129,8 @@ export function AttachmentManager({
                         </svg>
                       </span>
                     </span>
+                  ) : fileIconSvg ? (
+                    <span className="attach-file-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileIconSvg }} />
                   ) : effectivePreviewKind(attachment) === "audio" ? (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
@@ -1115,12 +1170,15 @@ export function AttachmentManager({
                       {attachment.filename}
                     </button>
                   )}
-                  <span className={`attach-row-size${isDownloading ? " downloading" : ""}`}>
-                    {orphaned
-                      ? t("common.fileMissing")
-                      : isDownloading
-                        ? (dlProgress ? t("common.downloadingPercent", { percent: dlProgress.percent }) : t("common.downloading"))
-                        : formatSize(attachment.plain_size_bytes)}
+                  <span className="attach-row-meta">
+                    <span className="attach-format-tag">{formatTag}</span>
+                    <span className={`attach-row-size${isDownloading ? " downloading" : ""}`}>
+                      {orphaned
+                        ? t("common.fileMissing")
+                        : isDownloading
+                          ? (dlProgress ? t("common.downloadingPercent", { percent: dlProgress.percent }) : t("common.downloading"))
+                          : formatSize(attachment.plain_size_bytes)}
+                    </span>
                   </span>
                   {loadError ? <span className="attachment-error-text">{loadError}</span> : null}
                 </div>

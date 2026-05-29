@@ -21,12 +21,12 @@ type TrashResult =
 
 type TimeGroup = "today" | "yesterday" | "this-week" | "this-month" | "earlier";
 
-const TIME_GROUP_META: Record<TimeGroup, { label: string; dotClass: string }> = {
-  today: { label: "今天", dotClass: "today" },
-  yesterday: { label: "昨天", dotClass: "yesterday" },
-  "this-week": { label: "本周", dotClass: "this-week" },
-  "this-month": { label: "本月", dotClass: "this-month" },
-  earlier: { label: "更早", dotClass: "earlier" },
+const TIME_GROUP_META: Record<TimeGroup, { labelKey: string; dotClass: string }> = {
+  today: { labelKey: "common.today", dotClass: "today" },
+  yesterday: { labelKey: "common.yesterday", dotClass: "yesterday" },
+  "this-week": { labelKey: "common.thisWeek", dotClass: "this-week" },
+  "this-month": { labelKey: "common.thisMonth", dotClass: "this-month" },
+  earlier: { labelKey: "common.earlier", dotClass: "earlier" },
 };
 
 const GROUP_ORDER: TimeGroup[] = ["today", "yesterday", "this-week", "this-month", "earlier"];
@@ -107,10 +107,10 @@ type TodoTrashStatus = "pending" | "overdue" | "late-done" | "done";
 
 function getTodoStatus(item: TodoItem, t: (key: string) => string): StatusTag {
   const status = getTodoTrashStatus(item);
-  if (status === "overdue") return { label: "逾期", className: "status-overdue" };
-  if (status === "late-done") return { label: "逾期完成", className: "status-late-done" };
-  if (status === "done") return { label: "完成", className: "status-done" };
-  return { label: "未完成", className: "status-pending" };
+  if (status === "overdue") return { label: t("common.overdue"), className: "status-overdue" };
+  if (status === "late-done") return { label: t("common.overdueCompleted"), className: "status-late-done" };
+  if (status === "done") return { label: t("common.done"), className: "status-done" };
+  return { label: t("common.notCompleted"), className: "status-pending" };
 }
 
 function getTodoTrashStatus(item: TodoItem): TodoTrashStatus {
@@ -323,29 +323,29 @@ function SwipeRow({ entry, busy, onRestore, onPurge, onItemClick, status, t, ind
         onMouseDown={onMouseDown}
       >
         {isTodoEntry ? (
-          <TodoTrashContent todo={entry.item as TodoItem} status={todoStatus ?? "pending"} label={status.label} />
+          <TodoTrashContent todo={entry.item as TodoItem} status={todoStatus ?? "pending"} label={status.label} t={t} />
         ) : isScheduleEntry ? (
-          <ScheduleTrashContent schedule={entry.item as ScheduleItem} />
+          <ScheduleTrashContent schedule={entry.item as ScheduleItem} t={t} />
         ) : (
-          <NotifyTrashContent notification={entry.item as NotificationItem} />
+          <NotifyTrashContent notification={entry.item as NotificationItem} t={t} />
         )}
       </div>
     </div>
   );
 }
 
-function NotifyTrashContent({ notification }: { notification: NotificationItem }) {
+function NotifyTrashContent({ notification, t }: { notification: NotificationItem; t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <div className="schedule-agenda-card notify-card trash-notify-card">
       <NotifyBellIcon />
       <span className="notify-card-time">{formatNotifyTrashTime(notification.trigger_at)}</span>
       <div className="notify-card-title">{notification.title}</div>
-      <span className="trash-notify-deleted">{formatDeletedAgo(notification.deleted_at)}</span>
+      <span className="trash-notify-deleted">{formatDeletedAgo(notification.deleted_at, t)}</span>
     </div>
   );
 }
 
-function ScheduleTrashContent({ schedule }: { schedule: ScheduleItem }) {
+function ScheduleTrashContent({ schedule, t }: { schedule: ScheduleItem; t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <div className="ms-card ms-card--schedule trash-schedule-card">
       <div className="ms-card-schedule-timeline">
@@ -357,14 +357,14 @@ function ScheduleTrashContent({ schedule }: { schedule: ScheduleItem }) {
         <div className="ms-card-schedule-body">
           <div className="ms-card-schedule-header">
             <div className="ms-card-title">{schedule.title}</div>
-            <span className="ms-card-schedule-id trash-schedule-deleted">{formatDeletedAgo(schedule.deleted_at)}</span>
+            <span className="ms-card-schedule-id trash-schedule-deleted">{formatDeletedAgo(schedule.deleted_at, t)}</span>
           </div>
           <div className="ms-card-schedule-time-row">
-            <span className="ms-card-schedule-time-label">起</span>
+            <span className="ms-card-schedule-time-label">{t("common.startShort")}</span>
             <span className="ms-card-schedule-time-value">{formatScheduleTrashDate(schedule.start_at)}</span>
           </div>
           <div className="ms-card-schedule-time-row">
-            <span className="ms-card-schedule-time-label">止</span>
+            <span className="ms-card-schedule-time-label">{t("common.endShort")}</span>
             <span className="ms-card-schedule-time-value">{formatScheduleTrashDate(schedule.end_at)}</span>
           </div>
           <div className="ms-card-schedule-footer">
@@ -391,7 +391,7 @@ function ScheduleTrashContent({ schedule }: { schedule: ScheduleItem }) {
   );
 }
 
-function TodoTrashContent({ todo, status, label }: { todo: TodoItem; status: TodoTrashStatus; label: string }) {
+function TodoTrashContent({ todo, status, label, t }: { todo: TodoItem; status: TodoTrashStatus; label: string; t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <div className="trash-todo-card">
       <div className="trash-todo-main">
@@ -410,7 +410,7 @@ function TodoTrashContent({ todo, status, label }: { todo: TodoItem; status: Tod
         </div>
       </div>
       <div className="trash-todo-side">
-        <span className="trash-todo-deleted">{formatDeletedAgo(todo.deleted_at)}</span>
+        <span className="trash-todo-deleted">{formatDeletedAgo(todo.deleted_at, t)}</span>
         {status !== "pending" ? (
           <span className={`trash-todo-status ${status}`}>
             <span className="trash-todo-status-dot" />
@@ -456,15 +456,15 @@ function TagIcon() {
   );
 }
 
-function formatDeletedAgo(epoch: number | null | undefined): string {
+function formatDeletedAgo(epoch: number | null | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (!epoch) return "-";
   const seconds = Math.max(0, Math.floor(Date.now() / 1000) - epoch);
   const days = Math.floor(seconds / 86400);
-  if (days > 0) return `${days} 天前`;
+  if (days > 0) return t("common.daysAgo", { count: days });
   const hours = Math.floor(seconds / 3600);
-  if (hours > 0) return `${hours} 小时前`;
+  if (hours > 0) return t("common.hoursAgo", { count: hours });
   const minutes = Math.max(1, Math.floor(seconds / 60));
-  return `${minutes} 分钟前`;
+  return t("common.minutesAgo", { count: minutes });
 }
 
 function formatNotifyTrashTime(epoch: number): string {
@@ -754,8 +754,8 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapse(groupKey); }}
               >
                 <span className={`timeline-dot ${meta.dotClass}`} />
-                <span className="timeline-date">{meta.label}</span>
-                <span className="timeline-count">{groupItems.length} 项</span>
+                <span className="timeline-date">{t(meta.labelKey)}</span>
+                <span className="timeline-count">{groupItems.length} {t("common.items")}</span>
                 <svg className={`timeline-chevron${isCollapsed ? " collapsed" : ""}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="6 9 12 15 18 9" />
                 </svg>

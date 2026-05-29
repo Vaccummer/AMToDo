@@ -100,8 +100,7 @@ def _setup_user_and_todo(app, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Full round-trip: init upload token -> PUT file bytes -> verify metadata
-    -> init download token -> GET download -> verify bytes match."""
+    """Full round-trip: init upload token -> PUT file bytes -> direct Bearer download."""
     app = _make_app(tmp_path, monkeypatch)
     token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
 
@@ -148,21 +147,10 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         )
         assert list_response.json()["count"] == 1
 
-        # Step 4: Init download token
-        download_init_response = client.post(
-            "/api/v1/attachment/init-download",
-            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert download_init_response.status_code == 200
-        download_init = download_init_response.json()
-        assert download_init["file_size"] == len(plain_content)
-        assert download_init["plain_size_bytes"] == len(plain_content)
-        download_token = download_init["token"]
-
-        # Step 5: GET download
+        # Step 4: GET download through the Bearer-authenticated direct URL
         download_response = client.get(
-            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert download_response.status_code == 200
         assert download_response.content == plain_content
@@ -173,13 +161,18 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert "X-AMToDo-Content-SHA256" in download_response.headers
 
         range_response = client.get(
-            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
-            headers={"Range": "bytes=7-10"},
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
+            headers={"Authorization": f"Bearer {token}", "Range": "bytes=7-10"},
         )
         assert range_response.status_code == 206
         assert range_response.content == plain_content[7:11]
         assert range_response.headers["content-range"] == f"bytes 7-10/{len(plain_content)}"
         assert range_response.headers["content-length"] == "4"
+
+        missing_auth_response = client.get(
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
+        )
+        assert missing_auth_response.status_code == 403
 
 
 def test_download_media_type_guesses_from_filename_when_upload_mime_is_generic() -> None:
@@ -217,18 +210,9 @@ def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pyte
             stored.plain_size_bytes = len(content) + 100
             uow.attachments.update(stored)
 
-        download_init_response = client.post(
-            "/api/v1/attachment/init-download",
-            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        download_init = download_init_response.json()
-        assert download_init["file_size"] == len(content)
-        assert download_init["plain_size_bytes"] == len(content) + 100
-        download_token = download_init["token"]
-
         download_response = client.get(
-            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert download_response.status_code == 200
         assert download_response.content == content
@@ -236,14 +220,14 @@ def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pyte
         assert download_response.headers["x-amtodo-content-length"] == str(len(content))
 
         range_response = client.get(
-            f"/api/v1/attachment/{attachment['id']}/download?token={download_token}",
-            headers={"Range": "bytes=7-10"},
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
+            headers={"Authorization": f"Bearer {token}", "Range": "bytes=7-10"},
         )
         assert range_response.status_code == 206
         assert range_response.headers["content-range"] == f"bytes 7-10/{len(content)}"
 
 
-def test_init_download_rejects_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_direct_download_rejects_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = _make_app(tmp_path, monkeypatch)
     token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
     content = b"stored then deleted"
@@ -272,12 +256,11 @@ def test_init_download_rejects_missing_file(tmp_path: Path, monkeypatch: pytest.
             stored = uow.attachments.get(attachment["id"])
             (Path(app.state.settings.attachment_root) / stored.storage_path).unlink()
 
-        download_init_response = client.post(
-            "/api/v1/attachment/init-download",
-            json={"owner_type": "todo", "owner_id": todo_id, "attachment_id": attachment["id"]},
+        download_response = client.get(
+            f"/api/v1/attachment/todo/{todo_id}/{attachment['id']}/download",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert download_init_response.status_code == 404
+        assert download_response.status_code == 404
 
 
 def test_upload_token_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -342,16 +325,16 @@ def test_upload_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
         assert response.status_code == 413
 
 
-def test_download_token_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """GET without token -> 404."""
+def test_direct_download_bearer_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET without Bearer token -> 403."""
     app = _make_app(tmp_path, monkeypatch)
     token, user_id, todo_id = _setup_user_and_todo(app, tmp_path)
 
     with TestClient(app) as client:
         response = client.get(
-            "/api/v1/attachment/1/download",
+            f"/api/v1/attachment/todo/{todo_id}/1/download",
         )
-        assert response.status_code == 422  # missing required query param
+        assert response.status_code == 403
 
 
 def test_upload_interruption_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

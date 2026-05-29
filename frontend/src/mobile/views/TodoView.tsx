@@ -36,6 +36,7 @@ type Props = {
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
+  isActive?: boolean;
 };
 
 function EditIcon() {
@@ -109,7 +110,7 @@ function rowStatus(todo: TodoItem): string {
   return "";
 }
 
-export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError, isActive = true }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const [selectedDayKey, setSelectedDayKey] = useState(cachedDateKey ?? todayKey);
@@ -140,6 +141,12 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
   const calendarStripRef = useRef<HTMLDivElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
   const { t, locale } = useI18n();
+
+  useEffect(() => {
+    if (isActive) return;
+    setShowCalendar(false);
+    setAnchorRect(null);
+  }, [isActive]);
 
   useEffect(() => {
     if (cachedDateKey) setSelectedDayKey(cachedDateKey);
@@ -287,6 +294,10 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         locale={locale}
         onPrevDay={prevDay}
         onNextDay={nextDay}
+        onOpenCalendar={(rect) => {
+          setAnchorRect(rect);
+          setShowCalendar((v) => !v);
+        }}
       />
       <DateBar
         ref={calendarStripRef}
@@ -325,6 +336,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
           onSelect={goToDate}
           onClose={() => setShowCalendar(false)}
           weekStart={weekStart}
+          inline
         />
       ) : null}
 
@@ -498,7 +510,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                             <svg width="14" height="14" viewBox="0 0 1024 1024" className="todo-date-icon" aria-hidden="true">
                               <path d="M983.637333 302.933333A502.101333 502.101333 0 0 0 719.957333 40.106667C751.786667 15.189333 792.149333 0 836.010667 0 939.861333 0 1024 83.882667 1024 187.306667c0 43.690667-15.104 83.797333-40.362667 115.626666z m-7.68 207.104a459.264 459.264 0 0 1-126.72 316.928l64.853334 64.597334a47.36 47.36 0 1 1-67.157334 66.901333l-69.632-69.461333a462.762667 462.762667 0 0 1-265.386666 83.285333 462.762667 462.762667 0 0 1-264.704-82.944l-69.290667 68.949333a47.872 47.872 0 0 1-67.84-67.584l64.341333-64.170666A459.264 459.264 0 0 1 47.957333 510.037333C47.957333 254.805333 255.744 47.786667 512 47.786667c256.256 0 464.042667 207.018667 464.042667 462.250666z m-271.957333 47.786667a47.872 47.872 0 1 0 0-95.573333H560.042667V255.146667a47.872 47.872 0 0 0-96.085334 0v254.976c0 26.453333 21.504 47.786667 48.042667 47.786666h192zM41.216 309.504A189.781333 189.781333 0 0 1 0 191.146667 191.658667 191.658667 0 0 1 192 0c44.8 0 85.930667 15.36 118.613333 40.96A512.853333 512.853333 0 0 0 41.216 309.504z" fill="#FA6935" />
                             </svg>
-                            <span className="todo-date-text">{dueDisplay ? dueDisplay.label : "无截止日期"}</span>
+                            <span className="todo-date-text">{dueDisplay ? dueDisplay.label : t("common.noDueDate")}</span>
                           </span>
                         ) : null}
                       </div>
