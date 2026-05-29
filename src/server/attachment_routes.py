@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import mimetypes
+import logging
 from pathlib import Path
 from typing import Annotated
 
@@ -30,6 +31,7 @@ from server.schemas import (
 from services.uow import UnitOfWork
 
 router = APIRouter()
+logger = logging.getLogger("amtodo")
 SettingsDep = Annotated[AppSettings, Depends(get_settings)]
 UowDep = Annotated[UnitOfWork, Depends(get_uow)]
 ClockDep = Annotated[Clock, Depends(get_clock)]
@@ -161,9 +163,15 @@ async def stream_upload_attachment(request: Request, token: str):
 
     # 2. Check Content-Length header (fast reject)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > settings_obj.max_attachment_size_bytes:
-        upload_token_store.pop(token)
-        raise HTTPException(413, "File too large")
+    if content_length:
+        try:
+            content_length_value = int(content_length)
+        except ValueError:
+            upload_token_store.pop(token)
+            raise HTTPException(400, "Invalid Content-Length")
+        if content_length_value > settings_obj.max_attachment_size_bytes:
+            upload_token_store.pop(token)
+            raise HTTPException(413, "File too large")
 
     # 3. Stream to temp file with byte counter
     temp_path = tok.temp_path
@@ -196,19 +204,33 @@ async def stream_upload_attachment(request: Request, token: str):
     clock = SystemClock()
     db = request.app.state.db
 
-    with UnitOfWork(db, tok_final.user_id) as uow:
-        svc = make_attachment_service(uow, clock, request, tok_final.owner_type)
-        attachment = svc.create_from_upload(
-            owner_id=tok_final.owner_id,
-            upload_path=temp_path,
-            content_size=total,
-            filename=tok_final.filename,
-            mime_type=tok_final.mime_type,
-            plain_sha256=tok_final.plain_sha256,
+    try:
+        with UnitOfWork(db, tok_final.user_id) as uow:
+            svc = make_attachment_service(uow, clock, request, tok_final.owner_type)
+            attachment = svc.create_from_upload(
+                owner_id=tok_final.owner_id,
+                upload_path=temp_path,
+                content_size=total,
+                filename=tok_final.filename,
+                mime_type=tok_final.mime_type,
+                plain_sha256=tok_final.plain_sha256,
+            )
+            uow.session.flush()
+            dict_fn = _dict_fn(tok_final.owner_type)
+            result = {"ok": True, "attachment": dict_fn(attachment, uow.user_id)}
+    except Exception:
+        logger.exception(
+            "Attachment upload finalize failed: user_id=%s owner_type=%s owner_id=%s "
+            "filename=%r bytes=%s temp_path=%s",
+            tok_final.user_id,
+            tok_final.owner_type,
+            tok_final.owner_id,
+            tok_final.filename,
+            total,
+            temp_path,
         )
-        uow.session.flush()
-        dict_fn = _dict_fn(tok_final.owner_type)
-        result = {"ok": True, "attachment": dict_fn(attachment, uow.user_id)}
+        temp_path.unlink(missing_ok=True)
+        raise
 
     return JSONResponse(result)
 

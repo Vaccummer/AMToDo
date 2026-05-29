@@ -267,6 +267,7 @@ export const zhCN: Record<string, string> = {
   "settings.mobileCaptureTempMedia": "拍摄临时文件",
   "settings.mobileCacheDetail": "{{count}} 个文件 · {{size}}",
   "settings.mobileCacheFileCount": "{{count}} 个文件",
+  "settings.mobileCaptureTempDetail": "{{photoCount}} 张照片 · {{videoCount}} 个视频",
   "settings.mobileClearCaptureTempConfirm": "确定清除拍照/拍视频上传产生的临时文件？不会删除已上传的附件。",
   "settings.mobileConnectionSwitch": "连接开关",
   "settings.mobileConnected": "已连接",

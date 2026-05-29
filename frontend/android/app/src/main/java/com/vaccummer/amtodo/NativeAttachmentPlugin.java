@@ -1,6 +1,7 @@
 package com.vaccummer.amtodo;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ContentResolver;
@@ -10,10 +11,13 @@ import android.content.IntentFilter;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -47,11 +51,15 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "NativeAttachment")
 public class NativeAttachmentPlugin extends Plugin {
     private static final int BUFFER_SIZE = 64 * 1024;
+    private static final String CAPTURE_TEMP_DIR = "capture-temp";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, HttpURLConnection> activeUploads = new ConcurrentHashMap<>();
     private final Map<String, PluginCall> activeDownloads = new ConcurrentHashMap<>();
     private BroadcastReceiver downloadReceiver;
+    private File pendingCaptureFile;
+    private Uri pendingCaptureUri;
+    private String pendingCaptureMimeType;
 
     @Override
     public void load() {
@@ -100,6 +108,16 @@ public class NativeAttachmentPlugin extends Plugin {
         startActivityForResult(call, intent, "pickFilesResult");
     }
 
+    @PluginMethod
+    public void capturePhoto(PluginCall call) {
+        startMediaCapture(call, false);
+    }
+
+    @PluginMethod
+    public void captureVideo(PluginCall call) {
+        startMediaCapture(call, true);
+    }
+
     @ActivityCallback
     private void pickFilesResult(PluginCall call, ActivityResult result) {
         if (call == null) return;
@@ -125,6 +143,16 @@ public class NativeAttachmentPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("files", files);
         call.resolve(ret);
+    }
+
+    @ActivityCallback
+    private void capturePhotoResult(PluginCall call, ActivityResult result) {
+        handleCaptureResult(call, result);
+    }
+
+    @ActivityCallback
+    private void captureVideoResult(PluginCall call, ActivityResult result) {
+        handleCaptureResult(call, result);
     }
 
     @PluginMethod
@@ -221,6 +249,33 @@ public class NativeAttachmentPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    @PluginMethod
+    public void getCaptureTempMediaStats(PluginCall call) {
+        executor.execute(() -> {
+            TempMediaStats stats = collectCaptureTempMediaStats(false);
+            JSObject ret = new JSObject();
+            ret.put("count", stats.count);
+            ret.put("bytes", stats.bytes);
+            ret.put("photoCount", stats.photoCount);
+            ret.put("videoCount", stats.videoCount);
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void clearCaptureTempMedia(PluginCall call) {
+        executor.execute(() -> {
+            TempMediaStats stats = collectCaptureTempMediaStats(true);
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            ret.put("count", stats.count);
+            ret.put("bytes", stats.bytes);
+            ret.put("photoCount", stats.photoCount);
+            ret.put("videoCount", stats.videoCount);
+            call.resolve(ret);
+        });
+    }
+
     private void handleDownloadEvent(Intent intent) {
         String downloadId = intent.getStringExtra(AttachmentDownloadService.EXTRA_DOWNLOAD_ID);
         if (downloadId == null || downloadId.isEmpty()) return;
@@ -245,6 +300,105 @@ public class NativeAttachmentPlugin extends Plugin {
         } else if (AttachmentDownloadService.ACTION_ERROR.equals(action)) {
             String message = intent.getStringExtra(AttachmentDownloadService.EXTRA_MESSAGE);
             call.reject(message == null || message.isEmpty() ? "Download failed" : message);
+        }
+    }
+
+    private void startMediaCapture(PluginCall call, boolean video) {
+        if (pendingCaptureFile != null) {
+            call.reject("Another capture is already in progress");
+            return;
+        }
+
+        try {
+            File dir = new File(getContext().getCacheDir(), CAPTURE_TEMP_DIR);
+            if (!dir.exists() && !dir.mkdirs()) {
+                call.reject("Unable to create capture temp directory");
+                return;
+            }
+
+            String prefix = video ? "amtodo-capture-video-" : "amtodo-capture-photo-";
+            String suffix = video ? ".mp4" : ".jpg";
+            String mimeType = video ? "video/mp4" : "image/jpeg";
+            File outputFile = File.createTempFile(prefix, suffix, dir);
+            Uri outputUri = FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                outputFile
+            );
+
+            Intent intent = new Intent(video ? MediaStore.ACTION_VIDEO_CAPTURE : MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+            if (video) {
+                intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
+            }
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+            pendingCaptureFile = outputFile;
+            pendingCaptureUri = outputUri;
+            pendingCaptureMimeType = mimeType;
+
+            startActivityForResult(call, intent, video ? "captureVideoResult" : "capturePhotoResult");
+        } catch (ActivityNotFoundException ex) {
+            cleanupPendingCapture(true);
+            call.reject(video ? "No camera app can record video" : "No camera app can take photos", ex);
+        } catch (Exception ex) {
+            cleanupPendingCapture(true);
+            call.reject(video ? "Failed to start video capture" : "Failed to start photo capture", ex);
+        }
+    }
+
+    private void handleCaptureResult(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            cleanupPendingCapture(true);
+            return;
+        }
+
+        File outputFile = pendingCaptureFile;
+        Uri outputUri = pendingCaptureUri;
+        String mimeType = pendingCaptureMimeType;
+        cleanupPendingCapture(false);
+
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            if (outputFile != null) outputFile.delete();
+            JSObject ret = new JSObject();
+            ret.put("file", null);
+            call.resolve(ret);
+            return;
+        }
+
+        if (outputFile != null && outputFile.length() > 0 && outputUri != null) {
+            JSObject ret = new JSObject();
+            ret.put("file", fileObject(outputUri, outputFile.getName(), mimeType, outputFile.length()));
+            call.resolve(ret);
+            return;
+        }
+
+        if (outputFile != null) outputFile.delete();
+
+        Intent data = result.getData();
+        Uri fallbackUri = data == null ? null : data.getData();
+        if (fallbackUri != null) {
+            JSObject ret = new JSObject();
+            ret.put("file", fileObject(
+                fallbackUri,
+                queryName(fallbackUri),
+                queryMimeType(fallbackUri),
+                querySize(fallbackUri)
+            ));
+            call.resolve(ret);
+            return;
+        }
+
+        call.reject("Captured media was not returned by the camera app");
+    }
+
+    private void cleanupPendingCapture(boolean deleteFile) {
+        File file = pendingCaptureFile;
+        pendingCaptureFile = null;
+        pendingCaptureUri = null;
+        pendingCaptureMimeType = null;
+        if (deleteFile && file != null) {
+            file.delete();
         }
     }
 
@@ -381,12 +535,16 @@ public class NativeAttachmentPlugin extends Plugin {
             // Some providers grant temporary access only; immediate upload still works.
         }
 
+        files.put(fileObject(uri, queryName(uri), queryMimeType(uri), querySize(uri)));
+    }
+
+    private JSObject fileObject(Uri uri, String name, String mimeType, long size) {
         JSObject file = new JSObject();
         file.put("uri", uri.toString());
-        file.put("name", queryName(uri));
-        file.put("mimeType", queryMimeType(uri));
-        file.put("size", querySize(uri));
-        files.put(file);
+        file.put("name", name == null || name.isEmpty() ? "attachment" : name);
+        file.put("mimeType", mimeType == null || mimeType.isEmpty() ? "application/octet-stream" : mimeType);
+        file.put("size", size);
+        return file;
     }
 
     private String queryName(Uri uri) {
@@ -420,6 +578,83 @@ public class NativeAttachmentPlugin extends Plugin {
         } catch (Exception ignored) {
         }
         return -1;
+    }
+
+    private TempMediaStats collectCaptureTempMediaStats(boolean deleteFiles) {
+        TempMediaStats stats = new TempMediaStats();
+        File[] roots = new File[] {
+            new File(getContext().getCacheDir(), CAPTURE_TEMP_DIR),
+            getContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            getContext().getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+            getContext().getExternalFilesDir(Environment.DIRECTORY_DCIM),
+            new File(getContext().getFilesDir(), "Pictures"),
+            new File(getContext().getFilesDir(), "Movies"),
+        };
+
+        for (File root : roots) {
+            collectCaptureTempMedia(root, deleteFiles, stats);
+        }
+        return stats;
+    }
+
+    private void collectCaptureTempMedia(File file, boolean deleteFiles, TempMediaStats stats) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children == null) return;
+            for (File child : children) {
+                collectCaptureTempMedia(child, deleteFiles, stats);
+            }
+            return;
+        }
+
+        MediaKind kind = mediaKind(file);
+        if (kind == MediaKind.NONE) return;
+        stats.count += 1;
+        stats.bytes += Math.max(file.length(), 0L);
+        if (kind == MediaKind.VIDEO) {
+            stats.videoCount += 1;
+        } else {
+            stats.photoCount += 1;
+        }
+        if (deleteFiles) {
+            file.delete();
+        }
+    }
+
+    private MediaKind mediaKind(File file) {
+        String name = file.getName().toLowerCase();
+        if (name.endsWith(".mp4")
+            || name.endsWith(".mov")
+            || name.endsWith(".m4v")
+            || name.endsWith(".webm")
+            || name.endsWith(".3gp")
+            || name.endsWith(".3gpp")) {
+            return MediaKind.VIDEO;
+        }
+        if (name.endsWith(".jpg")
+            || name.endsWith(".jpeg")
+            || name.endsWith(".png")
+            || name.endsWith(".heic")
+            || name.endsWith(".heif")
+            || name.endsWith(".webp")
+            || name.endsWith(".gif")) {
+            return MediaKind.PHOTO;
+        }
+        return MediaKind.NONE;
+    }
+
+    private enum MediaKind {
+        NONE,
+        PHOTO,
+        VIDEO
+    }
+
+    private static class TempMediaStats {
+        int count = 0;
+        long bytes = 0L;
+        int photoCount = 0;
+        int videoCount = 0;
     }
 
     private void notifyUploadProgress(String uploadId, long loaded, long total) {
