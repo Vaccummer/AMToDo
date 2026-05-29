@@ -168,7 +168,7 @@ def test_stream_upload_and_download(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert download_response.content == plain_content
         assert download_response.headers["content-type"].startswith("text/plain")
         assert download_response.headers["accept-ranges"] == "bytes"
-        assert "content-length" not in download_response.headers
+        assert download_response.headers["content-length"] == str(len(plain_content))
         assert download_response.headers["x-amtodo-content-length"] == str(len(plain_content))
         assert "X-AMToDo-Content-SHA256" in download_response.headers
 
@@ -232,7 +232,7 @@ def test_download_headers_use_actual_file_size(tmp_path: Path, monkeypatch: pyte
         )
         assert download_response.status_code == 200
         assert download_response.content == content
-        assert "content-length" not in download_response.headers
+        assert download_response.headers["content-length"] == str(len(content))
         assert download_response.headers["x-amtodo-content-length"] == str(len(content))
 
         range_response = client.get(

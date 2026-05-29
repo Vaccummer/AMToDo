@@ -308,7 +308,10 @@ async def stream_download_attachment(
     return StreamingResponse(
         _file_iterator(content_path),
         media_type=media_type,
-        headers=common_headers,
+        headers={
+            **common_headers,
+            "Content-Length": str(file_size),
+        },
     )
 
 
