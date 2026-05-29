@@ -33,6 +33,10 @@ repositories {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.camera:camera-camera2:1.6.1"
+    implementation "androidx.camera:camera-lifecycle:1.6.1"
+    implementation "androidx.camera:camera-video:1.6.1"
+    implementation "androidx.camera:camera-view:1.6.1"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"

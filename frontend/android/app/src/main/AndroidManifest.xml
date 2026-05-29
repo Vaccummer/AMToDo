@@ -25,6 +25,12 @@
 
         </activity>
 
+        <activity
+            android:name="com.vaccummer.amtodo.CameraXMediaActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme.CameraX"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
