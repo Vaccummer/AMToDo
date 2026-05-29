@@ -320,18 +320,27 @@ public class NativeAttachmentPlugin extends Plugin {
             String suffix = video ? ".mp4" : ".jpg";
             String mimeType = video ? "video/mp4" : "image/jpeg";
             File outputFile = File.createTempFile(prefix, suffix, dir);
-            Uri outputUri = FileProvider.getUriForFile(
-                getContext(),
-                getContext().getPackageName() + ".fileprovider",
-                outputFile
-            );
-
-            Intent intent = new Intent(video ? MediaStore.ACTION_VIDEO_CAPTURE : MediaStore.ACTION_IMAGE_CAPTURE);
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+            Uri outputUri = null;
+            Intent intent;
             if (video) {
-                intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
+                outputUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    outputFile
+                );
+                intent = new Intent(getContext(), CameraXVideoActivity.class);
+                intent.putExtra(CameraXVideoActivity.EXTRA_OUTPUT_PATH, outputFile.getAbsolutePath());
+                intent.putExtra(CameraXVideoActivity.EXTRA_QUALITY, "FHD");
+            } else {
+                outputUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    outputFile
+                );
+                intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
             pendingCaptureFile = outputFile;
             pendingCaptureUri = outputUri;
