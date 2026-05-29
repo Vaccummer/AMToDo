@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -17,7 +18,6 @@ import android.provider.OpenableColumns;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -57,7 +57,6 @@ public class NativeAttachmentPlugin extends Plugin {
     private final Map<String, HttpURLConnection> activeUploads = new ConcurrentHashMap<>();
     private final Map<String, PluginCall> activeDownloads = new ConcurrentHashMap<>();
     private BroadcastReceiver downloadReceiver;
-    private File pendingCaptureFile;
     private Uri pendingCaptureUri;
     private String pendingCaptureMimeType;
 
@@ -304,45 +303,31 @@ public class NativeAttachmentPlugin extends Plugin {
     }
 
     private void startMediaCapture(PluginCall call, boolean video) {
-        if (pendingCaptureFile != null) {
+        if (pendingCaptureUri != null) {
             call.reject("Another capture is already in progress");
             return;
         }
 
         try {
-            File dir = new File(getContext().getCacheDir(), CAPTURE_TEMP_DIR);
-            if (!dir.exists() && !dir.mkdirs()) {
-                call.reject("Unable to create capture temp directory");
+            String mimeType = video ? "video/mp4" : "image/jpeg";
+            Uri outputUri = createCaptureMediaUri(video, mimeType);
+            if (outputUri == null) {
+                call.reject(video ? "Unable to create video media item" : "Unable to create photo media item");
                 return;
             }
 
-            String prefix = video ? "amtodo-capture-video-" : "amtodo-capture-photo-";
-            String suffix = video ? ".mp4" : ".jpg";
-            String mimeType = video ? "video/mp4" : "image/jpeg";
-            File outputFile = File.createTempFile(prefix, suffix, dir);
-            Uri outputUri = null;
             Intent intent;
             if (video) {
-                outputUri = FileProvider.getUriForFile(
-                    getContext(),
-                    getContext().getPackageName() + ".fileprovider",
-                    outputFile
-                );
-                intent = new Intent(getContext(), CameraXVideoActivity.class);
-                intent.putExtra(CameraXVideoActivity.EXTRA_OUTPUT_PATH, outputFile.getAbsolutePath());
-                intent.putExtra(CameraXVideoActivity.EXTRA_QUALITY, "FHD");
+                intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+                intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             } else {
-                outputUri = FileProvider.getUriForFile(
-                    getContext(),
-                    getContext().getPackageName() + ".fileprovider",
-                    outputFile
-                );
                 intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
 
-            pendingCaptureFile = outputFile;
             pendingCaptureUri = outputUri;
             pendingCaptureMimeType = mimeType;
 
@@ -362,31 +347,25 @@ public class NativeAttachmentPlugin extends Plugin {
             return;
         }
 
-        File outputFile = pendingCaptureFile;
         Uri outputUri = pendingCaptureUri;
         String mimeType = pendingCaptureMimeType;
         cleanupPendingCapture(false);
 
         if (result.getResultCode() != Activity.RESULT_OK) {
-            if (outputFile != null) outputFile.delete();
+            deleteCaptureUri(outputUri);
             JSObject ret = new JSObject();
             ret.put("file", null);
             call.resolve(ret);
             return;
         }
 
-        if (outputFile != null && outputFile.length() > 0 && outputUri != null) {
-            JSObject ret = new JSObject();
-            ret.put("file", fileObject(outputUri, outputFile.getName(), mimeType, outputFile.length()));
-            call.resolve(ret);
-            return;
-        }
-
-        if (outputFile != null) outputFile.delete();
-
         Intent data = result.getData();
         Uri fallbackUri = data == null ? null : data.getData();
         if (fallbackUri != null) {
+            finalizeCaptureUri(fallbackUri);
+            if (outputUri != null && !fallbackUri.equals(outputUri)) {
+                deleteCaptureUri(outputUri);
+            }
             JSObject ret = new JSObject();
             ret.put("file", fileObject(
                 fallbackUri,
@@ -398,16 +377,64 @@ public class NativeAttachmentPlugin extends Plugin {
             return;
         }
 
+        if (outputUri != null) {
+            finalizeCaptureUri(outputUri);
+            JSObject ret = new JSObject();
+            ret.put("file", fileObject(
+                outputUri,
+                queryName(outputUri),
+                mimeType,
+                querySize(outputUri)
+            ));
+            call.resolve(ret);
+            return;
+        }
+
         call.reject("Captured media was not returned by the camera app");
     }
 
     private void cleanupPendingCapture(boolean deleteFile) {
-        File file = pendingCaptureFile;
-        pendingCaptureFile = null;
+        Uri uri = pendingCaptureUri;
         pendingCaptureUri = null;
         pendingCaptureMimeType = null;
-        if (deleteFile && file != null) {
-            file.delete();
+        if (deleteFile) {
+            deleteCaptureUri(uri);
+        }
+    }
+
+    private Uri createCaptureMediaUri(boolean video, String mimeType) {
+        ContentValues values = new ContentValues();
+        long now = System.currentTimeMillis();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, video ? "AMToDo_" + now + ".mp4" : "AMToDo_" + now + ".jpg");
+        values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            values.put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                video ? Environment.DIRECTORY_DCIM + "/Camera" : Environment.DIRECTORY_PICTURES + "/AMToDo"
+            );
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        }
+        Uri collection = video
+            ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+        return getContext().getContentResolver().insert(collection, values);
+    }
+
+    private void finalizeCaptureUri(Uri uri) {
+        if (uri == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            getContext().getContentResolver().update(uri, values, null, null);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void deleteCaptureUri(Uri uri) {
+        if (uri == null) return;
+        try {
+            getContext().getContentResolver().delete(uri, null, null);
+        } catch (Exception ignored) {
         }
     }
 

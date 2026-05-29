@@ -65,14 +65,23 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
 
   // System gesture navigation: push history entry so Android back gesture closes the modal
   const pickerOpenRef = useRef(false);
+  const suppressPickerHistoryPopRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
     history.pushState({ modal: "schedule-detail" }, "");
+    const onPickerHistoryPop = () => {
+      suppressPickerHistoryPopRef.current = true;
+    };
     const onPopState = () => {
+      if (suppressPickerHistoryPopRef.current) {
+        suppressPickerHistoryPopRef.current = false;
+        return;
+      }
       if (pickerOpenRef.current) return;
       onCloseRef.current();
     };
+    window.addEventListener("dirpicker-history-pop", onPickerHistoryPop);
     window.addEventListener("popstate", onPopState);
 
     // Also listen for Capacitor backButton as fallback
@@ -88,6 +97,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
     }).catch(() => {});
 
     return () => {
+      window.removeEventListener("dirpicker-history-pop", onPickerHistoryPop);
       window.removeEventListener("popstate", onPopState);
       capacitorHandle?.remove();
     };

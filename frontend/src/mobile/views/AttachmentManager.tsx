@@ -123,7 +123,6 @@ export function AttachmentManager({
   const [renameValue, setRenameValue] = useState("");
   const [downloadedIds, setDownloadedIds] = useState<Set<number>>(new Set());
   const [cacheActionIds, setCacheActionIds] = useState<Set<number>>(new Set());
-  const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [pickerAttachment, setPickerAttachment] = useState<AnyAttachment | null>(null);
   const [swipedAttachId, setSwipedAttachId] = useState<number | null>(null);
   const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
@@ -747,7 +746,6 @@ export function AttachmentManager({
       markNotDownloaded(attachment.id);
       markCacheActionUnavailable(attachment.id);
       forgetAttachmentUrl(attachment.id);
-      setSavedIds((prev) => { const next = new Set(prev); next.delete(attachment.id); return next; });
     } catch { /* ignore */ }
   }
 
@@ -830,7 +828,6 @@ export function AttachmentManager({
           a.click();
           URL.revokeObjectURL(url);
         }
-        setSavedIds((prev) => new Set(prev).add(attachment.id));
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (err instanceof Error && err.name === "AbortError") return;
@@ -1060,7 +1057,6 @@ export function AttachmentManager({
           const dlProgress = downloadProgressMap[attachment.id];
           const ext = attachment.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE";
           const isDownloaded = downloadedIds.has(attachment.id);
-          const isSaved = savedIds.has(attachment.id);
           const isSwiped = swipedAttachId === attachment.id;
           const isRenaming = renamingId === attachment.id;
           const hasClearCacheAction = cacheActionIds.has(attachment.id);
@@ -1231,12 +1227,6 @@ export function AttachmentManager({
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
                   </button>
-                ) : isSaved ? (
-                  <button type="button" className="attach-action-btn saved" disabled aria-label={t("common.saved")}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </button>
                 ) : isDownloaded ? (
                   <button type="button" className="attach-action-btn save" onClick={() => saveToFile(attachment)} aria-label={t("common.saveFile")}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1386,7 +1376,6 @@ export function AttachmentManager({
           cacheRelPath={getCachePath(pickerAttachment)}
           onClose={() => setPickerAttachment(null)}
           onSaved={() => {
-            setSavedIds((prev) => new Set(prev).add(pickerAttachment.id));
             setPickerAttachment(null);
           }}
         />
