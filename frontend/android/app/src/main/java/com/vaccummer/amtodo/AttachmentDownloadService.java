@@ -454,7 +454,7 @@ public class AttachmentDownloadService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(getApplicationInfo().icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title == null || title.isEmpty() ? "AMToDo 下载附件" : title)
             .setContentText(total > 0 ? percent + "%" : "正在下载")
             .setContentIntent(pendingIntent)

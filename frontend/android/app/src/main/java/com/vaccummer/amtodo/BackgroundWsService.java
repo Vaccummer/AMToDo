@@ -215,7 +215,7 @@ public class BackgroundWsService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
         return new NotificationCompat.Builder(this, SERVICE_CHANNEL_ID)
-            .setSmallIcon(getApplicationInfo().icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("AMToDo")
             .setContentText("后台同步运行中")
             .setContentIntent(pendingIntent)
@@ -251,7 +251,7 @@ public class BackgroundWsService extends Service {
         );
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFY_CHANNEL_ID)
-            .setSmallIcon(getApplicationInfo().icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title == null || title.isEmpty() ? "AMToDo" : title)
             .setContentText(description == null ? "" : description)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(description == null ? "" : description))
