@@ -24,12 +24,4 @@
         <item name="android:statusBarColor">#1a2820</item>
         <item name="android:navigationBarColor">#1a2820</item>
     </style>
-
-    <style name="AppTheme.CameraX" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowActionBar">false</item>
-        <item name="android:statusBarColor">#000000</item>
-        <item name="android:navigationBarColor">#000000</item>
-    </style>
 </resources>

@@ -88,9 +88,17 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const pickerOpenRef = useRef(false);
+  const suppressPickerHistoryPopRef = useRef(false);
   useEffect(() => {
     history.pushState({ modal: "todo-detail" }, "");
+    const onPickerHistoryPop = () => {
+      suppressPickerHistoryPopRef.current = true;
+    };
     const onPopState = () => {
+      if (suppressPickerHistoryPopRef.current) {
+        suppressPickerHistoryPopRef.current = false;
+        return;
+      }
       // If the directory picker is open, close it instead of the detail modal
       if (pickerOpenRef.current) {
         return;
@@ -98,8 +106,10 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
       closedViaPopRef.current = true;
       onCloseRef.current();
     };
+    window.addEventListener("dirpicker-history-pop", onPickerHistoryPop);
     window.addEventListener("popstate", onPopState);
     return () => {
+      window.removeEventListener("dirpicker-history-pop", onPickerHistoryPop);
       window.removeEventListener("popstate", onPopState);
       if (!closedViaPopRef.current) history.back();
     };

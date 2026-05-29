@@ -45,7 +45,10 @@ export function DirectoryPickerModal({ filename, cacheRelPath, onClose, onSaved 
     window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("popstate", onPopState);
-      if (!closedViaPopRef.current) history.back();
+      if (!closedViaPopRef.current) {
+        window.dispatchEvent(new Event("dirpicker-history-pop"));
+        history.back();
+      }
     };
   }, []);
 
