@@ -267,6 +267,7 @@ export const en: Record<string, string> = {
   "settings.mobileCaptureTempMedia": "Capture Temp Files",
   "settings.mobileCacheDetail": "{{count}} files · {{size}}",
   "settings.mobileCacheFileCount": "{{count}} files",
+  "settings.mobileCaptureTempDetail": "{{photoCount}} photos · {{videoCount}} videos",
   "settings.mobileClearCaptureTempConfirm": "Clear temporary photo/video capture files? Uploaded attachments will not be deleted.",
   "settings.mobileConnectionSwitch": "Connection",
   "settings.mobileConnected": "Connected",

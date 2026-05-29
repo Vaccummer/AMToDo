@@ -7,7 +7,7 @@ import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
 import { getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, hasCachedAttachmentOrPartial, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
 import type { NativeAttachmentFile } from "../../lib/native-attachment";
-import { isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
+import { captureNativeAttachmentMedia, isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { FileOpener } from "@capacitor-community/file-opener";
 import { getMimeType } from "../../lib/mime-types";
@@ -15,6 +15,13 @@ import { getFileIconSvg } from "../../lib/file-icon-map";
 import { DirectoryPickerModal } from "./DirectoryPickerModal";
 
 type AnyAttachment = AttachmentMetadata | ScheduleAttachmentMetadata;
+type CaptureDraft = {
+  file?: File;
+  nativeFile?: NativeAttachmentFile;
+  ext: string;
+  defaultBase: string;
+  name: string;
+};
 
 export type AttachmentManagerProps = {
   ownerType: "todo" | "schedule";
@@ -121,7 +128,7 @@ export function AttachmentManager({
   const [swipedAttachId, setSwipedAttachId] = useState<number | null>(null);
   const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [captureDraft, setCaptureDraft] = useState<{ file: File; ext: string; defaultBase: string; name: string } | null>(null);
+  const [captureDraft, setCaptureDraft] = useState<CaptureDraft | null>(null);
 
   const zoomRef = useRef({
     scale: 1, x: 0, y: 0,
@@ -519,12 +526,46 @@ export function AttachmentManager({
     setCaptureDraft({ file, ext, defaultBase, name: defaultBase });
   }
 
+  async function handleNativeCapture(kind: "photo" | "video") {
+    if (!uploadNativeFile || !isNativeAttachmentUploadAvailable()) {
+      if (kind === "photo") cameraInputRef.current?.click();
+      else videoInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const file = await captureNativeAttachmentMedia(kind);
+      if (!file) return;
+      const fallbackExt = kind === "video" ? "mp4" : "jpg";
+      const ext = file.name.split(".").pop() || fallbackExt;
+      const defaultBase = `${kind === "video" ? "video" : "photo"}_${Date.now()}`;
+      setCaptureDraft({ nativeFile: file, ext, defaultBase, name: defaultBase });
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : t("common.photoCaptureFailed"));
+    }
+  }
+
   async function confirmCaptureUpload() {
     if (!captureDraft) return;
     const raw = captureDraft.name.trim() || captureDraft.defaultBase;
     const suffix = `.${captureDraft.ext}`;
     const base = raw.toLowerCase().endsWith(suffix.toLowerCase()) ? raw.slice(0, -suffix.length) : raw;
     const finalName = `${base}.${captureDraft.ext}`;
+    if (captureDraft.nativeFile) {
+      const renamed = {
+        ...captureDraft.nativeFile,
+        name: finalName,
+        mimeType: captureDraft.nativeFile.mimeType || getMimeType(finalName),
+      };
+      setCaptureDraft(null);
+      await uploadNativeFiles([renamed]);
+      return;
+    }
+
+    if (!captureDraft.file) {
+      setCaptureDraft(null);
+      return;
+    }
     const renamed = new File([captureDraft.file], finalName, { type: captureDraft.file.type });
     setCaptureDraft(null);
     await uploadFiles([renamed]);
@@ -946,7 +987,7 @@ export function AttachmentManager({
 
       {/* Action bar: camera + video + file picker */}
       <div className="attach-action-bar">
-        <button type="button" className="attach-icon-btn" onClick={() => cameraInputRef.current?.click()} aria-label={t("common.takePhoto")}>
+        <button type="button" className="attach-icon-btn" onClick={() => handleNativeCapture("photo")} aria-label={t("common.takePhoto")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
             <circle cx="12" cy="13" r="4" />
@@ -954,7 +995,7 @@ export function AttachmentManager({
         </button>
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleCameraCapture} />
         <div className="attach-divider-v" />
-        <button type="button" className="attach-icon-btn" onClick={() => videoInputRef.current?.click()} aria-label={t("common.takeVideo")}>
+        <button type="button" className="attach-icon-btn" onClick={() => handleNativeCapture("video")} aria-label={t("common.takeVideo")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="23 7 16 12 23 17 23 7" />
             <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />

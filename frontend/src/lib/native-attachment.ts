@@ -9,6 +9,13 @@ export type NativeAttachmentFile = {
   size: number;
 };
 
+export type CaptureTempMediaStats = {
+  count: number;
+  bytes: number;
+  photoCount: number;
+  videoCount: number;
+};
+
 type NativeUploadProgress = UploadProgress & { uploadId: string };
 type NativeDownloadProgress = {
   downloadId: string;
@@ -19,6 +26,8 @@ type NativeDownloadProgress = {
 
 type NativeAttachmentPlugin = {
   pickFiles(options: { accept?: string; multiple?: boolean }): Promise<{ files: NativeAttachmentFile[] }>;
+  capturePhoto(): Promise<{ file?: NativeAttachmentFile | null }>;
+  captureVideo(): Promise<{ file?: NativeAttachmentFile | null }>;
   upload<T = unknown>(options: {
     uploadId: string;
     uri: string;
@@ -37,6 +46,8 @@ type NativeAttachmentPlugin = {
     headers?: Record<string, string>;
   }): Promise<{ ok: boolean; uri: string }>;
   cancelDownload(options: { downloadId: string }): Promise<{ ok: boolean }>;
+  getCaptureTempMediaStats(): Promise<CaptureTempMediaStats>;
+  clearCaptureTempMedia(): Promise<{ ok: boolean } & CaptureTempMediaStats>;
   addListener(
     eventName: "uploadProgress",
     listenerFunc: (progress: NativeUploadProgress) => void,
@@ -63,6 +74,27 @@ export async function pickNativeAttachmentFiles(options: { accept?: string; mult
     multiple: options.multiple ?? true,
   });
   return result.files;
+}
+
+export async function captureNativeAttachmentMedia(kind: "photo" | "video"): Promise<NativeAttachmentFile | null> {
+  const result = kind === "photo"
+    ? await NativeAttachment.capturePhoto()
+    : await NativeAttachment.captureVideo();
+  return result.file ?? null;
+}
+
+export async function getNativeCaptureTempMediaStats(): Promise<CaptureTempMediaStats> {
+  return NativeAttachment.getCaptureTempMediaStats();
+}
+
+export async function clearNativeCaptureTempMedia(): Promise<CaptureTempMediaStats> {
+  const result = await NativeAttachment.clearCaptureTempMedia();
+  return {
+    count: result.count,
+    bytes: result.bytes,
+    photoCount: result.photoCount,
+    videoCount: result.videoCount,
+  };
 }
 
 export async function uploadNativeAttachmentWithProgress<T = unknown>(

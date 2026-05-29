@@ -5,6 +5,7 @@ import type { ConnectionStatusSnapshot } from "../../api/connection-status";
 import { clearAttachmentCache, getCacheSize } from "../../lib/attachmentCache";
 import { clearDiskCache, getDiskCacheSize, isNative as isNativePlatform } from "../../lib/attachmentDiskCache";
 import { clearCaptureTempMedia, getCaptureTempMediaSize } from "../../lib/captureTempMediaCache";
+import type { CaptureTempMediaStats } from "../../lib/native-attachment";
 import type { UISettings } from "../../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../../themes";
 import { Dropdown } from "./Dropdown";
@@ -49,6 +50,7 @@ function createMobileSettingsText(t: (key: string, params?: Record<string, strin
   captureTempMedia: t("settings.mobileCaptureTempMedia"),
   cacheDetail: (count: number, size: string) => t("settings.mobileCacheDetail", { count, size }),
   cacheFileCount: (count: number) => t("settings.mobileCacheFileCount", { count }),
+  captureTempDetail: (photoCount: number, videoCount: number) => t("settings.mobileCaptureTempDetail", { photoCount, videoCount }),
   cacheLoading: t("settings.cacheLoading"),
   clearCache: t("settings.clearCache"),
   clearCacheAction: t("common.clear"),
@@ -252,7 +254,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   // Cache
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
-  const [captureTempSize, setCaptureTempSize] = useState<{ count: number; bytes: number } | null>(null);
+  const [captureTempSize, setCaptureTempSize] = useState<CaptureTempMediaStats | null>(null);
   const [clearingCaptureTemp, setClearingCaptureTemp] = useState(false);
 
   // Notification
@@ -1134,7 +1136,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 {captureTempSize ? (
                   <span className="settings-cache-metric">
                     <span>{formatSize(captureTempSize.bytes)}</span>
-                    <span>{MOB.cacheFileCount(captureTempSize.count)}</span>
+                    <span>{MOB.captureTempDetail(captureTempSize.photoCount, captureTempSize.videoCount)}</span>
                   </span>
                 ) : (
                   <span className="settings-row-hint">{MOB.cacheLoading}</span>
