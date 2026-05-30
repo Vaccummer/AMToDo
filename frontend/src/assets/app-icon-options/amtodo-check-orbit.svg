@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="AMToDo check orbit icon">
+  <defs>
+    <linearGradient id="bg" x1="144" y1="96" x2="880" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0bbf86"/>
+      <stop offset="0.55" stop-color="#159f9a"/>
+      <stop offset="1" stop-color="#3956d8"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="264" y1="196" x2="760" y2="828" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#edf7f2"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="220" fill="url(#bg)"/>
+  <path d="M243 304c0-58 47-105 105-105h300c58 0 105 47 105 105v416c0 58-47 105-105 105H348c-58 0-105-47-105-105V304z" fill="url(#paper)"/>
+  <path d="M352 345h300" stroke="#183b3a" stroke-width="44" stroke-linecap="round"/>
+  <path d="M352 481h178" stroke="#6a7d84" stroke-width="42" stroke-linecap="round"/>
+  <path d="M352 617h132" stroke="#6a7d84" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="690" cy="636" r="154" fill="#0b302c"/>
+  <path d="M620 638l48 50 98-118" fill="none" stroke="#59f0a8" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M707 238c58 25 108 65 145 114" fill="none" stroke="#baffde" stroke-width="34" stroke-linecap="round" opacity=".9"/>
+  <circle cx="824" cy="425" r="28" fill="#ffcf5a"/>
+</svg>

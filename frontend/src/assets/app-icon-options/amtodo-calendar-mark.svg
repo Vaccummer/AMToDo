@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="AMToDo calendar mark icon">
+  <defs>
+    <linearGradient id="bg" x1="96" y1="128" x2="928" y2="896" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#203c55"/>
+      <stop offset=".55" stop-color="#136c6b"/>
+      <stop offset="1" stop-color="#16b77f"/>
+    </linearGradient>
+    <linearGradient id="sheet" x1="236" y1="196" x2="788" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffef8"/>
+      <stop offset="1" stop-color="#e9f5f0"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="210" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(.74) translate(-512 -512)">
+    <rect x="224" y="206" width="576" height="618" rx="92" fill="url(#sheet)"/>
+    <path d="M224 350h576" stroke="#0e3b38" stroke-width="70"/>
+    <path d="M348 186v118M676 186v118" stroke="#f5fbf8" stroke-width="56" stroke-linecap="round"/>
+    <circle cx="370" cy="493" r="36" fill="#21b987"/>
+    <circle cx="512" cy="493" r="36" fill="#83a6ad"/>
+    <circle cx="654" cy="493" r="36" fill="#83a6ad"/>
+    <circle cx="370" cy="632" r="36" fill="#83a6ad"/>
+    <path d="M493 637l71 74 143-170" fill="none" stroke="#f08a5d" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

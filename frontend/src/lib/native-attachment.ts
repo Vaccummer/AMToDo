@@ -26,8 +26,8 @@ type NativeDownloadProgress = {
 
 type NativeAttachmentPlugin = {
   pickFiles(options: { accept?: string; multiple?: boolean }): Promise<{ files: NativeAttachmentFile[] }>;
-  capturePhoto(): Promise<{ file?: NativeAttachmentFile | null }>;
-  captureVideo(): Promise<{ file?: NativeAttachmentFile | null }>;
+  capturePhoto(options?: { locale?: string }): Promise<{ file?: NativeAttachmentFile | null }>;
+  captureVideo(options?: { locale?: string }): Promise<{ file?: NativeAttachmentFile | null }>;
   upload<T = unknown>(options: {
     uploadId: string;
     uri: string;
@@ -76,10 +76,11 @@ export async function pickNativeAttachmentFiles(options: { accept?: string; mult
   return result.files;
 }
 
-export async function captureNativeAttachmentMedia(kind: "photo" | "video"): Promise<NativeAttachmentFile | null> {
+export async function captureNativeAttachmentMedia(kind: "photo" | "video", locale?: string): Promise<NativeAttachmentFile | null> {
+  const options = locale ? { locale } : undefined;
   const result = kind === "photo"
-    ? await NativeAttachment.capturePhoto()
-    : await NativeAttachment.captureVideo();
+    ? await NativeAttachment.capturePhoto(options)
+    : await NativeAttachment.captureVideo(options);
   return result.file ?? null;
 }
 
