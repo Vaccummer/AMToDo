@@ -1,12 +1,14 @@
 package com.vaccummer.amtodo;
 
 import android.Manifest;
+import android.animation.LayoutTransition;
 import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.camera2.CaptureRequest;
 import android.net.Uri;
@@ -67,6 +69,7 @@ import java.util.concurrent.TimeUnit;
 
 public class CameraXMediaActivity extends AppCompatActivity {
     public static final String EXTRA_INITIAL_MODE = "initialMode";
+    public static final String EXTRA_LOCALE = "locale";
     public static final String EXTRA_URI = "uri";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_MIME_TYPE = "mimeType";
@@ -82,6 +85,10 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private static final String RATIO_4_3 = "4:3";
     private static final String RATIO_16_9 = "16:9";
     private static final String RATIO_FULL = "全屏";
+    private static final float[] ZOOM_STOPS = new float[] { 0.6f, 1f, 2f, 3f, 6f };
+    private static final int FLASH_OFF = 0;
+    private static final int FLASH_ON = 1;
+    private static final int FLASH_TORCH = 2;
 
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final Runnable timerTick = new Runnable() {
@@ -106,12 +113,16 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private LinearLayout qualityBar;
     private LinearLayout fpsBar;
     private LinearLayout zoomRail;
+    private LinearLayout controlRail;
+    private LinearLayout modeBar;
+    private LinearLayout captureRow;
+    private final Button[] zoomButtons = new Button[ZOOM_STOPS.length];
     private Button photoModeButton;
     private Button videoModeButton;
     private Button captureButton;
     private Button leftActionButton;
-    private Button optionButton;
-    private Button flashButton;
+    private ImageButton optionButton;
+    private ImageButton flashButton;
     private ImageButton switchButton;
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
@@ -120,12 +131,14 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private Recording recording;
     private ScaleGestureDetector scaleGestureDetector;
     private String mode = MODE_PHOTO;
+    private String appLocale = "";
     private Quality selectedQuality = Quality.FHD;
     private int selectedAspectRatio = AspectRatio.RATIO_16_9;
     private String selectedRatioMode = RATIO_FULL;
     private int selectedFps = 30;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private int flashMode = ImageCapture.FLASH_MODE_OFF;
+    private int flashState = FLASH_OFF;
     private boolean torchAlwaysOn = false;
     private boolean optionMenuOpen = false;
     private boolean reviewing = false;
@@ -137,7 +150,9 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private float currentZoomRatio = 1f;
     private float minZoomRatio = 1f;
     private float maxZoomRatio = 1f;
+    private int lastZoomStopIndex = 1;
     private boolean scaleInProgress = false;
+    private boolean consumePreviewTouchUntilUp = false;
     private float touchDownX = 0f;
     private float touchDownY = 0f;
     private long recordStartedAt = 0L;
@@ -147,6 +162,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         mode = MODE_VIDEO.equals(getIntent().getStringExtra(EXTRA_INITIAL_MODE)) ? MODE_VIDEO : MODE_PHOTO;
+        appLocale = getIntent().getStringExtra(EXTRA_LOCALE);
         buildLayout();
         if (hasCameraPermission()) {
             startCamera();
@@ -269,7 +285,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
         bottomPanel = bottom;
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setGravity(Gravity.CENTER);
-        bottom.setPadding(dp(16), dp(10), dp(16), dp(26));
+        bottom.setPadding(dp(16), dp(10), dp(16), dp(14));
         bottom.setBackgroundColor(0x00000000);
 
         ratioBar = new LinearLayout(this);
@@ -311,7 +327,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
         bottom.addView(fpsBar, fpsParams);
         rebuildFpsButtons();
 
-        LinearLayout controlRail = new LinearLayout(this);
+        controlRail = new LinearLayout(this);
         controlRail.setOrientation(LinearLayout.HORIZONTAL);
         controlRail.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams controlRailParams = new LinearLayout.LayoutParams(
@@ -323,34 +339,44 @@ public class CameraXMediaActivity extends AppCompatActivity {
 
         LinearLayout flashSlot = new LinearLayout(this);
         flashSlot.setGravity(Gravity.CENTER);
-        controlRail.addView(flashSlot, new LinearLayout.LayoutParams(0, dp(44), 1));
+        controlRail.addView(flashSlot, new LinearLayout.LayoutParams(0, dp(44), 0.8f));
 
-        flashButton = iconButton("关");
-        flashButton.setTextSize(14);
-        flashButton.setBackground(roundBg(0x661D1D1D, dp(20), 0x00FFFFFF));
+        flashButton = imageButton();
+        flashButton.clearColorFilter();
+        flashButton.setImageResource(flashIconResource());
+        flashButton.setPadding(dp(8), dp(7), dp(8), dp(7));
+        flashButton.setBackground(ovalBg(0x661D1D1D, 0x00FFFFFF));
         flashButton.setOnClickListener(v -> toggleFlash());
-        flashSlot.addView(flashButton, new LinearLayout.LayoutParams(dp(64), dp(40)));
+        flashSlot.addView(flashButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         zoomRail = new LinearLayout(this);
         zoomRail.setOrientation(LinearLayout.HORIZONTAL);
         zoomRail.setGravity(Gravity.CENTER);
-        zoomRail.setPadding(dp(5), dp(3), dp(5), dp(3));
+        zoomRail.setClipChildren(false);
+        zoomRail.setClipToPadding(false);
+        zoomRail.setPadding(dp(3), dp(3), dp(3), dp(3));
         zoomRail.setBackground(roundBg(0x661D1D1D, dp(18), 0x00FFFFFF));
-        LinearLayout.LayoutParams zoomRailParams = new LinearLayout.LayoutParams(0, dp(40), 3);
+        LayoutTransition zoomTransition = new LayoutTransition();
+        zoomTransition.setDuration(LayoutTransition.CHANGING, 130);
+        zoomTransition.setDuration(LayoutTransition.APPEARING, 90);
+        zoomTransition.setDuration(LayoutTransition.DISAPPEARING, 70);
+        zoomRail.setLayoutTransition(zoomTransition);
+        LinearLayout.LayoutParams zoomRailParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40));
         controlRail.addView(zoomRail, zoomRailParams);
         rebuildZoomRail();
 
         LinearLayout optionSlot = new LinearLayout(this);
         optionSlot.setGravity(Gravity.CENTER);
-        controlRail.addView(optionSlot, new LinearLayout.LayoutParams(0, dp(44), 1));
+        controlRail.addView(optionSlot, new LinearLayout.LayoutParams(0, dp(44), 0.8f));
 
-        optionButton = iconButton("⋯");
-        optionButton.setTextSize(24);
-        optionButton.setBackground(roundBg(0x661D1D1D, dp(20), 0x00FFFFFF));
+        optionButton = imageButton();
+        optionButton.setImageResource(R.drawable.ic_camera_settings);
+        optionButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        optionButton.setBackground(ovalBg(0x661D1D1D, 0x00FFFFFF));
         optionButton.setOnClickListener(v -> toggleOptionMenu());
-        optionSlot.addView(optionButton, new LinearLayout.LayoutParams(dp(54), dp(40)));
+        optionSlot.addView(optionButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
-        LinearLayout modeBar = new LinearLayout(this);
+        modeBar = new LinearLayout(this);
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
         modeBar.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams modeParams = new LinearLayout.LayoutParams(
@@ -360,22 +386,19 @@ public class CameraXMediaActivity extends AppCompatActivity {
         modeParams.setMargins(0, dp(2), 0, dp(18));
         bottom.addView(modeBar, modeParams);
 
-        TextView leftModeSpacer = new TextView(this);
-        modeBar.addView(leftModeSpacer, new LinearLayout.LayoutParams(0, dp(54), 1));
-
         videoModeButton = modeButton(modeLabel(MODE_VIDEO));
         videoModeButton.setOnClickListener(v -> switchMode(MODE_VIDEO));
-        LinearLayout.LayoutParams videoModeParams = new LinearLayout.LayoutParams(0, dp(54), 1);
+        LinearLayout.LayoutParams videoModeParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(30));
+        videoModeParams.setMargins(dp(4), dp(12), dp(4), dp(12));
         modeBar.addView(videoModeButton, videoModeParams);
 
         photoModeButton = modeButton(modeLabel(MODE_PHOTO));
         photoModeButton.setOnClickListener(v -> switchMode(MODE_PHOTO));
-        modeBar.addView(photoModeButton, new LinearLayout.LayoutParams(0, dp(54), 1));
+        LinearLayout.LayoutParams photoModeParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(30));
+        photoModeParams.setMargins(dp(4), dp(12), dp(4), dp(12));
+        modeBar.addView(photoModeButton, photoModeParams);
 
-        TextView rightModeSpacer = new TextView(this);
-        modeBar.addView(rightModeSpacer, new LinearLayout.LayoutParams(0, dp(54), 1));
-
-        LinearLayout captureRow = new LinearLayout(this);
+        captureRow = new LinearLayout(this);
         captureRow.setOrientation(LinearLayout.HORIZONTAL);
         captureRow.setGravity(Gravity.CENTER);
         bottom.addView(captureRow, new LinearLayout.LayoutParams(
@@ -454,9 +477,9 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private void bindCamera() {
         if (cameraProvider == null) return;
         try {
-            selectedAspectRatio = aspectRatioForMode(selectedRatioMode);
+            selectedAspectRatio = aspectRatioForMode(effectiveRatioMode());
             Preview.Builder previewBuilder = new Preview.Builder();
-            if (!RATIO_FULL.equals(selectedRatioMode)) {
+            if (!RATIO_FULL.equals(effectiveRatioMode())) {
                 previewBuilder.setTargetAspectRatio(selectedAspectRatio);
             }
             applyFps(previewBuilder);
@@ -496,6 +519,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
     }
 
     private void handleCapture() {
+        closeOptionMenu();
         if (reviewing) {
             if (MODE_VIDEO.equals(pendingKind)) {
                 toggleReviewPlayback();
@@ -607,9 +631,9 @@ public class CameraXMediaActivity extends AppCompatActivity {
 
     private void switchMode(String nextMode) {
         if (recording != null || reviewing) return;
+        closeOptionMenu();
         mode = MODE_VIDEO.equals(nextMode) ? MODE_VIDEO : MODE_PHOTO;
-        applyTorchForMode();
-        updateModeUi();
+        bindCamera();
     }
 
     private void switchCamera() {
@@ -626,22 +650,34 @@ public class CameraXMediaActivity extends AppCompatActivity {
 
     private void toggleFlash() {
         if (recording != null || reviewing) return;
-        if (flashMode == ImageCapture.FLASH_MODE_OFF) {
+        closeOptionMenu();
+        flashState = (flashState + 1) % 3;
+        if (flashState == FLASH_ON) {
             flashMode = ImageCapture.FLASH_MODE_ON;
             torchAlwaysOn = false;
-        } else if (!torchAlwaysOn) {
+        } else if (flashState == FLASH_TORCH) {
             flashMode = ImageCapture.FLASH_MODE_OFF;
             torchAlwaysOn = true;
         } else {
             flashMode = ImageCapture.FLASH_MODE_OFF;
             torchAlwaysOn = false;
         }
-        bindCamera();
+        if (imageCapture != null) {
+            imageCapture.setFlashMode(flashMode);
+        }
+        applyTorchForMode();
+        updateModeUi();
     }
 
     private void toggleOptionMenu() {
         if (reviewing) return;
         optionMenuOpen = !optionMenuOpen;
+        updateModeUi();
+    }
+
+    private void closeOptionMenu() {
+        if (!optionMenuOpen) return;
+        optionMenuOpen = false;
         updateModeUi();
     }
 
@@ -726,22 +762,28 @@ public class CameraXMediaActivity extends AppCompatActivity {
         if (photoModeButton == null || videoModeButton == null || statusText == null) return;
         photoModeButton.setText(modeLabel(MODE_PHOTO));
         videoModeButton.setText(modeLabel(MODE_VIDEO));
-        photoModeButton.setBackgroundColor(0x00000000);
-        photoModeButton.setTextColor(MODE_PHOTO.equals(mode) ? 0xFFFF8A33 : Color.WHITE);
-        videoModeButton.setBackgroundColor(0x00000000);
-        videoModeButton.setTextColor(MODE_VIDEO.equals(mode) ? 0xFFFF8A33 : Color.WHITE);
+        boolean photoSelected = MODE_PHOTO.equals(mode);
+        boolean videoSelected = MODE_VIDEO.equals(mode);
+        photoModeButton.setBackground(photoSelected ? roundBg(0x661D1D1D, dp(15), 0x22FFFFFF) : roundBg(0x00000000, dp(15), 0x00000000));
+        photoModeButton.setTextColor(photoSelected ? 0xFFFF8A33 : Color.WHITE);
+        photoModeButton.setTypeface(null, photoSelected ? Typeface.BOLD : Typeface.NORMAL);
+        videoModeButton.setBackground(videoSelected ? roundBg(0x661D1D1D, dp(15), 0x22FFFFFF) : roundBg(0x00000000, dp(15), 0x00000000));
+        videoModeButton.setTextColor(videoSelected ? 0xFFFF8A33 : Color.WHITE);
+        videoModeButton.setTypeface(null, videoSelected ? Typeface.BOLD : Typeface.NORMAL);
         captureButton.setBackground(captureBg(recording != null));
         captureButton.setText(reviewing && MODE_VIDEO.equals(pendingKind) ? (reviewVideoPlaying ? "Ⅱ" : "▶") : "");
         captureButton.setTextColor(Color.WHITE);
         captureButton.setTextSize(28);
-        flashButton.setText(flashLabel());
-        flashButton.setTextColor((flashMode == ImageCapture.FLASH_MODE_OFF && !torchAlwaysOn) ? 0xFFEDEDED : 0xFFFF8A33);
+        flashButton.setImageResource(flashIconResource());
+        flashButton.clearColorFilter();
         boolean videoMode = MODE_VIDEO.equals(mode);
         if (ratioBar != null) ratioBar.setVisibility(optionMenuOpen && !videoMode && !reviewing ? View.VISIBLE : View.GONE);
         if (qualityBar != null) qualityBar.setVisibility(optionMenuOpen && videoMode && !reviewing ? View.VISIBLE : View.GONE);
         if (fpsBar != null) fpsBar.setVisibility(optionMenuOpen && videoMode && !reviewing ? View.VISIBLE : View.GONE);
+        if (controlRail != null) controlRail.setVisibility(reviewing ? View.GONE : View.VISIBLE);
+        if (modeBar != null) modeBar.setVisibility(reviewing ? View.GONE : View.VISIBLE);
         if (optionButton != null) {
-            optionButton.setText(optionMenuOpen ? "×" : "⋯");
+            optionButton.setImageResource(optionMenuOpen ? R.drawable.ic_camera_close : R.drawable.ic_camera_settings);
             optionButton.setVisibility(reviewing ? View.INVISIBLE : View.VISIBLE);
         }
         if (leftActionButton != null) leftActionButton.setVisibility(View.VISIBLE);
@@ -755,7 +797,9 @@ public class CameraXMediaActivity extends AppCompatActivity {
         flashButton.setEnabled(controlsEnabled);
         if (optionButton != null) optionButton.setEnabled(!reviewing);
         if (zoomRail != null) zoomRail.setVisibility(reviewing ? View.GONE : View.VISIBLE);
+        if (zoomText != null && reviewing) zoomText.setVisibility(View.GONE);
         statusText.setText("");
+        statusText.setVisibility(View.GONE);
         if (rootLayout != null) rootLayout.post(this::applyPreviewFrame);
     }
 
@@ -766,7 +810,8 @@ public class CameraXMediaActivity extends AppCompatActivity {
         if (rootWidth <= 0 || rootHeight <= 0) return;
 
         FrameLayout.LayoutParams params;
-        if (RATIO_FULL.equals(selectedRatioMode)) {
+        String ratioMode = effectiveRatioMode();
+        if (RATIO_FULL.equals(ratioMode)) {
             params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -779,23 +824,53 @@ public class CameraXMediaActivity extends AppCompatActivity {
         int targetWidth = rootWidth;
         int targetHeight;
 
-        if (RATIO_1_1.equals(selectedRatioMode)) {
+        if (RATIO_1_1.equals(ratioMode)) {
             targetHeight = rootWidth;
         } else {
-            float ratio = RATIO_4_3.equals(selectedRatioMode) ? (4f / 3f) : (16f / 9f);
+            float ratio = RATIO_4_3.equals(ratioMode) ? (4f / 3f) : (16f / 9f);
             targetHeight = Math.round(targetWidth * ratio);
         }
 
         params = new FrameLayout.LayoutParams(targetWidth, targetHeight);
-        params.gravity = Gravity.CENTER;
+        params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        params.topMargin = previewTopForRatio(ratioMode, targetHeight, rootHeight);
         setPreviewLayout(params);
+    }
+
+    private int previewTopForRatio(String ratioMode, int targetHeight, int rootHeight) {
+        int desiredBottom = rootHeight / 2 + targetHeight / 2;
+        int minTop = 0;
+        if (RATIO_16_9.equals(ratioMode)) {
+            desiredBottom = viewTopInRoot(captureButton, desiredBottom) - dp(10);
+            minTop = dp(42);
+        } else if (RATIO_4_3.equals(ratioMode)) {
+            desiredBottom = viewBottomInRoot(zoomRail, desiredBottom) + dp(18);
+        } else if (RATIO_1_1.equals(ratioMode)) {
+            desiredBottom = viewTopInRoot(zoomRail, desiredBottom) - dp(28);
+        }
+        int maxTop = Math.max(0, rootHeight - targetHeight);
+        return Math.min(maxTop, Math.max(minTop, desiredBottom - targetHeight));
+    }
+
+    private int viewTopInRoot(View view, int fallback) {
+        if (rootLayout == null || view == null || view.getHeight() <= 0 || !view.isShown()) return fallback;
+        int[] rootLocation = new int[2];
+        int[] viewLocation = new int[2];
+        rootLayout.getLocationOnScreen(rootLocation);
+        view.getLocationOnScreen(viewLocation);
+        return viewLocation[1] - rootLocation[1];
+    }
+
+    private int viewBottomInRoot(View view, int fallback) {
+        if (view == null || view.getHeight() <= 0 || !view.isShown()) return fallback;
+        return viewTopInRoot(view, fallback) + view.getHeight();
     }
 
     private void setPreviewLayout(FrameLayout.LayoutParams next) {
         ViewGroup.LayoutParams current = previewView.getLayoutParams();
         if (current instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) current;
-            if (frame.width == next.width && frame.height == next.height && frame.gravity == next.gravity) {
+            if (frame.width == next.width && frame.height == next.height && frame.gravity == next.gravity && frame.topMargin == next.topMargin) {
                 return;
             }
         }
@@ -847,7 +922,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector detector) {
                 scaleInProgress = true;
-                showZoomText();
+                refreshZoomRail(false);
                 return true;
             }
 
@@ -857,17 +932,28 @@ public class CameraXMediaActivity extends AppCompatActivity {
                 float next = clamp(currentZoomRatio * detector.getScaleFactor(), minZoomRatio, maxZoomRatio);
                 camera.getCameraControl().setZoomRatio(next);
                 currentZoomRatio = next;
-                showZoomText();
+                refreshZoomRail(false);
                 return true;
             }
 
             @Override
             public void onScaleEnd(ScaleGestureDetector detector) {
-                zoomText.postDelayed(() -> zoomText.setVisibility(View.GONE), 1100);
+                refreshZoomRail(true);
             }
         });
 
         previewView.setOnTouchListener((view, event) -> {
+            if (consumePreviewTouchUntilUp) {
+                if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    consumePreviewTouchUntilUp = false;
+                }
+                return true;
+            }
+            if (optionMenuOpen && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                closeOptionMenu();
+                consumePreviewTouchUntilUp = true;
+                return true;
+            }
             scaleGestureDetector.onTouchEvent(event);
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 touchDownX = event.getX();
@@ -932,42 +1018,73 @@ public class CameraXMediaActivity extends AppCompatActivity {
         if (camera == null) return;
         camera.getCameraInfo().getZoomState().observe(this, state -> {
             if (state == null) return;
-            currentZoomRatio = state.getZoomRatio();
             minZoomRatio = state.getMinZoomRatio();
             maxZoomRatio = state.getMaxZoomRatio();
-            if (zoomText != null && zoomText.getVisibility() == View.VISIBLE) {
-                zoomText.setText(String.format(Locale.US, "%.1fx", currentZoomRatio));
+            if (!scaleInProgress) {
+                currentZoomRatio = state.getZoomRatio();
             }
-            rebuildZoomRail();
+            refreshZoomRail(false);
         });
     }
 
     private void showZoomText() {
-        if (zoomText == null) return;
-        zoomText.setText(String.format(Locale.US, "%.1fx", currentZoomRatio));
-        zoomText.setVisibility(View.VISIBLE);
+        refreshZoomRail(false);
     }
 
     private void rebuildZoomRail() {
         if (zoomRail == null) return;
+        if (zoomRail.getChildCount() == ZOOM_STOPS.length) {
+            refreshZoomRail(false);
+            return;
+        }
         zoomRail.removeAllViews();
-        addZoomButton("0.6", 0.6f);
-        addZoomButton("1×", 1f);
-        addZoomButton("2", 2f);
-        addZoomButton("3", 3f);
-        addZoomButton("6", 6f);
+        for (int i = 0; i < ZOOM_STOPS.length; i++) {
+            addZoomButton(i);
+        }
+        refreshZoomRail(false);
     }
 
-    private void addZoomButton(String label, float zoomRatio) {
-        Button button = pillButton(label);
-        button.setTextSize(15);
-        boolean selected = Math.abs(currentZoomRatio - zoomRatio) < 0.15f;
-        button.setTextColor(selected ? 0xFFFF8A33 : Color.WHITE);
-        button.setBackground(selected ? roundBg(0xAA2C2C2C, dp(16), 0x00FFFFFF) : roundBg(0x00000000, dp(16), 0x00000000));
+    private void refreshZoomRail(boolean animateMoved) {
+        if (zoomRail == null) return;
+        int selectedIndex = closestZoomStopIndex(currentZoomRatio);
+        for (int i = 0; i < ZOOM_STOPS.length; i++) {
+            Button button = zoomButtons[i];
+            if (button == null) continue;
+            boolean selected = i == selectedIndex;
+            String label = selected ? activeZoomLabel(i) : defaultZoomLabel(ZOOM_STOPS[i]);
+            button.setText(label);
+            button.setTextSize(selected && label.length() >= 4 ? 7 : 8);
+            button.setTextColor(selected ? 0xFFFF8A33 : Color.WHITE);
+            button.setBackground(selected ? ovalBg(0xAA2C2C2C, 0x00FFFFFF) : roundBg(0x00000000, dp(16), 0x00000000));
+            if (animateMoved && selected && selectedIndex != lastZoomStopIndex) {
+                int direction = selectedIndex > lastZoomStopIndex ? 1 : -1;
+                button.setTranslationX(direction * dp(16));
+                button.setScaleX(0.78f);
+                button.setScaleY(0.78f);
+                button.setAlpha(0.72f);
+                button.animate()
+                    .translationX(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(140)
+                    .start();
+            }
+        }
+        lastZoomStopIndex = selectedIndex;
+    }
+
+    private void addZoomButton(int index) {
+        float zoomRatio = ZOOM_STOPS[index];
+        Button button = pillButton(defaultZoomLabel(zoomRatio));
+        button.setTextSize(8);
+        button.setSingleLine(true);
         button.setOnClickListener(v -> setZoomRatio(zoomRatio));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(34));
-        params.setMargins(dp(3), 0, dp(3), 0);
+        int width = dp(34);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(width, dp(34));
+        params.setMargins(dp(1), 0, dp(1), 0);
         zoomRail.addView(button, params);
+        zoomButtons[index] = button;
     }
 
     private void setZoomRatio(float requestedRatio) {
@@ -975,9 +1092,32 @@ public class CameraXMediaActivity extends AppCompatActivity {
         float next = clamp(requestedRatio, minZoomRatio, maxZoomRatio);
         camera.getCameraControl().setZoomRatio(next);
         currentZoomRatio = next;
-        showZoomText();
-        rebuildZoomRail();
-        zoomText.postDelayed(() -> zoomText.setVisibility(View.GONE), 900);
+        refreshZoomRail(true);
+    }
+
+    private int closestZoomStopIndex(float zoomRatio) {
+        int selectedIndex = 0;
+        float selectedDistance = Float.MAX_VALUE;
+        for (int i = 0; i < ZOOM_STOPS.length; i++) {
+            float distance = Math.abs(zoomRatio - ZOOM_STOPS[i]);
+            if (distance < selectedDistance) {
+                selectedDistance = distance;
+                selectedIndex = i;
+            }
+        }
+        return selectedIndex;
+    }
+
+    private String activeZoomLabel(int stopIndex) {
+        float stop = ZOOM_STOPS[stopIndex];
+        if (Math.abs(currentZoomRatio - stop) <= 0.05f) return defaultZoomLabel(stop);
+        return String.format(Locale.US, "%.1fx", currentZoomRatio);
+    }
+
+    private String defaultZoomLabel(float zoomRatio) {
+        if (Math.abs(zoomRatio - 1f) <= 0.05f) return "1x";
+        if (zoomRatio < 1f) return String.format(Locale.US, "%.1f", zoomRatio);
+        return String.format(Locale.US, "%.0f", zoomRatio);
     }
 
     private void applyFps(Preview.Builder builder) {
@@ -1009,14 +1149,19 @@ public class CameraXMediaActivity extends AppCompatActivity {
         }
     }
 
-    private String flashLabel() {
-        if (torchAlwaysOn) return "灯";
-        if (flashMode == ImageCapture.FLASH_MODE_ON) return "闪";
-        return "关";
+    private int flashIconResource() {
+        if (torchAlwaysOn) return R.drawable.ic_flash_torch;
+        if (flashMode == ImageCapture.FLASH_MODE_ON) return R.drawable.ic_flash_on;
+        return R.drawable.ic_flash_off;
+    }
+
+    private String effectiveRatioMode() {
+        return MODE_VIDEO.equals(mode) ? RATIO_16_9 : selectedRatioMode;
     }
 
     private String modeLabel(String modeValue) {
-        boolean chinese = Locale.getDefault().getLanguage().toLowerCase(Locale.US).startsWith("zh");
+        String localeText = appLocale == null || appLocale.isEmpty() ? Locale.getDefault().getLanguage() : appLocale;
+        boolean chinese = localeText.toLowerCase(Locale.US).startsWith("zh");
         if (MODE_VIDEO.equals(modeValue)) return chinese ? "视频" : "Video";
         return chinese ? "照片" : "Photo";
     }
@@ -1205,11 +1350,11 @@ public class CameraXMediaActivity extends AppCompatActivity {
     private Button modeButton(String text) {
         Button button = new Button(this);
         button.setText(text);
-        button.setTextSize(18);
+        button.setTextSize(14);
         button.setTextColor(Color.WHITE);
         button.setAllCaps(false);
         button.setGravity(Gravity.CENTER);
-        button.setPadding(0, 0, 0, 0);
+        button.setPadding(dp(8), 0, dp(8), 0);
         button.setMinWidth(0);
         button.setMinHeight(0);
         button.setIncludeFontPadding(false);
@@ -1271,6 +1416,14 @@ public class CameraXMediaActivity extends AppCompatActivity {
         drawable.setShape(GradientDrawable.RECTANGLE);
         drawable.setColor(color);
         drawable.setCornerRadius(radius);
+        drawable.setStroke(dp(1), strokeColor);
+        return drawable;
+    }
+
+    private GradientDrawable ovalBg(int color, int strokeColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.OVAL);
+        drawable.setColor(color);
         drawable.setStroke(dp(1), strokeColor);
         return drawable;
     }

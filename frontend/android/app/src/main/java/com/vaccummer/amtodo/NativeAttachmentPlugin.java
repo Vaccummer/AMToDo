@@ -300,6 +300,7 @@ public class NativeAttachmentPlugin extends Plugin {
     private void startMediaCapture(PluginCall call, boolean video) {
         Intent intent = new Intent(getContext(), CameraXMediaActivity.class);
         intent.putExtra(CameraXMediaActivity.EXTRA_INITIAL_MODE, video ? CameraXMediaActivity.MODE_VIDEO : CameraXMediaActivity.MODE_PHOTO);
+        intent.putExtra(CameraXMediaActivity.EXTRA_LOCALE, call.getString("locale", ""));
         startActivityForResult(call, intent, video ? "captureVideoResult" : "capturePhotoResult");
     }
 

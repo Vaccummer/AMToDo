@@ -108,7 +108,7 @@ export function AttachmentManager({
   modalClass = "modal",
   pickerOpenRef,
 }: AttachmentManagerProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { ask, dialog: confirmDialog } = useConfirm();
 
   const [attachments, setAttachments] = useState<AnyAttachment[]>([]);
@@ -142,7 +142,6 @@ export function AttachmentManager({
   const batchAbortRef = useRef<AbortController | null>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureNameInputRef = useRef<HTMLInputElement>(null);
   const attachSwipeRef = useRef({ id: 0, startX: 0, startY: 0, moved: false, cancelled: false });
@@ -527,13 +526,12 @@ export function AttachmentManager({
 
   async function handleNativeCapture(kind: "photo" | "video") {
     if (!uploadNativeFile || !isNativeAttachmentUploadAvailable()) {
-      if (kind === "photo") cameraInputRef.current?.click();
-      else videoInputRef.current?.click();
+      cameraInputRef.current?.click();
       return;
     }
 
     try {
-      const file = await captureNativeAttachmentMedia(kind);
+      const file = await captureNativeAttachmentMedia(kind, locale);
       if (!file) return;
       const fallbackExt = kind === "video" ? "mp4" : "jpg";
       const ext = file.name.split(".").pop() || fallbackExt;
@@ -982,7 +980,7 @@ export function AttachmentManager({
     <>
       <div className={`${modalClass}-section-label`}>{t("common.attachments")}</div>
 
-      {/* Action bar: camera + video + file picker */}
+      {/* Action bar: camera + file picker */}
       <div className="attach-action-bar">
         <button type="button" className="attach-icon-btn" onClick={() => handleNativeCapture("photo")} aria-label={t("common.takePhoto")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -991,14 +989,6 @@ export function AttachmentManager({
           </svg>
         </button>
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleCameraCapture} />
-        <div className="attach-divider-v" />
-        <button type="button" className="attach-icon-btn" onClick={() => handleNativeCapture("video")} aria-label={t("common.takeVideo")}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="23 7 16 12 23 17 23 7" />
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-          </svg>
-        </button>
-        <input ref={videoInputRef} type="file" accept="video/*" capture="environment" hidden onChange={handleCameraCapture} />
         <div className="attach-divider-v" />
         <button type="button" className="attach-icon-btn" onClick={handleSelectFiles} aria-label={t("common.selectFile")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

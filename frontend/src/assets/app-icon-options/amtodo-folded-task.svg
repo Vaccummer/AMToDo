@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="AMToDo folded task icon">
+  <defs>
+    <linearGradient id="bg" x1="160" y1="104" x2="864" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fbf8"/>
+      <stop offset="1" stop-color="#dbeee9"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="270" y1="208" x2="754" y2="826" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00c080"/>
+      <stop offset="1" stop-color="#2477d8"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="210" fill="#14312f"/>
+  <path d="M272 178h344l142 142v526H272V178z" fill="url(#bg)"/>
+  <path d="M616 178v142h142" fill="#c4ded8"/>
+  <path d="M360 402h304M360 536h230M360 670h162" stroke="#5f7774" stroke-width="48" stroke-linecap="round"/>
+  <circle cx="692" cy="690" r="138" fill="url(#accent)"/>
+  <path d="M630 692l46 48 92-110" fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M272 178h344l142 142" fill="none" stroke="#ffffff" stroke-width="22" opacity=".55"/>
+</svg>

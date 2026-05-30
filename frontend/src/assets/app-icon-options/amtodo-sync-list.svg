@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="AMToDo sync list icon">
+  <defs>
+    <linearGradient id="bg" x1="112" y1="912" x2="912" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f08a5d"/>
+      <stop offset=".48" stop-color="#0bbf86"/>
+      <stop offset="1" stop-color="#2e62d6"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="232" fill="#111f24"/>
+  <path d="M196 678c-44-118-8-254 91-333 101-80 245-87 354-18" fill="none" stroke="url(#bg)" stroke-width="54" stroke-linecap="round"/>
+  <path d="M305 293h184v184" fill="none" stroke="#53e4a4" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M828 346c44 118 8 254-91 333-101 80-245 87-354 18" fill="none" stroke="url(#bg)" stroke-width="54" stroke-linecap="round"/>
+  <path d="M719 731H535V547" fill="none" stroke="#f7b26f" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="294" y="417" width="436" height="60" rx="30" fill="#edf7f2"/>
+  <rect x="294" y="547" width="310" height="60" rx="30" fill="#edf7f2" opacity=".86"/>
+  <rect x="294" y="677" width="214" height="60" rx="30" fill="#edf7f2" opacity=".7"/>
+</svg>

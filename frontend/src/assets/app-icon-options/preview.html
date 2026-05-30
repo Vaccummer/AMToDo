@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AMToDo Icon Options</title>
+  <style>
+    body {
+      margin: 0;
+      background: #eef3f1;
+      color: #1b2426;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+    h1 {
+      margin: 0 0 24px;
+      font-size: 28px;
+      font-weight: 740;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 20px;
+    }
+    .option {
+      background: rgba(255, 255, 255, .78);
+      border: 1px solid rgba(22, 39, 46, .12);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(20, 49, 47, .08);
+    }
+    img {
+      display: block;
+      width: 128px;
+      height: 128px;
+      margin: 0 auto 14px;
+    }
+    .name {
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AMToDo Icon Options</h1>
+    <section class="grid">
+      <div class="option"><img src="./amtodo-check-orbit.svg" alt=""><div class="name">check-orbit</div></div>
+      <div class="option"><img src="./amtodo-calendar-mark.svg" alt=""><div class="name">calendar-mark</div></div>
+      <div class="option"><img src="./amtodo-sync-list.svg" alt=""><div class="name">sync-list</div></div>
+      <div class="option"><img src="./amtodo-folded-task.svg" alt=""><div class="name">folded-task</div></div>
+      <div class="option"><img src="./amtodo-a-check.svg" alt=""><div class="name">a-check</div></div>
+    </section>
+  </main>
+</body>
+</html>
