@@ -297,7 +297,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   const loadCaptureTempSize = useCallback(async () => {
     if (!isNativePlatform()) {
-      setCaptureTempSize({ count: 0, bytes: 0 });
+      setCaptureTempSize({ count: 0, bytes: 0, photoCount: 0, videoCount: 0 });
       return;
     }
     try {

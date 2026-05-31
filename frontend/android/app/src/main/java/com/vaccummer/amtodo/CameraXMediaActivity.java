@@ -478,6 +478,7 @@ public class CameraXMediaActivity extends AppCompatActivity {
         if (cameraProvider == null) return;
         try {
             selectedAspectRatio = aspectRatioForMode(effectiveRatioMode());
+            applyFrontCameraPreviewMirror();
             Preview.Builder previewBuilder = new Preview.Builder();
             if (!RATIO_FULL.equals(effectiveRatioMode())) {
                 previewBuilder.setTargetAspectRatio(selectedAspectRatio);
@@ -540,11 +541,13 @@ public class CameraXMediaActivity extends AppCompatActivity {
         applyImageCropRatio();
         String name = mediaName("jpg");
         ContentValues values = mediaValues(name, "image/jpeg");
+        ImageCapture.Metadata metadata = new ImageCapture.Metadata();
+        metadata.setReversedHorizontal(isFrontCamera());
         ImageCapture.OutputFileOptions options = new ImageCapture.OutputFileOptions.Builder(
             getContentResolver(),
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             values
-        ).build();
+        ).setMetadata(metadata).build();
         imageCapture.takePicture(options, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
             @Override
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
@@ -646,6 +649,15 @@ public class CameraXMediaActivity extends AppCompatActivity {
             ? CameraSelector.LENS_FACING_FRONT
             : CameraSelector.LENS_FACING_BACK;
         bindCamera();
+    }
+
+    private boolean isFrontCamera() {
+        return lensFacing == CameraSelector.LENS_FACING_FRONT;
+    }
+
+    private void applyFrontCameraPreviewMirror() {
+        if (previewView == null) return;
+        previewView.setScaleX(isFrontCamera() ? -1f : 1f);
     }
 
     private void toggleFlash() {
