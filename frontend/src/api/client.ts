@@ -344,7 +344,7 @@ export type ScheduleCreateParams = {
   description?: string | null;
   location?: string | null;
   category?: string | null;
-  extra_fields?: Record<string, string> | null;
+  extra_fields?: Record<string, string> | string | null;
 };
 
 type AttachmentOwnerType = "todo" | "schedule";
@@ -416,6 +416,12 @@ function parseExtraFields<T extends { extra_fields?: unknown }>(item: T): T {
     }
   }
   return item;
+}
+
+function serializeExtraFields(extraFields: Record<string, string> | string | null | undefined): string | null {
+  if (extraFields == null) return null;
+  if (typeof extraFields === "string") return extraFields;
+  return Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null;
 }
 
 export class AMToDoApi {
@@ -571,15 +577,17 @@ export class AMToDoApi {
   }
 
   async createTodo(title: string, plannedAt: number, opts?: { due_at?: number | null; description?: string | null; priority?: number; tag?: string | null; extra_fields?: string | null }): Promise<TodoResponse> {
-    return this.post("/api/v1/todos/create", {
+    const res = await this.post<TodoResponse>("/api/v1/todos/create", {
       title,
       planned_at: plannedAt,
       due_at: opts?.due_at ?? null,
       description: opts?.description ?? null,
       priority: opts?.priority ?? 0,
       tag: opts?.tag ?? null,
-      ...(opts?.extra_fields != null ? { extra_fields: opts.extra_fields } : {}),
+      ...(opts?.extra_fields != null ? { extra_fields: serializeExtraFields(opts.extra_fields) } : {}),
     });
+    parseExtraFields(res.todo);
+    return res;
   }
 
   async getTodo(todoId: number, trashMode?: boolean): Promise<TodoResponse> {
@@ -895,13 +903,15 @@ export class AMToDoApi {
   }
 
   async createSchedule(params: ScheduleCreateParams): Promise<ScheduleResponse> {
-    return this.post("/api/v1/schedules/create", {
+    const res = await this.post<ScheduleResponse>("/api/v1/schedules/create", {
       ...params,
       description: params.description ?? null,
       location: params.location ?? null,
       category: params.category ?? null,
-      extra_fields: params.extra_fields ?? null
+      extra_fields: serializeExtraFields(params.extra_fields)
     });
+    parseExtraFields(res.schedule);
+    return res;
   }
 
   async getSchedule(scheduleId: number, trashMode?: boolean): Promise<ScheduleResponse> {
