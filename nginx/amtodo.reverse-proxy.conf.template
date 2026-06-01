@@ -1,0 +1,107 @@
+# AMToDo Nginx reverse proxy template.
+#
+# Replace every ${...} placeholder before enabling this file:
+#   ${AMTODO_DOMAIN}               example: www.example.com
+#   ${AMTODO_HTTP_PORT}            example: 80
+#   ${AMTODO_HTTPS_PORT}           example: 443 or 1984
+#   ${AMTODO_SSL_CERTIFICATE}      example: /etc/letsencrypt/live/www.example.com/fullchain.pem
+#   ${AMTODO_SSL_CERTIFICATE_KEY}  example: /etc/letsencrypt/live/www.example.com/privkey.pem
+#   ${AMTODO_UPSTREAM_HOST}        example: 127.0.0.1
+#   ${AMTODO_UPSTREAM_PORT}        example: 8000
+#
+# Put this file inside the nginx http {} context, for example by including it
+# from nginx.conf. Do not expose /api/v1/admin/* through this reverse proxy.
+
+limit_req_zone $binary_remote_addr zone=amtodo_health_per_ip:10m rate=30r/m;
+
+map $http_upgrade $amtodo_connection_upgrade {
+    default upgrade;
+    ""      close;
+}
+
+upstream amtodo_server {
+    server ${AMTODO_UPSTREAM_HOST}:${AMTODO_UPSTREAM_PORT};
+    keepalive 32;
+}
+
+server {
+    listen ${AMTODO_HTTP_PORT};
+    server_name ${AMTODO_DOMAIN};
+
+    return 301 https://${AMTODO_DOMAIN}:${AMTODO_HTTPS_PORT}$request_uri;
+}
+
+server {
+    listen ${AMTODO_HTTPS_PORT} ssl http2;
+    server_name ${AMTODO_DOMAIN};
+
+    ssl_certificate     ${AMTODO_SSL_CERTIFICATE};
+    ssl_certificate_key ${AMTODO_SSL_CERTIFICATE_KEY};
+
+    ssl_session_cache shared:AMTODO_SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 0;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Port ${AMTODO_HTTPS_PORT};
+    proxy_connect_timeout 30s;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
+    # Admin APIs are intentionally not proxied. Keep admin use local to the
+    # backend host, or access it through an SSH tunnel if remote maintenance is
+    # needed.
+    location = /api/v1/admin {
+        return 404;
+    }
+
+    location ^~ /api/v1/admin/ {
+        return 404;
+    }
+
+    # Public unauthenticated health check. Limit per source IP.
+    location = /api/v1/health {
+        limit_req zone=amtodo_health_per_ip burst=10 nodelay;
+        limit_req_status 429;
+
+        proxy_pass http://amtodo_server;
+        proxy_set_header Connection "";
+    }
+
+    location = /api/v1/ws {
+        proxy_pass http://amtodo_server;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $amtodo_connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location = /api/v1/attachment/upload {
+        proxy_pass http://amtodo_server;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location ~ ^/api/v1/attachment/(todo|schedule)/[0-9]+/[0-9]+/download$ {
+        proxy_pass http://amtodo_server;
+        proxy_buffering off;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location / {
+        proxy_pass http://amtodo_server;
+        proxy_set_header Connection "";
+    }
+}
