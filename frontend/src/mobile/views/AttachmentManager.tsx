@@ -60,6 +60,7 @@ function AttachmentMissingIcon() {
 const VIDEO_EXTS = new Set(["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv", "flv", "3gp", "3g2", "mpeg", "mpg", "ogv"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "opus", "webm", "m4b"]);
 const TEXT_EXTS = new Set(["txt", "md", "json", "csv", "xml", "log", "py", "js", "ts", "tsx", "jsx", "html", "css", "yaml", "yml", "ini", "cfg", "sh", "bat", "rs", "go", "java", "c", "cpp", "h", "hpp", "sql", "toml", "env", "gitignore", "dockerfile", "makefile", "rb", "php", "swift", "kt", "lua", "r", "vue", "svelte", "astro", "conf", "config", "properties", "gradle", "cmake", "lock", "diff", "patch", "svg"]);
+const ATTACHMENT_ICON_SIZE = 36;
 
 function isPreviewable(a: AnyAttachment): boolean {
   return effectivePreviewKind(a) !== "none";
@@ -92,6 +93,94 @@ function effectivePreviewKind(a: AnyAttachment): string {
   return "none";
 }
 
+function scaledIconSize(width: number, height: number, iconSize: number): { width: number; height: number } | null {
+  const maxSide = Math.max(width, height);
+  if (!Number.isFinite(maxSide) || maxSide <= 0) return null;
+  const scale = iconSize / maxSide;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+function drawThumbnail(source: CanvasImageSource, width: number, height: number, iconSize: number): string | null {
+  const size = scaledIconSize(width, height, iconSize);
+  if (!size) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, size.width, size.height);
+  return canvas.toDataURL("image/png");
+}
+
+function createImageThumbnail(url: string, iconSize = ATTACHMENT_ICON_SIZE): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      try {
+        resolve(drawThumbnail(img, img.naturalWidth, img.naturalHeight, iconSize));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function createVideoThumbnail(url: string, iconSize = ATTACHMENT_ICON_SIZE): Promise<string | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    let settled = false;
+    let timer: number | undefined;
+    const done = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+      resolve(value);
+    };
+    const capture = () => {
+      try {
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        done(drawThumbnail(video, width, height, iconSize));
+      } catch {
+        done(null);
+      }
+    };
+    timer = window.setTimeout(() => done(null), 5000);
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const targetTime = Number.isFinite(video.duration) && video.duration > 0.2 ? 0.1 : 0;
+      if (Math.abs(video.currentTime - targetTime) < 0.01) {
+        capture();
+        return;
+      }
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        capture();
+      }
+    };
+    video.onseeked = capture;
+    video.onloadeddata = () => {
+      if (video.currentTime === 0) capture();
+    };
+    video.onerror = () => done(null);
+    video.src = url.includes("#") ? url : `${url}#t=0.1`;
+    video.load();
+  });
+}
+
 export function AttachmentManager({
   ownerType,
   ownerId,
@@ -113,6 +202,7 @@ export function AttachmentManager({
 
   const [attachments, setAttachments] = useState<AnyAttachment[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [attachmentThumbnails, setAttachmentThumbnails] = useState<Record<number, string>>({});
   const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [downloadProgressMap, setDownloadProgressMap] = useState<Record<number, DownloadProgress>>({});
@@ -146,6 +236,7 @@ export function AttachmentManager({
   const captureNameInputRef = useRef<HTMLInputElement>(null);
   const attachSwipeRef = useRef({ id: 0, startX: 0, startY: 0, moved: false, cancelled: false });
   const attachmentUrlsRef = useRef<Record<number, string>>({});
+  const thumbnailKeysRef = useRef<Record<number, string>>({});
 
   const previewItems = useMemo(
     () => attachments.filter((a) => !a.is_orphaned && isPreviewable(a)),
@@ -347,6 +438,58 @@ export function AttachmentManager({
   useEffect(() => {
     attachmentUrlsRef.current = attachmentUrls;
   }, [attachmentUrls]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const validIds = new Set(attachments.map((attachment) => attachment.id));
+    setAttachmentThumbnails((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const idText of Object.keys(next)) {
+        if (!validIds.has(Number(idText))) {
+          delete next[Number(idText)];
+          delete thumbnailKeysRef.current[Number(idText)];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    for (const attachment of attachments) {
+      const url = attachmentUrls[attachment.id];
+      const kind = effectivePreviewKind(attachment);
+      if (!url || (kind !== "image" && kind !== "video")) {
+        delete thumbnailKeysRef.current[attachment.id];
+        setAttachmentThumbnails((prev) => {
+          if (!(attachment.id in prev)) return prev;
+          const next = { ...prev };
+          delete next[attachment.id];
+          return next;
+        });
+        continue;
+      }
+      const key = `${kind}:${url}:${attachment.updated_at}:${attachment.plain_size_bytes}`;
+      if (thumbnailKeysRef.current[attachment.id] === key) continue;
+      thumbnailKeysRef.current[attachment.id] = key;
+      setAttachmentThumbnails((prev) => {
+        if (!(attachment.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[attachment.id];
+        return next;
+      });
+      const create = kind === "image" ? createImageThumbnail : createVideoThumbnail;
+      create(url).then((thumbUrl) => {
+        if (cancelled || !thumbUrl || thumbnailKeysRef.current[attachment.id] !== key) return;
+        setAttachmentThumbnails((prev) => ({ ...prev, [attachment.id]: thumbUrl }));
+      }).catch(() => {
+        if (thumbnailKeysRef.current[attachment.id] === key) {
+          delete thumbnailKeysRef.current[attachment.id];
+        }
+      });
+    }
+
+    return () => { cancelled = true; };
+  }, [attachments, attachmentUrls]);
 
   useEffect(() => {
     return () => {
@@ -1041,6 +1184,8 @@ export function AttachmentManager({
         <div className="attachment-list-scroll">
         {attachments.map((attachment) => {
           const url = attachmentUrls[attachment.id];
+          const previewKind = effectivePreviewKind(attachment);
+          const thumbUrl = attachmentThumbnails[attachment.id];
           const orphaned = attachment.is_orphaned;
           const loadError = attachmentErrors[attachment.id];
           const isDownloading = downloadingIds.current.has(attachment.id);
@@ -1131,38 +1276,26 @@ export function AttachmentManager({
                 >
                   {orphaned || loadError ? (
                     <AttachmentMissingIcon />
-                  ) : effectivePreviewKind(attachment) === "image" && url ? (
-                    <img src={url} alt="" />
-                  ) : effectivePreviewKind(attachment) === "video" && url ? (
-                    <span className="attach-video-thumb">
-                      <video
-                        src={url.includes("#") ? url : `${url}#t=0.1`}
-                        muted
-                        playsInline
-                        preload="auto"
-                        onLoadedMetadata={(e) => {
-                          const video = e.currentTarget;
-                          if (Number.isFinite(video.duration) && video.duration > 0.2 && video.currentTime < 0.1) {
-                            try { video.currentTime = 0.1; } catch { /* ignore */ }
-                          }
-                        }}
-                        onLoadedData={(e) => {
-                          try { e.currentTarget.pause(); } catch { /* ignore */ }
-                        }}
-                      />
+                  ) : (previewKind === "image" || previewKind === "video") && thumbUrl ? (
+                    <span className={`attach-generated-thumb attach-generated-thumb-${previewKind}`}>
+                      <img src={thumbUrl} alt="" />
+                      {previewKind === "video" ? (
                       <span className="attach-video-play" aria-hidden="true">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                           <path d="M8 5v14l11-7z" />
                         </svg>
                       </span>
+                      ) : null}
                     </span>
+                  ) : previewKind === "image" || previewKind === "video" ? (
+                    <span className="attachment-spinner" aria-hidden="true" />
                   ) : fileIconSvg ? (
                     <span className="attach-file-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: fileIconSvg }} />
-                  ) : effectivePreviewKind(attachment) === "audio" ? (
+                  ) : previewKind === "audio" ? (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
                     </svg>
-                  ) : effectivePreviewKind(attachment) === "text" ? (
+                  ) : previewKind === "text" ? (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
