@@ -161,7 +161,12 @@ async def stream_upload_attachment(request: Request, token: str):
     if not tok:
         raise HTTPException(404, "Invalid or expired token")
 
-    # 2. Check Content-Length header (fast reject)
+    # 2. Reject resumable/ranged upload semantics explicitly.
+    if request.headers.get("content-range") or request.headers.get("range"):
+        upload_token_store.pop(token)
+        raise HTTPException(400, "Resumable attachment upload is not supported")
+
+    # 3. Check Content-Length header (fast reject)
     content_length = request.headers.get("content-length")
     if content_length:
         try:
@@ -173,7 +178,7 @@ async def stream_upload_attachment(request: Request, token: str):
             upload_token_store.pop(token)
             raise HTTPException(413, "File too large")
 
-    # 3. Stream to temp file with byte counter
+    # 4. Stream to temp file with byte counter
     temp_path = tok.temp_path
     total = 0
     try:
@@ -192,13 +197,13 @@ async def stream_upload_attachment(request: Request, token: str):
         upload_token_store.pop(token)
         raise
 
-    # 4. Finalize -- remove token, keep temp file
+    # 5. Finalize -- remove token, keep temp file
     tok_final = upload_token_store.finalize(token)
     if not tok_final:
         temp_path.unlink(missing_ok=True)
         raise HTTPException(408, "Token expired during upload")
 
-    # 5. Service creates metadata + moves file to final location
+    # 6. Service creates metadata + moves file to final location
     from clock import SystemClock
 
     clock = SystemClock()
