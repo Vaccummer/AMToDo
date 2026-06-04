@@ -16,11 +16,13 @@ const notificationFiredIds = new Set(); // IDs already shown as system notificat
 const DEFAULT_POLL_INTERVAL = 30; // seconds
 const DEFAULT_QUERY_WINDOW = 60; // seconds
 
-// --- Icon helpers (load from app.png, resize for each use) ---
+// --- Icon helpers (load from app.png/app-tray.ico, resize for each use) ---
 
 const APP_PNG_PATH = path.join(__dirname, "..", "src", "assets", "app.png");
+const APP_TRAY_ICO_PATH = path.join(__dirname, "..", "src", "assets", "app-tray.ico");
 
 let _appPngImage = null;
+let _trayIconImage = null;
 
 function _appPng() {
   if (!_appPngImage) _appPngImage = nativeImage.createFromPath(APP_PNG_PATH);
@@ -32,7 +34,12 @@ function createAppIcon() {
 }
 
 function createTrayIcon() {
-  return _appPng().resize({ width: 16, height: 16 });
+  if (!_trayIconImage) {
+    _trayIconImage = fs.existsSync(APP_TRAY_ICO_PATH)
+      ? nativeImage.createFromPath(APP_TRAY_ICO_PATH)
+      : _appPng().resize({ width: 32, height: 32, quality: "best" });
+  }
+  return _trayIconImage;
 }
 
 function createWindowIcon() {

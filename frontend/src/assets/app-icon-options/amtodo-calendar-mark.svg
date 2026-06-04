@@ -10,8 +10,8 @@
       <stop offset="1" stop-color="#e9f5f0"/>
     </linearGradient>
   </defs>
-  <rect x="72" y="72" width="880" height="880" rx="210" fill="url(#bg)"/>
-  <g transform="translate(512 512) scale(.74) translate(-512 -512)">
+  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(1.12) translate(-512 -512)">
     <rect x="224" y="206" width="576" height="618" rx="92" fill="url(#sheet)"/>
     <path d="M224 350h576" stroke="#0e3b38" stroke-width="70"/>
     <path d="M348 186v118M676 186v118" stroke="#f5fbf8" stroke-width="56" stroke-linecap="round"/>
