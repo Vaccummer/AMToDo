@@ -79,7 +79,7 @@ def ui_root() -> Path:
 def _default_database_url(root: Path) -> str:
     """Return the default SQLite database URL under the given root."""
 
-    return f"sqlite:///{root / 'db' / 'amtodo.sqlite3'}"
+    return f"sqlite:///{(root / 'db' / 'amtodo.sqlite3').resolve().as_posix()}"
 
 
 def _int_env(name: str, default: int) -> int:

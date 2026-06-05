@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.engine import make_url
 
 from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, server_root
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
@@ -84,6 +85,21 @@ def _build_log_config(log_file: str) -> dict:
             "amtodo": {"handlers": ["file", "terminal"], "level": "INFO", "propagate": False},
         },
     }
+
+
+def _resolve_database_url(database_url: str, root: Path) -> str:
+    """Resolve relative SQLite database URLs against the server root."""
+
+    url = make_url(database_url)
+    if url.drivername not in {"sqlite", "sqlite+pysqlite"}:
+        return database_url
+    if url.database in {None, "", ":memory:"}:
+        return database_url
+
+    database_path = Path(url.database).expanduser()
+    if not database_path.is_absolute():
+        database_path = root / database_path
+    return str(url.set(database=database_path.resolve().as_posix()))
 
 
 def _build_token_map(db) -> dict[str, int]:
@@ -306,7 +322,8 @@ def main() -> None:
     from hypercorn.config import Config
 
     root = server_root()
-    raw = _load_raw_config(str(root / "config.toml"))
+    config_path = (root / "config.toml").resolve()
+    raw = _load_raw_config(str(config_path))
 
     server = raw.get("server", {})
     database_cfg = raw.get("database", {})
@@ -320,7 +337,10 @@ def main() -> None:
     security_headers_cfg = raw.get("security_headers", {})
 
     log_file = log_cfg.get("file", "log/server.log")
-    database_url = database_cfg.get("url", "sqlite:///db/amtodo.sqlite3")
+    database_url = _resolve_database_url(
+        database_cfg.get("url", "sqlite:///db/amtodo.sqlite3"),
+        root,
+    )
     host = server.get("host", "")
     if not host or host == "null":
         host = None
@@ -341,18 +361,19 @@ def main() -> None:
     hsts_enabled = _as_bool(security_headers_cfg.get("hsts_enabled"), False)
     hsts_max_age_seconds = int(security_headers_cfg.get("hsts_max_age_seconds", 15_552_000))
 
+    log_path = (root / log_file).resolve()
+
     if not admin_token or admin_token == "CHANGE_ME_BEFORE_RELEASE":
-        print("FATAL: admin_token is not configured in server/config.toml", file=sys.stderr)
+        print(f"FATAL: admin_token is not configured in {config_path}", file=sys.stderr)
         sys.exit(1)
 
     if not attachment_root:
-        print("FATAL: attachment_root is not configured in server/config.toml", file=sys.stderr)
+        print(f"FATAL: attachment_root is not configured in {config_path}", file=sys.stderr)
         sys.exit(1)
-
-    log_path = (root / log_file).resolve()
 
     print(f"AMToDo Server v{__version__}")
     print(f"  PID:       {os.getpid()}")
+    print(f"  Config:    {config_path}")
     print(f"  Log:       {log_path}")
     print(f"  Database:  {database_url}")
     listen_display = f"[::]:{port} (dual-stack)" if host is None else f"{host}:{port}"
