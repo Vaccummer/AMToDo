@@ -306,7 +306,7 @@ def main() -> None:
     from hypercorn.config import Config
 
     root = server_root()
-    raw = _load_raw_config(str(root / "config" / "server.toml"))
+    raw = _load_raw_config(str(root / "config.toml"))
 
     server = raw.get("server", {})
     database_cfg = raw.get("database", {})
@@ -341,12 +341,12 @@ def main() -> None:
     hsts_enabled = _as_bool(security_headers_cfg.get("hsts_enabled"), False)
     hsts_max_age_seconds = int(security_headers_cfg.get("hsts_max_age_seconds", 15_552_000))
 
-    if not admin_token:
-        print("FATAL: admin_token is not configured in config/server.toml", file=sys.stderr)
+    if not admin_token or admin_token == "CHANGE_ME_BEFORE_RELEASE":
+        print("FATAL: admin_token is not configured in server/config.toml", file=sys.stderr)
         sys.exit(1)
 
     if not attachment_root:
-        print("FATAL: attachment_root is not configured in config/server.toml", file=sys.stderr)
+        print("FATAL: attachment_root is not configured in server/config.toml", file=sys.stderr)
         sys.exit(1)
 
     log_path = (root / log_file).resolve()

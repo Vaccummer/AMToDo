@@ -279,6 +279,36 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
     }
   }
 
+  async function restoreAll() {
+    if (filteredItems.length === 0) return;
+    const ok = await ask({
+      title: t("trash.restoreAllConfirmTitle"),
+      message: t("trash.restoreAllConfirmMessage", { count: filteredItems.length }),
+      confirmLabel: t("common.restore"),
+      danger: false,
+    });
+    if (!ok) return;
+
+    setBusyKey("restore-all");
+    try {
+      const todoIds = filteredItems.filter((e) => e.type === "todo").map((e) => e.item.id);
+      const scheduleIds = filteredItems.filter((e) => e.type === "schedule").map((e) => e.item.id);
+      const notifyEntries = filteredItems.filter((e) => e.type === "notify");
+      const promises: Promise<unknown>[] = [];
+      if (todoIds.length) promises.push(api.restoreTodos(todoIds));
+      if (scheduleIds.length) promises.push(api.restoreSchedules(scheduleIds));
+      for (const ne of notifyEntries) promises.push(api.restoreNotification(ne.item.id));
+      await Promise.all(promises);
+      const restoredKeys = new Set(filteredItems.map(resultKey));
+      setItems((prev) => prev.filter((item) => !restoredKeys.has(resultKey(item))));
+      setStatus(t("trash.restoredCount", { count: filteredItems.length }));
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : t("trash.restoreFailed"));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <div className="trash-view">
       <div className="trash-filter-bar">
@@ -309,6 +339,15 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
         </div>
         <button
           type="button"
+          className="trash-restore-all-btn"
+          disabled={filteredItems.length === 0 || busyKey === "restore-all"}
+          onClick={() => void restoreAll()}
+          title={t("trash.restoreAllConfirmTitle")}
+        >
+          <RestoreIcon />
+        </button>
+        <button
+          type="button"
           className="trash-clear-btn"
           disabled={filteredItems.length === 0 || busyKey === "purge-all"}
           onClick={() => void purgeAll()}
@@ -318,7 +357,6 @@ export function TrashView({ api, onOpenSettings, connectionStatus, onConnectionE
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           </svg>
-          {filteredItems.length > 0 && <span className="count-dot">{filteredItems.length}</span>}
         </button>
       </div>
 

@@ -27,6 +27,7 @@ interface SettingsData {
   ws_enabled?: string;
   notify_on_disconnect?: string;
   ws_reconnect_interval_ms?: string;
+  attachment_download_root?: string;
 }
 
 
@@ -48,6 +49,35 @@ interface Window {
     startNotificationPolling?: (settings: SettingsData) => Promise<{ ok: boolean; error?: string }>;
     stopNotificationPolling?: () => Promise<{ ok: boolean; error?: string }>;
     showSystemNotification?: (params: { title: string; body: string; id: number; trigger_at: number }) => Promise<{ ok: boolean; error?: string }>;
+    getDefaultAttachmentDownloadRoot?: () => Promise<{ ok: boolean; path: string }>;
+    selectAttachmentDownloadRoot?: () => Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
+    getAttachmentCacheEntry?: (entry: AttachmentCacheEntryInput) => Promise<AttachmentCacheEntryResult>;
+    appendAttachmentCacheChunk?: (entry: AttachmentCacheEntryInput & { offset: number }, data: Uint8Array) => Promise<{ ok: boolean; bytes?: number; error?: string }>;
+    finalizeAttachmentCacheEntry?: (entry: AttachmentCacheEntryInput) => Promise<{ ok: boolean; filePath?: string; folderPath?: string; error?: string }>;
+    deleteAttachmentCacheEntry?: (entry: AttachmentCacheEntryInput) => Promise<{ ok: boolean; error?: string }>;
+    clearAttachmentDownloadCache?: (root?: string) => Promise<{ ok: boolean; error?: string }>;
+    getAttachmentDownloadCacheSize?: (root?: string) => Promise<{ ok: boolean; count: number; bytes: number; error?: string }>;
+    readAttachmentTextPreview?: (entry: AttachmentCacheEntryInput, maxBytes?: number) => Promise<{ ok: boolean; text?: string; truncated?: boolean; error?: string }>;
+    openAttachmentCacheFolder?: (entry: AttachmentCacheEntryInput) => Promise<{ ok: boolean; error?: string }>;
     onNotificationClicked?: (callback: (data: { id: number; trigger_at: number }) => void) => () => void;
   };
+}
+
+interface AttachmentCacheEntryInput {
+  root?: string;
+  ownerType: "todo" | "schedule";
+  ownerId: number;
+  attachmentId: number;
+  filename: string;
+  size: number;
+}
+
+interface AttachmentCacheEntryResult {
+  ok: boolean;
+  exists: boolean;
+  filePath: string;
+  folderPath: string;
+  partialBytes: number;
+  sanitizedFilename: string;
+  error?: string;
 }

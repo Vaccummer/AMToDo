@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut, Notification } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut, Notification, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -15,6 +15,144 @@ let notificationLastPollAt = null; // unix timestamp (seconds)
 const notificationFiredIds = new Set(); // IDs already shown as system notifications
 const DEFAULT_POLL_INTERVAL = 30; // seconds
 const DEFAULT_QUERY_WINDOW = 60; // seconds
+const DEFAULT_ATTACHMENT_DIR_NAME = "AMToDo Attachments";
+
+// --- Attachment cache helpers ---
+
+function defaultAttachmentDownloadRoot() {
+  return path.join(app.getPath("downloads"), DEFAULT_ATTACHMENT_DIR_NAME);
+}
+
+function sanitizePathPart(value, fallback) {
+  const raw = String(value || "").trim();
+  const cleaned = raw
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .replace(/\.+$/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 180)
+    .trim();
+  if (!cleaned || cleaned === "." || cleaned === "..") return fallback;
+  return cleaned;
+}
+
+function attachmentEntryParts(entry) {
+  const ownerType = entry?.ownerType === "schedule" ? "schedule" : "todo";
+  const ownerId = sanitizePathPart(entry?.ownerId, "0");
+  const attachmentId = sanitizePathPart(entry?.attachmentId, "0");
+  const filename = sanitizePathPart(entry?.filename, `${attachmentId}.bin`);
+  const root = path.resolve(String(entry?.root || defaultAttachmentDownloadRoot()));
+  const parentPath = path.join(root, ownerType, ownerId, attachmentId);
+  const filePath = path.join(parentPath, filename);
+  const partPath = `${filePath}.part`;
+  return { root, ownerType, ownerId, attachmentId, filename, parentPath, filePath, partPath };
+}
+
+function ensureInside(parent, target) {
+  const rel = path.relative(parent, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("Invalid attachment cache path");
+  }
+}
+
+function findCachedAttachmentFile(parts, expectedSize) {
+  if (!fs.existsSync(parts.parentPath)) return null;
+  const entries = fs.readdirSync(parts.parentPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.name.endsWith(".part")) continue;
+    const candidate = path.join(parts.parentPath, entry.name);
+    ensureInside(parts.parentPath, candidate);
+    const stat = fs.statSync(candidate);
+    if (Number.isFinite(expectedSize) && expectedSize > 0 && stat.size !== expectedSize) continue;
+    if (entry.name !== parts.filename) {
+      try {
+        fs.renameSync(candidate, parts.filePath);
+        return parts.filePath;
+      } catch {
+        return candidate;
+      }
+    }
+    return candidate;
+  }
+  return null;
+}
+
+function findPartialAttachmentFile(parts) {
+  if (!fs.existsSync(parts.parentPath)) return null;
+  const entries = fs.readdirSync(parts.parentPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".part")) continue;
+    const candidate = path.join(parts.parentPath, entry.name);
+    ensureInside(parts.parentPath, candidate);
+    if (candidate !== parts.partPath) {
+      try {
+        fs.renameSync(candidate, parts.partPath);
+        return parts.partPath;
+      } catch {
+        return candidate;
+      }
+    }
+    return candidate;
+  }
+  return null;
+}
+
+function getAttachmentCacheEntry(entry) {
+  const parts = attachmentEntryParts(entry);
+  const expectedSize = Number(entry?.size || 0);
+  const cached = findCachedAttachmentFile(parts, expectedSize);
+  const partialPath = findPartialAttachmentFile(parts);
+  const partialBytes = partialPath ? fs.statSync(partialPath).size : 0;
+  return {
+    ok: true,
+    exists: Boolean(cached),
+    filePath: cached || parts.filePath,
+    folderPath: parts.parentPath,
+    partialBytes,
+    sanitizedFilename: parts.filename,
+  };
+}
+
+function deleteDirIfEmpty(dir, stopAt) {
+  let current = dir;
+  const stop = path.resolve(stopAt);
+  while (current.startsWith(stop) && current !== stop) {
+    try {
+      if (fs.existsSync(current) && fs.readdirSync(current).length === 0) {
+        fs.rmdirSync(current);
+        current = path.dirname(current);
+      } else {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+}
+
+function directorySize(root) {
+  let count = 0;
+  let bytes = 0;
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const target = path.join(dir, entry.name);
+      ensureInside(root, target);
+      if (entry.isDirectory()) {
+        walk(target);
+      } else if (entry.isFile()) {
+        const stat = fs.statSync(target);
+        count += 1;
+        bytes += stat.size;
+      }
+    }
+  }
+  for (const child of ["todo", "schedule"]) {
+    const target = path.join(root, child);
+    ensureInside(root, target);
+    walk(target);
+  }
+  return { count, bytes };
+}
 
 // --- Icon helpers (load from app.png/app-tray.ico, resize for each use) ---
 
@@ -284,8 +422,19 @@ function createWindow() {
   }
 }
 
+function getConfigPaths() {
+  const envHome = String(process.env.AMTODO_HOME || "").trim();
+  const home = envHome ? path.resolve(envHome) : path.join(app.getPath("home"), ".amtodo");
+  return [path.join(home, "ui", "config.toml")];
+}
+
 function resolveConfigPath() {
-  return path.resolve(__dirname, "..", "..", "config", "ui.toml");
+  return getConfigPaths()[0];
+}
+
+function resolveReadableConfigPath() {
+  const paths = getConfigPaths();
+  return paths.find((candidate) => fs.existsSync(candidate)) || paths[0];
 }
 
 // ── In-memory settings store ──
@@ -301,7 +450,7 @@ function _parseToml(raw) {
 }
 
 function _loadSettingsFromDisk() {
-  const configPath = resolveConfigPath();
+  const configPath = resolveReadableConfigPath();
   const raw = fs.readFileSync(configPath, "utf-8");
   return _parseToml(raw);
 }
@@ -336,6 +485,7 @@ function writeUiToml(settings) {
     "ws_reconnect_retries", "reconnect_max_attempts",
     "ws_enabled", "notify_on_disconnect",
     "ws_reconnect_interval_ms",
+    "attachment_download_root",
   ];
   lines.push("# AMToDo UI configuration (non-visual parameters).");
   for (const key of keys) {
@@ -344,7 +494,9 @@ function writeUiToml(settings) {
     }
   }
   lines.push("");
-  fs.writeFileSync(resolveConfigPath(), lines.join("\n"), "utf-8");
+  const configPath = resolveConfigPath();
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, lines.join("\n"), "utf-8");
 }
 
 app.setAppUserModelId("AMToDo");
@@ -437,6 +589,143 @@ app.whenReady().then(() => {
         mainWindow?.webContents.send("notification:clicked", { id, trigger_at });
       });
       electronNotification.show();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:default-root", () => {
+    return { ok: true, path: defaultAttachmentDownloadRoot() };
+  });
+
+  ipcMain.handle("attachment-cache:select-root", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "选择附件下载目录",
+      defaultPath: defaultAttachmentDownloadRoot(),
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true };
+    return { ok: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle("attachment-cache:get", (_event, entry) => {
+    try {
+      return getAttachmentCacheEntry(entry);
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:append", (_event, entry, data) => {
+    try {
+      const parts = attachmentEntryParts(entry);
+      fs.mkdirSync(parts.parentPath, { recursive: true });
+      ensureInside(parts.parentPath, parts.partPath);
+      const offset = Number(entry?.offset || 0);
+      const existing = fs.existsSync(parts.partPath) ? fs.statSync(parts.partPath).size : 0;
+      if (existing !== offset) {
+        return { ok: false, error: `Partial size mismatch: expected ${offset}, found ${existing}` };
+      }
+      const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      fs.appendFileSync(parts.partPath, bytes);
+      return { ok: true, bytes: existing + bytes.length };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:finalize", (_event, entry) => {
+    try {
+      const parts = attachmentEntryParts(entry);
+      const expectedSize = Number(entry?.size || 0);
+      if (!fs.existsSync(parts.partPath)) return { ok: false, error: "Partial file not found" };
+      const stat = fs.statSync(parts.partPath);
+      if (expectedSize > 0 && stat.size < expectedSize) {
+        return { ok: false, error: `Download incomplete: received ${stat.size} of ${expectedSize} bytes` };
+      }
+      try { fs.rmSync(parts.filePath, { force: true }); } catch {}
+      fs.renameSync(parts.partPath, parts.filePath);
+      return { ok: true, filePath: parts.filePath, folderPath: parts.parentPath };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:delete", (_event, entry) => {
+    try {
+      const parts = attachmentEntryParts(entry);
+      if (fs.existsSync(parts.parentPath)) {
+        for (const item of fs.readdirSync(parts.parentPath)) {
+          const target = path.join(parts.parentPath, item);
+          ensureInside(parts.parentPath, target);
+          fs.rmSync(target, { recursive: true, force: true });
+        }
+        deleteDirIfEmpty(parts.parentPath, parts.root);
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:clear-root", (_event, rootValue) => {
+    try {
+      const root = path.resolve(String(rootValue || defaultAttachmentDownloadRoot()));
+      for (const child of ["todo", "schedule"]) {
+        const target = path.join(root, child);
+        ensureInside(root, target);
+        fs.rmSync(target, { recursive: true, force: true });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:size-root", (_event, rootValue) => {
+    try {
+      const root = path.resolve(String(rootValue || defaultAttachmentDownloadRoot()));
+      return { ok: true, ...directorySize(root) };
+    } catch (err) {
+      return { ok: false, error: err.message, count: 0, bytes: 0 };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:read-text", (_event, entry, maxBytesValue) => {
+    try {
+      const info = getAttachmentCacheEntry(entry);
+      if (!info.exists) return { ok: false, error: "Cached file not found" };
+      const maxBytes = Math.max(1, Math.min(Number(maxBytesValue || 512000), 1024 * 1024));
+      const fd = fs.openSync(info.filePath, "r");
+      try {
+        const stat = fs.fstatSync(fd);
+        const bytesToRead = Math.min(stat.size, maxBytes);
+        const buffer = Buffer.alloc(bytesToRead);
+        fs.readSync(fd, buffer, 0, bytesToRead, 0);
+        return {
+          ok: true,
+          text: buffer.toString("utf8"),
+          truncated: stat.size > bytesToRead,
+        };
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("attachment-cache:open-folder", (_event, entry) => {
+    try {
+      const info = getAttachmentCacheEntry(entry);
+      const target = info.exists ? info.filePath : info.folderPath;
+      if (info.exists) {
+        shell.showItemInFolder(target);
+      } else {
+        fs.mkdirSync(info.folderPath, { recursive: true });
+        shell.openPath(info.folderPath);
+      }
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

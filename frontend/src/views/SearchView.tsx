@@ -17,6 +17,7 @@ type Props = {
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
+  attachmentDownloadRoot?: string;
 };
 
 type SearchMode = "todo" | "schedule" | "notify";
@@ -295,7 +296,7 @@ function updateFields(fields: string[], value: string, checked: boolean): string
   return next.length ? next : fields;
 }
 
-export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, onConnectionError, attachmentDownloadRoot }: Props) {
   const { t } = useI18n();
   const initialConfig = useMemo(() => cloneSearchConfig(searchSessionConfig), []);
   const [mode, setMode] = useState<SearchMode>(initialConfig.mode);
@@ -1333,6 +1334,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
             setDetail(null);
           }}
           onUpdate={(item) => replaceResult({ type: "todo", item })}
+          attachmentDownloadRoot={attachmentDownloadRoot}
         />
       ) : null}
 
@@ -1346,6 +1348,7 @@ export function SearchView({ api, onNavigate, onOpenSettings, connectionStatus, 
             setDetail(null);
           }}
           onUpdate={(item) => replaceResult({ type: "schedule", item })}
+          attachmentDownloadRoot={attachmentDownloadRoot}
         />
       ) : null}
 

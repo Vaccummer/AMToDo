@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import tomllib
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,8 +19,6 @@ DEFAULT_UPLOAD_TEMP_ROOT = str(Path(__import__("tempfile").gettempdir()) / "amto
 DEFAULT_RATE_LIMIT_REQUESTS = 30
 DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_IP_CACHE_TTL_SECONDS = 300
-_AMTODO_SERVER_ROOT_CACHE = Path()
-_AMTODO_CLI_ROOT_CACHE = Path()
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,52 +47,33 @@ class AppSettings:
     hsts_max_age_seconds: int = 15_552_000
 
 
-def _resolve_root(
-    env_var: str,
-    cache_attr: str,
-    *,
-    fatal_handler: Callable[[str], None] | None = None,
-) -> Path:
-    """Resolve a root directory from an environment variable with caching.
+def amtodo_home() -> Path:
+    """Return the AMToDo runtime home directory."""
 
-    *fatal_handler* is called with an error message instead of the default
-    stderr print + sys.exit(1) when provided.
-    """
-    cache: Path = globals()[cache_attr]
-    _die = fatal_handler or (lambda msg: (print(f"FATAL: {msg}", file=sys.stderr), sys.exit(1)))
+    raw = os.environ.get("AMTODO_HOME")
+    return Path(raw).expanduser() if raw else Path.home() / ".amtodo"
 
-    raw = os.environ.get(env_var)
-    if not raw:
-        if cache:
-            return cache
-        _die(f"{env_var} environment variable is not set")
-        sys.exit(1)  # unreachable if handler exits, keeps type-checker happy
 
-    root = Path(raw)
-    if cache == root:
-        return cache
-    if not root.is_dir():
-        _die(f"{env_var} is not a directory: {root}")
-        sys.exit(1)
-    globals()[cache_attr] = root
-    return root
+def _component_root(component: str) -> Path:
+    return amtodo_home() / component
 
 
 def server_root() -> Path:
-    """Return the server root directory from AMTODO_SERVER_ROOT."""
-    return _resolve_root("AMTODO_SERVER_ROOT", "_AMTODO_SERVER_ROOT_CACHE")
+    """Return the server runtime root directory."""
+
+    return _component_root("server")
 
 
 def cli_root() -> Path:
-    """Return the CLI root directory from AMTODO_CLI_ROOT."""
-    import json as _json
+    """Return the CLI runtime root directory."""
 
-    def _json_fatal(msg: str) -> None:
-        print(_json.dumps({"ok": False, "error": msg}, ensure_ascii=False), file=sys.stderr)
-        sys.exit(1)
+    return _component_root("cli")
 
-    return _resolve_root("AMTODO_CLI_ROOT", "_AMTODO_CLI_ROOT_CACHE", fatal_handler=_json_fatal)
 
+def ui_root() -> Path:
+    """Return the UI runtime root directory."""
+
+    return _component_root("ui")
 
 
 def _default_database_url(root: Path) -> str:
@@ -131,7 +109,7 @@ def load_settings() -> AppSettings:
 
 
 def load_cli_settings() -> AppSettings:
-    """Load CLI settings from $AMTODO_CLI_ROOT/config/cli.toml.
+    """Load CLI settings from $AMTODO_HOME/cli/config.toml.
 
     ``server_url`` is required — local-only mode is no longer supported.
     """
@@ -139,7 +117,7 @@ def load_cli_settings() -> AppSettings:
     import json as _json
 
     root = cli_root()
-    config_path = root / "config" / "cli.toml"
+    config_path = root / "config.toml"
 
     database_url = ""
     server_url = ""
@@ -156,7 +134,7 @@ def load_cli_settings() -> AppSettings:
     if not server_url:
         print(
             _json.dumps(
-                {"ok": False, "error": "server_url is not set in cli.toml; local mode is disabled"},
+                {"ok": False, "error": "server_url is not set in cli/config.toml; local mode is disabled"},
                 ensure_ascii=False,
             ),
             file=sys.stderr,
@@ -172,10 +150,10 @@ def load_cli_settings() -> AppSettings:
 
 
 def load_ui_settings() -> AppSettings:
-    """Load UI settings from $AMTODO_SERVER_ROOT/config/ui.toml."""
+    """Load UI settings from $AMTODO_HOME/ui/config.toml."""
 
-    root = server_root()
-    config_path = root / "config" / "ui.toml"
+    root = ui_root()
+    config_path = root / "config.toml"
 
     server_url = ""
     access_token = ""

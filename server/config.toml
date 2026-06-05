@@ -1,0 +1,48 @@
+[server]
+host = "127.0.0.1"
+port = 8000
+name = "AMToDo"
+# External HTTPS URL when running behind a reverse proxy.
+public_url = ""
+
+[database]
+url = "sqlite:///db/amtodo.sqlite3"
+
+[auth]
+admin_token = "CHANGE_ME_BEFORE_RELEASE"
+
+[log]
+file = "log/server.log"
+
+[storage]
+attachment_root = "db"
+
+[rate_limit]
+# Max requests per IP in the time window for public (unauthenticated) endpoints
+requests = 30
+window_seconds = 60
+
+[notification]
+# Background check interval for triggered notifications (seconds)
+watcher_interval = 10
+
+# Heartbeat interval for WebSocket connections (seconds)
+heartbeat_interval = 30
+
+[health]
+# TTL (seconds) for cached public IP addresses (0 = no cache, fetch every time)
+ip_cache_ttl = 300
+
+[proxy]
+# Trust forwarded client IP/scheme only from these proxy addresses or CIDR ranges.
+trusted_ips = ["127.0.0.1", "::1"]
+
+[cors]
+# Replace "*" with explicit origins after the HTTPS domain is stable.
+allow_origins = ["*"]
+
+[security_headers]
+enabled = true
+# Enable only after HTTPS/domain/certificate are stable.
+hsts_enabled = false
+hsts_max_age_seconds = 15552000

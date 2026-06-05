@@ -1,4 +1,4 @@
 interface:
-  display_name: "AMToDo ToDo"
-  short_description: "Operate AMToDo ToDo tasks via JSON CLI"
-  default_prompt: "Use $amtodo-todo to add, search, update, complete, reopen, remove, or summarize AMToDo tasks."
+  display_name: "AMToDo CLI"
+  short_description: "Operate AMToDo todos, schedules, attachments, trash, and users via JSON CLI"
+  default_prompt: "Use $amtodo-todo to manage AMToDo todos, schedules, attachments, trash, users, tokens, health checks, and cache commands through the CLI."

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AMToDoApi, type HealthResponse, type TodoItem } from "./api/client";
+import { AMToDoApi, type HealthResponse, type UserResponse, type TodoItem } from "./api/client";
 import { UiWsClient, RECONNECT_EXHAUSTED_CODE, type WsNotificationPayload } from "./api/ws-client";
 import { ConnectionStatusManager, useConnectionStatus } from "./api/connection-status";
 import { ACCESS_TOKEN, SERVER_URL } from "./config";
@@ -61,6 +61,7 @@ export function App() {
   const [visitedTick, setVisitedTick] = useState(0);
   const tabHistory = useRef<{ stack: Tab[]; index: number }>({ stack: ["todo"], index: 0 });
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserResponse["user"] | null>(null);
   const [maximized, setMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<"url" | "token" | undefined>();
@@ -293,6 +294,17 @@ export function App() {
   // Bootstrap: health check (HTTP) → WS connect → API ready
   useEffect(() => {
     if (!settingsLoaded) return;
+    if (!settings.ws_enabled) {
+      connectionManagerRef.current.reportIdle();
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+        wsClientRef.current = null;
+      }
+      setApi(null);
+      setHealth(null);
+      return;
+    }
+    setApi(null);
     let cancelled = false;
     let retryTimer: number | undefined;
     const MAX_STARTUP_ATTEMPTS = 3;
@@ -398,7 +410,7 @@ export function App() {
         wsClientRef.current = null;
       }
     };
-  }, [settingsLoaded, settings.server_url, settings.access_token]);
+  }, [settingsLoaded, settings.server_url, settings.access_token, settings.ws_enabled, settings.ws_reconnect_interval_ms, settings.reconnect_max_attempts]);
 
   function showSystemNotification(notification: WsNotificationPayload) {
     const epoch = typeof notification.trigger_at === "number" ? notification.trigger_at : 0;
@@ -458,8 +470,14 @@ export function App() {
   useEffect(() => {
     if (!api) return;
     api.user()
-      .then((result) => setUsername(result.user.name))
-      .catch(() => setUsername(""));
+      .then((result) => {
+        setUsername(result.user.name);
+        setCurrentUser(result.user);
+      })
+      .catch(() => {
+        setUsername("");
+        setCurrentUser(null);
+      });
   }, [api]);
 
   // Listen for window maximize changes
@@ -505,9 +523,11 @@ export function App() {
       global_hotkey: s.global_hotkey,
       notification_silent: String(s.notification_silent),
       notification_timeout: s.notification_timeout,
+      ws_enabled: String(s.ws_enabled),
       ws_reconnect_interval_ms: String(s.ws_reconnect_interval_ms),
       reconnect_max_attempts: String(s.reconnect_max_attempts),
       notify_on_disconnect: String(s.notify_on_disconnect),
+      attachment_download_root: s.attachment_download_root,
     }).then(() => {
       shell.startNotificationPolling?.({
         server_url: s.server_url,
@@ -673,6 +693,7 @@ export function App() {
                 }}
                 connectionStatus={connStatus}
                 onConnectionError={handleConnectionError}
+                attachmentDownloadRoot={settings.attachment_download_root}
               />
             </div>
           )}
@@ -753,6 +774,8 @@ export function App() {
           }}
           focusTarget={settingsFocusTarget}
           connectionStatus={connStatus}
+          health={health}
+          currentUser={currentUser}
         />
       ) : null}
 
@@ -763,6 +786,7 @@ export function App() {
           onClose={() => setCrossTypeEdit(null)}
           onDelete={() => setCrossTypeEdit(null)}
           onUpdate={(updated) => setCrossTypeEdit((prev) => prev ? { ...prev, item: updated } : null)}
+          attachmentDownloadRoot={settings.attachment_download_root}
         />
       ) : null}
     </div>

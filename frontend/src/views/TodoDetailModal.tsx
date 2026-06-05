@@ -10,6 +10,7 @@ import { TimeInput } from "./TimeInput";
 import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { ExtraFieldsEditor } from "./ExtraFieldsEditor";
+import { DesktopAttachmentManager } from "./DesktopAttachmentManager";
 
 type Props = {
   todo: TodoItem;
@@ -17,6 +18,7 @@ type Props = {
   onClose: () => void;
   onDelete: (id: number) => void;
   onUpdate: (todo: TodoItem) => void;
+  attachmentDownloadRoot?: string;
 };
 
 function fmtDatetime(epoch: number): string {
@@ -54,7 +56,7 @@ function AttachmentMissingIcon() {
   );
 }
 
-export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate }: Props) {
+export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdate, attachmentDownloadRoot }: Props) {
   const [todo, setTodo] = useState<TodoItem>(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
@@ -539,6 +541,22 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
 
           <div className="modal-divider" />
 
+          <DesktopAttachmentManager
+            ownerType="todo"
+            ownerId={todo.id}
+            api={api}
+            downloadRoot={attachmentDownloadRoot}
+            uploadFile={(file, onProgress, signal) => api.uploadTodoAttachment(todo.id, file, onProgress, signal)}
+            getDownloadUrl={(attachmentId) => api.getTodoAttachmentDownloadUrl(todo.id, attachmentId)}
+            removeFile={(attachmentId) => api.removeTodoAttachment(todo.id, attachmentId)}
+            listAttachments={() => api.listTodoAttachments(todo.id)}
+            onAttachmentsChanged={(count) => {
+              const updatedTodo = { ...todo, attachment_count: count };
+              setTodo(updatedTodo);
+              onUpdate(updatedTodo);
+            }}
+          />
+          {false ? <>
           <div className="modal-section-label">{t("common.attachments")}</div>
           <div
             className={`attachment-dropzone${dragActive ? " active" : ""}`}
@@ -644,6 +662,7 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
             })}
           </div>
 
+          </> : null}
           <div className="modal-divider" />
 
           {/* Read-only fields */}

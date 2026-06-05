@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMToDoApi } from "../api/client";
+import type { HealthResponse, UserResponse } from "../api/client";
 import type { ConnectionStatusSnapshot } from "../api/connection-status";
 import { useI18n } from "../i18n";
 import { clearAttachmentCache, getCacheSize } from "../lib/attachmentCache";
+import { clearDesktopAttachmentDownloadCache, getDefaultDesktopAttachmentRoot, getDesktopAttachmentDownloadCacheSize, selectDesktopAttachmentRoot } from "../lib/desktopAttachmentCache";
 import type { UISettings } from "../lib/settings";
 import { listThemes, applyTheme, getTheme } from "../themes";
 import { Dropdown } from "./Dropdown";
@@ -29,12 +31,12 @@ const SCHEDULE_END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
 // ── Types ──
 
 type UrlCheckResult =
-  | { kind: "ok"; version: string; name?: string }
+  | { kind: "ok"; version: string; name?: string; maxAttachmentSizeBytes?: number }
   | { kind: "unreachable"; message: string }
   | { kind: "invalid"; message: string };
 
 type TokenResult =
-  | { ok: true; userName: string }
+  | { ok: true; userId: number; userName: string; createdAt: number }
   | { ok: false; message: string };
 
 type Props = {
@@ -44,6 +46,8 @@ type Props = {
   onClose: () => void;
   focusTarget?: "url" | "token";
   connectionStatus?: ConnectionStatusSnapshot;
+  health?: HealthResponse | null;
+  currentUser?: UserResponse["user"] | null;
   onConnectionToggle?: (enabled: boolean) => void;
 };
 
@@ -63,9 +67,17 @@ const CROSS_ICON = (
   </svg>
 );
 
+const WARN_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
 // ── Main Component ──
 
-export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, onConnectionToggle }: Props) {
+export function SettingsModal({ settings: initial, onUpdateField, onSaveConnection, onClose, focusTarget, connectionStatus, health, currentUser, onConnectionToggle }: Props) {
   // Form fields
   const [serverUrl, setServerUrl] = useState(initial.server_url);
   const [accessToken, setAccessToken] = useState(initial.access_token);
@@ -100,12 +112,15 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   // Cache
   const [cacheSize, setCacheSize] = useState<{ count: number; bytes: number } | null>(null);
+  const [desktopCacheSize, setDesktopCacheSize] = useState<{ count: number; bytes: number } | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
 
   // Notification
   const [notifyEnabled, setNotifyEnabled] = useState(initial.notification_enabled);
   const [notifSilent, setNotifSilent] = useState(initial.notification_silent);
   const [notifTimeout, setNotifTimeout] = useState(initial.notification_timeout);
+  const [attachmentDownloadRoot, setAttachmentDownloadRoot] = useState(initial.attachment_download_root);
+  const [defaultAttachmentDownloadRoot, setDefaultAttachmentDownloadRoot] = useState("");
 
   // Global hotkey
   const [hotkeyEnabled, setHotkeyEnabled] = useState(initial.global_hotkey_enabled);
@@ -133,18 +148,27 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
 
   const loadCacheSize = useCallback(async () => {
     try {
-      const size = await getCacheSize();
-      setCacheSize(size);
+      const [memorySize, diskSize] = await Promise.all([
+        getCacheSize(),
+        getDesktopAttachmentDownloadCacheSize(attachmentDownloadRoot),
+      ]);
+      setCacheSize(memorySize);
+      setDesktopCacheSize(diskSize);
     } catch {
       setCacheSize(null);
+      setDesktopCacheSize(null);
     }
-  }, []);
+  }, [attachmentDownloadRoot]);
 
   // Check results reset when server URL changes (handled by handleUrlChange)
 
   useEffect(() => {
     loadCacheSize().catch(() => setCacheSize(null));
   }, [loadCacheSize]);
+
+  useEffect(() => {
+    getDefaultDesktopAttachmentRoot().then(setDefaultAttachmentDownloadRoot).catch(() => {});
+  }, []);
 
   // Auto-revert wsEnabled if connection fails after user toggle
   useEffect(() => {
@@ -182,7 +206,12 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
         return false;
       }
 
-      setUrlCheckResult({ kind: "ok", version: result.version, name: result.name });
+      setUrlCheckResult({
+        kind: "ok",
+        version: result.version,
+        name: result.name,
+        maxAttachmentSizeBytes: result.limits?.max_attachment_size_bytes,
+      });
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t("settings.connectionFailed");
@@ -214,7 +243,12 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       const api = new AMToDoApi(serverUrl, accessToken);
       const result = await api.verifyTokenHttp();
       if (result.ok) {
-        setTokenResult({ ok: true, userName: result.user.name });
+        setTokenResult({
+          ok: true,
+          userId: result.user.id,
+          userName: result.user.name,
+          createdAt: result.user.created_at,
+        });
         return true;
       } else {
         setTokenResult({ ok: false, message: t("settings.tokenInvalid") });
@@ -248,6 +282,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   async function handleWsToggle() {
     if (wsEnabled) {
       setWsEnabled(false);
+      onSaveConnection?.({ ws_enabled: false });
       onConnectionToggle?.(false);
       return;
     }
@@ -318,9 +353,9 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
   const validScheduleHours = Number(scheduleStartHour) < Number(scheduleEndHour);
 
   // Connection section state
-  const connLocked = wsEnabled;
+  const connLocked = wsEnabled && connectionStatus?.status === "online";
   const urlCheckPassed = urlCheckResult?.kind === "ok";
-  const tokenEditable = urlCheckPassed && !connLocked;
+  const tokenEditable = !connLocked;
 
   // Input classes
   const urlInputClass = [
@@ -352,6 +387,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     setClearingCache(true);
     try {
       await clearAttachmentCache();
+      await clearDesktopAttachmentDownloadCache(attachmentDownloadRoot);
       await loadCacheSize();
     } catch {
       // ignore clear-cache errors
@@ -359,6 +395,17 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
       setClearingCache(false);
     }
   }
+
+  async function chooseAttachmentDownloadRoot() {
+    const selected = await selectDesktopAttachmentRoot();
+    if (!selected) return;
+    setAttachmentDownloadRoot(selected);
+    onUpdateField?.({ attachment_download_root: selected });
+  }
+
+  const totalCacheSize = cacheSize && desktopCacheSize
+    ? { count: cacheSize.count + desktopCacheSize.count, bytes: cacheSize.bytes + desktopCacheSize.bytes }
+    : cacheSize;
 
   // Register/unregister global hotkey when settings change
   useEffect(() => {
@@ -486,7 +533,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <div className="settings-conn-card-icon">{CHECK_ICON}</div>
             <div className="settings-conn-card-body">
               <div className="settings-conn-card-title">{t("settings.tokenValid")}</div>
-              <div className="settings-conn-card-desc">{t("settings.userLabel")}{tokenResult.userName}</div>
+              <div className="settings-conn-card-desc">{t("settings.userLabel")}{tokenResult.userName} · No.{tokenResult.userId}</div>
             </div>
           </div>
         </div>
@@ -504,6 +551,190 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  function formatUserCreated(ts?: number): string {
+    if (!ts) return t("settings.mobilePendingCheck");
+    return new Date(ts * 1000).toLocaleDateString(locale === "en" ? "en" : "zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  type ConnectionViewState = "online" | "connecting" | "interrupted" | "error" | "idle";
+
+  function getConnectionViewState(): ConnectionViewState {
+    if (urlChecking || tokenVerifying) return "connecting";
+    if (!wsEnabled) return "idle";
+
+    switch (connectionStatus?.status) {
+      case "online":
+        return "online";
+      case "checking":
+        return "connecting";
+      case "reconnecting":
+        return tokenResult?.ok || connectionStatus.serverName ? "interrupted" : "connecting";
+      case "idle":
+        return "idle";
+      case "offline":
+        return wsEnabled && (tokenResult?.ok || connectionStatus.serverName) ? "interrupted" : "error";
+      case "token-error":
+        return "error";
+      default:
+        if (urlCheckResult?.kind === "unreachable" || urlCheckResult?.kind === "invalid" || tokenResult?.ok === false) return "error";
+        if (wsEnabled) return "connecting";
+        return "idle";
+    }
+  }
+
+  const serverOk = urlCheckResult?.kind === "ok" ? urlCheckResult : null;
+  const serverName = serverOk?.name || health?.name || connectionStatus?.serverName || t("settings.mobileServerInfoUnavailable");
+  const serverVersion = serverOk?.version || health?.version || connectionStatus?.serverVersion || t("settings.mobilePendingCheck");
+  const hasReliableServerInfo = Boolean(serverOk || health || connectionStatus?.serverName || connectionStatus?.serverVersion);
+  const verifiedUser = tokenResult?.ok
+    ? { id: tokenResult.userId, name: tokenResult.userName, created_at: tokenResult.createdAt }
+    : currentUser;
+  const userNameText = verifiedUser?.name || (connectionStatus?.status === "online" ? t("settings.mobileUnknownUser") : t("settings.mobileUnverified"));
+  const userIdText = verifiedUser ? `No.${verifiedUser.id}` : t("settings.mobilePendingCheck");
+  const userCreatedText = verifiedUser ? formatUserCreated(verifiedUser.created_at) : t("settings.mobilePendingCheck");
+  const maxAttachmentSizeBytes = serverOk?.maxAttachmentSizeBytes ?? health?.limits?.max_attachment_size_bytes;
+  const viewState = getConnectionViewState();
+  const isWorking = viewState === "connecting";
+  const canStartConnection = !isWorking && Boolean(serverUrl && accessToken);
+
+  function primaryConnectionLabel(): string {
+    if (isWorking) return t("settings.mobileConnecting");
+    if (viewState === "online" && wsEnabled) return t("settings.mobileDisconnect");
+    if (viewState === "interrupted") return t("settings.mobileReconnectNow");
+    return t("settings.connectionLogin");
+  }
+
+  function handlePrimaryConnectionAction() {
+    if (viewState === "interrupted" && wsEnabled) {
+      setWsEnabled(false);
+      onConnectionToggle?.(false);
+      window.setTimeout(() => {
+        setWsEnabled(true);
+        userToggledWsRef.current = true;
+        onSaveConnection?.({ ws_enabled: true });
+        onConnectionToggle?.(true);
+      }, 0);
+      return;
+    }
+    void handleWsToggle();
+  }
+
+  async function handleVerifyTokenClick() {
+    let urlOk = urlCheckResult?.kind === "ok";
+    if (!urlOk) {
+      urlOk = await checkUrl();
+      if (!urlOk) return;
+    }
+    await verifyToken({ skipUrlCheck: true });
+  }
+
+  function renderConnectionIcon() {
+    if (viewState === "online") return CHECK_ICON;
+    if (viewState === "interrupted") return WARN_ICON;
+    if (viewState === "error") return CROSS_ICON;
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+        <path d="M21 12a9 9 0 0 1-9 9m0-18a9 9 0 0 1 9 9" />
+        <path d="M3 12a9 9 0 0 1 9-9m0 18a9 9 0 0 1-9-9" />
+      </svg>
+    );
+  }
+
+  function connectionTitle(): string {
+    if (viewState === "online") return t("settings.mobileConnected");
+    if (viewState === "connecting") return t("settings.mobileConnecting");
+    if (viewState === "interrupted") return t("settings.mobileInterrupted");
+    if (viewState === "idle") return t("settings.mobileDisconnected");
+    return t("settings.connectionFailed");
+  }
+
+  function connectionDescription(): string {
+    if (viewState === "online") return t("settings.mobileConnectionOnlineDesc");
+    if (viewState === "connecting") {
+      if (!hasReliableServerInfo) return t("settings.mobileCheckingServerDesc");
+      return tokenVerifying ? t("settings.mobileVerifyingTokenDesc") : t("settings.mobileEstablishingRealtimeDesc");
+    }
+    if (viewState === "interrupted") return t("settings.mobileInterruptedDesc");
+    if (viewState === "idle") return t("settings.desktopConnectionIdleDesc");
+    return connectionStatus?.errorMessage || (tokenResult?.ok === false ? tokenResult.message : t("settings.connectionFailedDesc"));
+  }
+
+  function renderConnectionOverview() {
+    return (
+      <div className={`settings-conn-result state-${viewState}`}>
+        <div className="settings-conn-head">
+          <div className="settings-conn-mark">{renderConnectionIcon()}</div>
+          <div className="settings-conn-main">
+            <div className="settings-conn-title-row">
+              <span className="settings-conn-dot" />
+              <span className="settings-conn-title">{connectionTitle()}</span>
+            </div>
+            <div className="settings-conn-desc">
+              <span>{connectionDescription()}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="settings-sw settings-conn-top-switch on"
+            onClick={handlePrimaryConnectionAction}
+            disabled={!canStartConnection && !(viewState === "online" && wsEnabled)}
+            role="switch"
+            aria-checked={true}
+            aria-label={t("settings.mobileDisconnect")}
+            title={t("settings.mobileDisconnect")}
+          >
+            <span className="settings-sw-knob" />
+          </button>
+        </div>
+
+        <div className="settings-conn-info-section">
+          <div className="settings-conn-info-heading">{t("settings.mobileServerInfo")}</div>
+          <div className="settings-conn-grid">
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileServerName")}</span>
+              <strong>{hasReliableServerInfo ? serverName : t("settings.mobileServerInfoUnavailable")}</strong>
+            </div>
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileServerVersion")}</span>
+              <strong>{hasReliableServerInfo ? `v${serverVersion}` : t("settings.mobilePendingCheck")}</strong>
+            </div>
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileAttachmentLimit")}</span>
+              <strong>{maxAttachmentSizeBytes ? formatSize(maxAttachmentSizeBytes) : t("settings.mobilePendingCheck")}</strong>
+            </div>
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileAddress")}</span>
+              <strong className="mono">{serverUrl || t("settings.mobilePendingCheck")}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-conn-info-section">
+          <div className="settings-conn-info-heading">{t("settings.userInfo")}</div>
+          <div className="settings-conn-grid">
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileUserName")}</span>
+              <strong>{userNameText}</strong>
+            </div>
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileUserId")}</span>
+              <strong>{userIdText}</strong>
+            </div>
+            <div className="settings-conn-tile">
+              <span>{t("settings.mobileUserCreated")}</span>
+              <strong>{userCreatedText}</strong>
+            </div>
+          </div>
+        </div>
+
       </div>
     );
   }
@@ -559,47 +790,19 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {activeSettingsTab === "connection" && (<>
           <div className="settings-modal-section-label">{t("settings.connectionSettings")}</div>
 
-          <div className={`settings-conn-section${connLocked ? " conn-locked" : ""}`}>
-            <div className="settings-conn-header">
-              <span className="settings-conn-header-label">{t("settings.connectionToggle")}</span>
-              <button
-                type="button"
-                className={`settings-sw${wsEnabled ? " on" : ""}`}
-                onClick={handleWsToggle}
-                role="switch"
-                aria-checked={wsEnabled}
-              >
-                <span className="settings-sw-knob" />
-              </button>
-            </div>
-
-            <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
-              {/* LAN Address */}
-              <div className="settings-modal-field">
-                <label className="settings-modal-label" htmlFor="lan-addr">{t("settings.lanAddress")}</label>
-                <div className="settings-conn-lan-row">
-                  <input
-                    id="lan-addr"
-                    type="text"
-                    className="settings-modal-input"
-                    value={lanAddress}
-                    onChange={(e) => setLanAddress(e.target.value)}
-                    onBlur={() => onUpdateField?.({ lan_address: lanAddress })}
-                    placeholder="https://todo.example.com"
-                    disabled={false}
-                  />
-                  <button
-                    type="button"
-                    className="settings-conn-lan-btn"
-                    onClick={handleLanFetch}
-                    disabled={!lanAddress || lanLoading}
-                  >
-                    {lanLoading ? t("settings.fetching") : t("settings.fetch")}
-                  </button>
+          {viewState === "online" ? renderConnectionOverview() : <div className="settings-conn-layout">
+            <div className={`settings-conn-section settings-conn-login${connLocked ? " conn-locked" : ""}`}>
+              <div className="settings-conn-header">
+                <div>
+                  <span className="settings-conn-header-label">{t("settings.connectionCredentials")}</span>
+                  <span className="settings-conn-header-desc">{t("settings.connectionCredentialsDesc")}</span>
                 </div>
+                <span className={`settings-conn-badge state-${viewState}`}>
+                  {connectionTitle()}
+                </span>
               </div>
 
-              {/* Server URL */}
+              <div className={`settings-conn-body${connLocked ? " locked" : ""}`}>
               <div className="settings-modal-field">
                 <label className="settings-modal-label" htmlFor="srv-url">{t("settings.serverUrl")}</label>
                 <div className="settings-conn-input-row">
@@ -629,9 +832,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               <div className={`settings-modal-field${!tokenEditable ? " settings-conn-field-disabled" : ""}`}>
                 <label className="settings-modal-label" htmlFor="srv-token">
                   {t("settings.accessToken")}
-                  {!tokenEditable && (
-                    <span className="settings-conn-field-hint">{t("settings.checkServerFirst")}</span>
-                  )}
+                  {connLocked ? <span className="settings-conn-field-hint">{t("settings.connectionLoggedIn")}</span> : null}
                 </label>
                 <div className="settings-conn-input-row">
                   <div className="settings-modal-input-wrap" style={{ flex: 1 }}>
@@ -643,7 +844,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                       onChange={handleTokenChange}
                       onBlur={() => onUpdateField?.({ access_token: accessToken })}
                       disabled={!tokenEditable}
-                      placeholder={!tokenEditable ? t("settings.completeServerCheckFirst") : t("settings.enterAccessToken")}
+                      placeholder={t("settings.enterAccessToken")}
                     />
                     <button
                       type="button"
@@ -668,8 +869,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                   <button
                     type="button"
                     className="settings-conn-lan-btn"
-                    onClick={() => verifyToken()}
-                    disabled={!tokenEditable || !accessToken || tokenVerifying}
+                    onClick={() => void handleVerifyTokenClick()}
+                    disabled={!tokenEditable || !serverUrl || !accessToken || urlChecking || tokenVerifying}
                   >
                     {tokenVerifying ? t("settings.verifying") : t("settings.verify")}
                   </button>
@@ -677,7 +878,25 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
                 {renderTokenStatus()}
               </div>
 
-              {/* Connection sub-settings */}
+              <div className="settings-conn-login-actions">
+                <button
+                  type="button"
+                  className="settings-conn-primary"
+                  onClick={handlePrimaryConnectionAction}
+                  disabled={!canStartConnection}
+                >
+                  {primaryConnectionLabel()}
+                </button>
+                <button
+                  type="button"
+                  className="settings-conn-secondary"
+                  onClick={() => void checkUrl()}
+                  disabled={!serverUrl || urlChecking || connLocked}
+                >
+                  {urlChecking ? t("settings.checking") : t("settings.check")}
+                </button>
+              </div>
+
               <div className="settings-modal-divider" style={{ margin: "2px 0" }} />
 
               <div className="settings-conn-sub-row">
@@ -728,6 +947,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               </div>
             </div>
           </div>
+          </div>}
           </>)}
 
           {activeSettingsTab === "general" && (<>
@@ -994,6 +1214,27 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
           {/* ══════════════════════════════════════ */}
           <div className="settings-modal-section-label">{t("settings.cache")}</div>
 
+          <div className="settings-modal-field">
+            <label className="settings-modal-label" htmlFor="sui-attachment-root">{t("settings.attachmentDownloadRoot")}</label>
+            <div className="settings-modal-input-row">
+              <input
+                id="sui-attachment-root"
+                type="text"
+                className="settings-modal-input"
+                value={attachmentDownloadRoot}
+                onChange={(e) => {
+                  setAttachmentDownloadRoot(e.target.value);
+                  onUpdateField?.({ attachment_download_root: e.target.value });
+                }}
+                placeholder={defaultAttachmentDownloadRoot || "Downloads/AMToDo Attachments"}
+              />
+              <button type="button" className="settings-modal-inline-btn" onClick={chooseAttachmentDownloadRoot}>
+                {t("settings.chooseFolder")}
+              </button>
+            </div>
+            <span className="settings-modal-hint">{t("settings.attachmentDownloadRootHint")}</span>
+          </div>
+
           <div className="cache-compact-card">
             <div className="cache-compact-left">
               <div className="cache-compact-icon">
@@ -1006,8 +1247,8 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
               <div className="cache-compact-text">
                 <span className="cache-compact-title">{t("settings.attachmentCache")}</span>
                 <span className="cache-compact-detail">
-                  {cacheSize
-                    ? t("settings.cacheDetail", { count: cacheSize.count, size: formatSize(cacheSize.bytes) })
+                  {totalCacheSize
+                    ? t("settings.attachmentCacheDetail", { count: totalCacheSize.count, size: formatSize(totalCacheSize.bytes) })
                     : t("settings.cacheLoading")}
                 </span>
               </div>
@@ -1015,7 +1256,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
             <button
               type="button"
               className="cache-compact-btn"
-              disabled={clearingCache || !cacheSize || cacheSize.count === 0}
+              disabled={clearingCache || !totalCacheSize || totalCacheSize.count === 0}
               onClick={handleClearCache}
             >
               {clearingCache ? t("settings.clearingCache") : t("settings.clearCache")}

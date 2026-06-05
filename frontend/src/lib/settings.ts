@@ -25,6 +25,7 @@ export interface UISettings {
   reconnect_max_attempts: number;
   notify_on_disconnect: boolean;
   ws_reconnect_interval_ms: number;
+  attachment_download_root: string;
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: UISettings = {
   reconnect_max_attempts: 3,
   notify_on_disconnect: true,
   ws_reconnect_interval_ms: 3000,
+  attachment_download_root: "",
 };
 
 export function parseSettings(raw: { [key: string]: string | undefined }): UISettings {
@@ -104,6 +106,7 @@ export function parseSettings(raw: { [key: string]: string | undefined }): UISet
     ),
     notify_on_disconnect: raw.notify_on_disconnect !== "false",
     ws_reconnect_interval_ms: parseNumberSetting(raw.ws_reconnect_interval_ms, DEFAULT_SETTINGS.ws_reconnect_interval_ms),
+    attachment_download_root: raw.attachment_download_root ?? DEFAULT_SETTINGS.attachment_download_root,
   };
 }
 

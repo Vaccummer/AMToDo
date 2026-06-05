@@ -10,6 +10,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { ExtraFieldsEditor } from "./ExtraFieldsEditor";
 import { useI18n } from "../i18n";
+import { DesktopAttachmentManager } from "./DesktopAttachmentManager";
 
 type Props = {
   schedule: ScheduleItem;
@@ -17,6 +18,7 @@ type Props = {
   onClose: () => void;
   onDelete: (id: number) => void;
   onUpdate: (schedule: ScheduleItem) => void;
+  attachmentDownloadRoot?: string;
 };
 
 function splitDatetime(dt: string) {
@@ -54,7 +56,7 @@ function AttachmentMissingIcon() {
   );
 }
 
-export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete, onUpdate }: Props) {
+export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete, onUpdate, attachmentDownloadRoot }: Props) {
   const { t } = useI18n();
   const [schedule, setSchedule] = useState<ScheduleItem>(initial);
   const [title, setTitle] = useState(initial.title);
@@ -583,6 +585,23 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
           {/* Divider */}
           <div className="schedule-modal-divider" />
 
+          <DesktopAttachmentManager
+            ownerType="schedule"
+            ownerId={schedule.id}
+            api={api}
+            downloadRoot={attachmentDownloadRoot}
+            uploadFile={(file, onProgress, signal) => api.uploadScheduleAttachment(schedule.id, file, onProgress, signal)}
+            getDownloadUrl={(attachmentId) => api.getScheduleAttachmentDownloadUrl(schedule.id, attachmentId)}
+            removeFile={(attachmentId) => api.removeScheduleAttachment(schedule.id, attachmentId)}
+            listAttachments={() => api.listScheduleAttachments(schedule.id)}
+            onAttachmentsChanged={(count) => {
+              const updatedSchedule = { ...schedule, attachment_count: count };
+              setSchedule(updatedSchedule);
+              onUpdate(updatedSchedule);
+            }}
+            modalClass="schedule-modal"
+          />
+          {false ? <>
           <div className="schedule-modal-section-label">{t("common.attachments")}</div>
           <div
             className={`attachment-dropzone${dragActive ? " active" : ""}`}
@@ -688,6 +707,7 @@ export function ScheduleDetailModal({ schedule: initial, api, onClose, onDelete,
             })}
           </div>
 
+          </> : null}
           {/* Divider */}
           <div className="schedule-modal-divider" />
 

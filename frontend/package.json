@@ -10,6 +10,10 @@
     "generate:file-icons": "python scripts/generate-file-icon-map.py",
     "start": "electron electron/main.cjs",
     "preview": "vite preview --host 127.0.0.1",
+    "patch:desktop-icon": "node scripts/patch-desktop-icon.cjs",
+    "zip:desktop": "node scripts/zip-desktop.cjs",
+    "pack:desktop": "npm run build && electron-builder --win --x64 --dir && npm run patch:desktop-icon",
+    "dist:desktop": "npm run pack:desktop && npm run zip:desktop",
     "build:mobile": "vite build --mode mobile",
     "cap:sync": "vite build --mode mobile && npx cap sync android",
     "cap:open": "npx cap open android",
@@ -38,6 +42,33 @@
     "@types/react-dom": "^19.2.3",
     "concurrently": "^9.2.1",
     "electron": "^39.2.7",
+    "electron-builder": "^26.8.1",
     "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.amtodo.desktop",
+    "productName": "AMToDo",
+    "directories": {
+      "output": "../bin/desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "src/assets/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "icon": "src/assets/app-tray.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
   }
 }

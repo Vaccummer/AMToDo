@@ -878,9 +878,9 @@ def _fetch_admin_config() -> tuple[str, Path]:
 
     settings = load_cli_settings()
     if not settings.server_url:
-        _exit_with_error(ValidationError("server_url is required in config/cli.toml for admin management"))
+        _exit_with_error(ValidationError("server_url is required in cli/config.toml for admin management"))
     if not settings.admin_token:
-        _exit_with_error(ValidationError("admin_token is not configured in config/cli.toml"))
+        _exit_with_error(ValidationError("admin_token is not configured in cli/config.toml"))
 
     client = AMTodoClient(settings)
     try:

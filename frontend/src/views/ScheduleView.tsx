@@ -1045,6 +1045,7 @@ export function ScheduleView({ api, settings, startHour = 6, endHour = 24, slotM
               pointerEditRef.current = null;
             }
           }}
+          attachmentDownloadRoot={settings.attachment_download_root}
         />
       ) : null}
 

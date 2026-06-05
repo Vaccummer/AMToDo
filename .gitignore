@@ -46,3 +46,4 @@ frontend/*.html
 db/
 tmp/
 icons/
+bin/

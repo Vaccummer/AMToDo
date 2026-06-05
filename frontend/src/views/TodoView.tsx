@@ -35,6 +35,7 @@ type Props = {
   onOpenSettings?: (focusTarget?: "url" | "token") => void;
   connectionStatus?: ConnectionStatusSnapshot;
   onConnectionError?: (kind: "network" | "token" | null, message?: string) => void;
+  attachmentDownloadRoot?: string;
 };
 
 function EditIcon() {
@@ -78,7 +79,7 @@ function overdueDurationLabel(fromEpoch: number, toEpoch: number | undefined, t:
   return t("common.minutes", { count: minutes });
 }
 
-export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError }: Props) {
+export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, onDateChange, pendingAction, onPendingActionConsumed, onOpenSettings, connectionStatus, onConnectionError, attachmentDownloadRoot }: Props) {
   const todayKey = useMemo(() => dateKeyFromDate(new Date()), []);
   const normalizedWeekStart = weekStart === 1 ? 1 : 0;
   const [selectedDayKey, setSelectedDayKey] = useState(cachedDateKey ?? todayKey);
@@ -544,6 +545,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
               ))
             );
           }}
+          attachmentDownloadRoot={attachmentDownloadRoot}
         />
       ) : null}
 
