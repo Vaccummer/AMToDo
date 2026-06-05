@@ -9,6 +9,13 @@ let tray = null;
 let forceQuit = false;
 let registeredHotkey = null;
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
 // --- Notification polling state ---
 let notificationPollTimer = null;
 let notificationLastPollAt = null; // unix timestamp (seconds)
@@ -184,6 +191,13 @@ function createWindowIcon() {
   return _appPng();
 }
 
+function showMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function createTray() {
   tray = new Tray(createTrayIcon());
   tray.setToolTip("AMToDo");
@@ -192,10 +206,7 @@ function createTray() {
     {
       label: "显示",
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
+        showMainWindow();
       }
     },
     {
@@ -203,8 +214,7 @@ function createTray() {
       click: () => {
         if (mainWindow) {
           mainWindow.maximize();
-          mainWindow.show();
-          mainWindow.focus();
+          showMainWindow();
         }
       }
     },
@@ -221,11 +231,7 @@ function createTray() {
   tray.setContextMenu(contextMenu);
 
   tray.on("click", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    showMainWindow();
   });
 }
 
@@ -234,8 +240,7 @@ function toggleWindowVisibility() {
   if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
     mainWindow.hide();
   } else {
-    mainWindow.show();
-    mainWindow.focus();
+    showMainWindow();
   }
 }
 
@@ -304,11 +309,7 @@ function pollNotifications(serverUrl, accessToken, queryWindow) {
         });
 
         electronNotification.on("click", () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-          }
+          showMainWindow();
           mainWindow?.webContents.send("notification:clicked", { id: n.id, trigger_at: n.trigger_at });
         });
 
@@ -501,6 +502,14 @@ function writeUiToml(settings) {
 
 app.setAppUserModelId("AMToDo");
 
+app.on("second-instance", () => {
+  if (mainWindow) {
+    showMainWindow();
+  } else if (app.isReady()) {
+    createWindow();
+  }
+});
+
 app.whenReady().then(() => {
   ipcMain.handle("settings:read", () => {
     try {
@@ -581,11 +590,7 @@ app.whenReady().then(() => {
         timeoutType: getNotifSetting("notification_timeout") === "never" ? "never" : "default",
       });
       electronNotification.on("click", () => {
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.show();
-          mainWindow.focus();
-        }
+        showMainWindow();
         mainWindow?.webContents.send("notification:clicked", { id, trigger_at });
       });
       electronNotification.show();
@@ -754,8 +759,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     } else if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
+      showMainWindow();
     }
   });
 });

@@ -46,4 +46,5 @@ frontend/*.html
 db/
 tmp/
 icons/
-bin/
+bin/*
+!bin/*.ps1
