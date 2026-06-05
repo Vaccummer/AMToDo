@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,22 @@ from services.search_common import compile_search_query, search_text, sort_resul
 from services.uow import UnitOfWork
 
 logger = logging.getLogger("amtodo")
+
+
+def _format_attachment_transfer_error(action: str, exc: Exception, **context) -> dict[str, object]:
+    clean_context = {key: str(value) for key, value in context.items() if value is not None}
+    message = f"{type(exc).__name__}: {exc}"
+    formatted = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "action": action,
+        "context": clean_context,
+    }
+    context_text = " ".join(f"{key}={value}" for key, value in clean_context.items())
+    line = f"Attachment transfer error: action={action} {context_text} error={message}".strip()
+    print(line, file=sys.stderr)
+    logger.exception(line)
+    return formatted
 
 
 class UiMessageRouter:
@@ -938,19 +955,34 @@ class UiMessageRouter:
         offset = max(int(p.get("offset", 0)), 0)
         length = min(max(int(p.get("length", 262144)), 1), 1048576)
 
-        with self._uow() as uow:
-            changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
-            svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
-            attachment = svc.show(owner_id, attachment_id)
-            content_path = svc.storage_path(attachment)
-            if not content_path.is_file():
-                raise ValidationError("attachment file was not found")
-            file_size = content_path.stat().st_size
-            if offset > file_size:
-                raise ValidationError("download offset is out of range")
-            with open(content_path, "rb") as f:
-                f.seek(offset)
-                chunk = f.read(length)
+        try:
+            with self._uow() as uow:
+                changelog = uow.todo_changelog_service if owner_type == "todo" else uow.schedule_changelog_service
+                svc = self._make_attachment_service(uow, owner_type, changelog_service=changelog)
+                attachment = svc.show(owner_id, attachment_id)
+                content_path = svc.storage_path(attachment)
+                if not content_path.is_file():
+                    raise ValidationError("attachment file was not found")
+                file_size = content_path.stat().st_size
+                if offset > file_size:
+                    raise ValidationError("download offset is out of range")
+                with open(content_path, "rb") as f:
+                    f.seek(offset)
+                    chunk = f.read(length)
+        except Exception as exc:
+            detail = _format_attachment_transfer_error(
+                "ws.download_chunk",
+                exc,
+                user_id=self.user_id,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                attachment_id=attachment_id,
+                offset=offset,
+                length=length,
+            )
+            raise ValidationError(
+                f"{detail['action']} failed: {detail['type']}: {detail['message']}"
+            ) from exc
 
         bytes_read = len(chunk)
         next_offset = offset + bytes_read

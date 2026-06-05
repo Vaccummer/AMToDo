@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import mimetypes
 import logging
+import mimetypes
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -50,6 +51,22 @@ def _changelog_service(uow: UnitOfWork, owner_type: str):
 
 def _dict_fn(owner_type: str):
     return attachment_to_dict if owner_type == "todo" else schedule_attachment_to_dict
+
+
+def _format_attachment_transfer_error(action: str, exc: Exception, **context) -> dict[str, object]:
+    clean_context = {key: str(value) for key, value in context.items() if value is not None}
+    message = f"{type(exc).__name__}: {exc}"
+    formatted = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "action": action,
+        "context": clean_context,
+    }
+    context_text = " ".join(f"{key}={value}" for key, value in clean_context.items())
+    line = f"Attachment transfer error: action={action} {context_text} error={message}".strip()
+    print(line, file=sys.stderr)
+    logger.exception(line)
+    return formatted
 
 
 @router.post("/attachment/init-upload")
@@ -192,10 +209,18 @@ async def stream_upload_attachment(request: Request, token: str):
         temp_path.unlink(missing_ok=True)
         upload_token_store.pop(token)
         raise
-    except Exception:
+    except Exception as exc:
+        detail = _format_attachment_transfer_error(
+            "upload.stream",
+            exc,
+            token=token,
+            temp_path=temp_path,
+            bytes_received=total,
+            content_length=content_length,
+        )
         temp_path.unlink(missing_ok=True)
         upload_token_store.pop(token)
-        raise
+        raise HTTPException(500, detail=detail) from exc
 
     # 5. Finalize -- remove token, keep temp file
     tok_final = upload_token_store.finalize(token)
@@ -223,19 +248,19 @@ async def stream_upload_attachment(request: Request, token: str):
             uow.session.flush()
             dict_fn = _dict_fn(tok_final.owner_type)
             result = {"ok": True, "attachment": dict_fn(attachment, uow.user_id)}
-    except Exception:
-        logger.exception(
-            "Attachment upload finalize failed: user_id=%s owner_type=%s owner_id=%s "
-            "filename=%r bytes=%s temp_path=%s",
-            tok_final.user_id,
-            tok_final.owner_type,
-            tok_final.owner_id,
-            tok_final.filename,
-            total,
-            temp_path,
+    except Exception as exc:
+        detail = _format_attachment_transfer_error(
+            "upload.finalize",
+            exc,
+            user_id=tok_final.user_id,
+            owner_type=tok_final.owner_type,
+            owner_id=tok_final.owner_id,
+            filename=tok_final.filename,
+            bytes_received=total,
+            temp_path=temp_path,
         )
         temp_path.unlink(missing_ok=True)
-        raise
+        raise HTTPException(500, detail=detail) from exc
 
     return JSONResponse(result)
 
@@ -252,13 +277,25 @@ async def stream_download_attachment_bearer(
     """Stream-download an attachment using the user's Bearer token."""
     if owner_type not in {"todo", "schedule"}:
         raise HTTPException(404, "Invalid attachment owner type")
-    svc = make_attachment_service(uow, clock, request, owner_type)
-    attachment = svc.show(owner_id, attachment_id)
-    content_path = svc.storage_path(attachment)
-    if not content_path.exists():
-        raise HTTPException(404, "File not found")
+    try:
+        svc = make_attachment_service(uow, clock, request, owner_type)
+        attachment = svc.show(owner_id, attachment_id)
+        content_path = svc.storage_path(attachment)
+        if not content_path.exists():
+            raise HTTPException(404, "File not found")
 
-    return _stream_attachment_file(attachment, content_path, request)
+        return _stream_attachment_file(attachment, content_path, request)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        detail = _format_attachment_transfer_error(
+            "download.prepare",
+            exc,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            attachment_id=attachment_id,
+        )
+        raise HTTPException(500, detail=detail) from exc
 
 
 def _stream_attachment_file(attachment, content_path: Path, request: Request) -> StreamingResponse:
@@ -286,7 +323,17 @@ def _stream_attachment_file(attachment, content_path: Path, request: Request) ->
         start, end = byte_range
         length = end - start + 1
         return StreamingResponse(
-            _file_iterator(content_path, start=start, length=length),
+            _file_iterator(
+                content_path,
+                start=start,
+                length=length,
+                transfer_context={
+                    "attachment_id": attachment.id,
+                    "filename": attachment.filename,
+                    "range_start": start,
+                    "range_end": end,
+                },
+            ),
             status_code=206,
             media_type=media_type,
             headers={
@@ -297,7 +344,13 @@ def _stream_attachment_file(attachment, content_path: Path, request: Request) ->
         )
 
     return StreamingResponse(
-        _file_iterator(content_path),
+        _file_iterator(
+            content_path,
+            transfer_context={
+                "attachment_id": attachment.id,
+                "filename": attachment.filename,
+            },
+        ),
         media_type=media_type,
         headers={
             **common_headers,
@@ -339,16 +392,33 @@ def _download_media_type(stored_mime_type: str | None, filename: str) -> str:
     return guessed or stored_mime_type or "application/octet-stream"
 
 
-def _file_iterator(path: Path, chunk_size: int = 65536, start: int = 0, length: int | None = None):
+def _file_iterator(
+    path: Path,
+    chunk_size: int = 65536,
+    start: int = 0,
+    length: int | None = None,
+    transfer_context: dict[str, object] | None = None,
+):
     remaining = length
-    with open(path, "rb") as f:
-        if start:
-            f.seek(start)
-        while remaining is None or remaining > 0:
-            read_size = chunk_size if remaining is None else min(chunk_size, remaining)
-            chunk = f.read(read_size)
-            if not chunk:
-                break
-            if remaining is not None:
-                remaining -= len(chunk)
-            yield chunk
+    try:
+        with open(path, "rb") as f:
+            if start:
+                f.seek(start)
+            while remaining is None or remaining > 0:
+                read_size = chunk_size if remaining is None else min(chunk_size, remaining)
+                chunk = f.read(read_size)
+                if not chunk:
+                    break
+                if remaining is not None:
+                    remaining -= len(chunk)
+                yield chunk
+    except Exception as exc:
+        _format_attachment_transfer_error(
+            "download.stream",
+            exc,
+            path=path,
+            start=start,
+            length=length,
+            **(transfer_context or {}),
+        )
+        raise

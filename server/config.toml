@@ -6,7 +6,7 @@ name = "AMToDo"
 public_url = ""
 
 [database]
-url = "sqlite:///db/amtodo.sqlite3"
+path = "db/amtodo.sqlite3"
 
 [auth]
 admin_token = "CHANGE_ME_BEFORE_RELEASE"

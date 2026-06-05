@@ -43,7 +43,7 @@ $env:AMTODO_HOME = "D:\CodeLib\Python\AMToDo"
 
 Before running a real deployment, edit these files:
 
-- `$AMTODO_HOME/server/config.toml`: backend listener, database URL, admin token, attachment root, proxy, CORS, and security headers.
+- `$AMTODO_HOME/server/config.toml`: backend listener, database path, admin token, attachment root, proxy, CORS, and security headers.
 - `$AMTODO_HOME/ui/config.toml`: desktop UI server URL, access token, language, timezone, and optional local attachment download folder.
 - `$AMTODO_HOME/cli/config.toml`: CLI server URL, user token, and admin token.
 

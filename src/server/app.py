@@ -16,9 +16,8 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.engine import make_url
 
-from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, server_root
+from config import DEFAULT_IP_CACHE_TTL_SECONDS, DEFAULT_MAX_ATTACHMENT_SIZE_BYTES, DEFAULT_RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_UPLOAD_TEMP_ROOT, DEFAULT_UPLOAD_TOKEN_TTL_SECONDS, __version__, AppSettings, amtodo_home, server_root
 from exceptions import AMToDoError, ConflictError, NotFoundError, ValidationError
 from models.user import User
 from serialization import error_to_dict
@@ -87,19 +86,50 @@ def _build_log_config(log_file: str) -> dict:
     }
 
 
-def _resolve_database_url(database_url: str, root: Path) -> str:
-    """Resolve relative SQLite database URLs against the server root."""
+def _database_path_from_config(database_cfg: dict, root: Path) -> Path | str:
+    """Return a database file path from config, accepting old sqlite URL values."""
 
-    url = make_url(database_url)
-    if url.drivername not in {"sqlite", "sqlite+pysqlite"}:
-        return database_url
-    if url.database in {None, "", ":memory:"}:
-        return database_url
+    raw_value = database_cfg.get("path", database_cfg.get("url", "db/amtodo.sqlite3"))
+    value = str(raw_value).strip()
+    if not value:
+        value = "db/amtodo.sqlite3"
+    if value == ":memory:":
+        return value
+    if value.startswith(("sqlite:///", "sqlite+pysqlite:///")):
+        value = _sqlite_url_to_path(value)
 
-    database_path = Path(url.database).expanduser()
+    database_path = Path(value).expanduser()
     if not database_path.is_absolute():
         database_path = root / database_path
-    return str(url.set(database=database_path.resolve().as_posix()))
+    return database_path.resolve()
+
+
+def _sqlite_url_to_path(value: str) -> str:
+    """Convert a legacy sqlite URL config value into a path string."""
+
+    if value.startswith("sqlite+pysqlite:///"):
+        path_value = value[len("sqlite+pysqlite:///"):]
+    else:
+        path_value = value[len("sqlite:///"):]
+    if path_value == ":memory:":
+        return path_value
+    if path_value.startswith("/") or path_value.startswith("~"):
+        return path_value
+    if len(path_value) >= 3 and path_value[1] == ":" and path_value[2] in {"/", "\\"}:
+        return path_value
+    # Compatibility for the common typo sqlite:///Users/... that meant /Users/...
+    first_part = path_value.split("/", 1)[0].split("\\", 1)[0]
+    if first_part in {"Users", "home", "var", "opt", "mnt", "Volumes", "tmp"}:
+        return f"/{path_value}"
+    return path_value
+
+
+def _sqlite_url_from_path(database_path: Path | str) -> str:
+    """Convert a database path into a SQLAlchemy SQLite URL."""
+
+    if database_path == ":memory:":
+        return "sqlite:///:memory:"
+    return f"sqlite:///{Path(database_path).as_posix()}"
 
 
 def _build_token_map(db) -> dict[str, int]:
@@ -321,6 +351,7 @@ def main() -> None:
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
 
+    home_path = amtodo_home().resolve()
     root = server_root()
     config_path = (root / "config.toml").resolve()
     raw = _load_raw_config(str(config_path))
@@ -337,10 +368,8 @@ def main() -> None:
     security_headers_cfg = raw.get("security_headers", {})
 
     log_file = log_cfg.get("file", "log/server.log")
-    database_url = _resolve_database_url(
-        database_cfg.get("url", "sqlite:///db/amtodo.sqlite3"),
-        root,
-    )
+    database_path = _database_path_from_config(database_cfg, root)
+    database_url = _sqlite_url_from_path(database_path)
     host = server.get("host", "")
     if not host or host == "null":
         host = None
@@ -373,9 +402,10 @@ def main() -> None:
 
     print(f"AMToDo Server v{__version__}")
     print(f"  PID:       {os.getpid()}")
+    print(f"  AMTODO_HOME: {home_path}")
     print(f"  Config:    {config_path}")
     print(f"  Log:       {log_path}")
-    print(f"  Database:  {database_url}")
+    print(f"  Database:  {database_path}")
     listen_display = f"[::]:{port} (dual-stack)" if host is None else f"{host}:{port}"
     print(f"  Listen:    {listen_display}")
     if public_url:
