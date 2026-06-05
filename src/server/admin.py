@@ -770,10 +770,9 @@ def init_db(
     _localhost: None = Depends(require_localhost),
     _auth: None = Depends(require_admin),
 ) -> dict[str, object]:
-    """Initialize database schema and stamp Alembic as current."""
+    """Initialize database schema."""
     db = request.app.state.db
     Base.metadata.create_all(db.engine)
-    db.stamp_head()
     return {"ok": True, "database": "initialized"}
 
 

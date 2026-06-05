@@ -19,8 +19,6 @@ mobile UI, and a JSON-oriented CLI for automation.
 ```text
 .
 |-- src/                 Python backend, services, models, API routes, CLI
-|-- tests/               Backend and client tests
-|-- alembic/             Database migrations
 |-- config/              Runtime configuration templates
 |-- frontend/            React, Vite, Electron, and Capacitor frontend
 |-- nginx/               Reverse proxy template

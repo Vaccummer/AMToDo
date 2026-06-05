@@ -48,3 +48,4 @@ tmp/
 icons/
 bin/*
 !bin/*.ps1
+tests/

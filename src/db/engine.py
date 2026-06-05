@@ -40,34 +40,10 @@ class Database:
         Base.metadata.create_all(self.engine)
 
     def run_migrations(self) -> None:
-        """Run Alembic migrations against this database."""
+        """Create the schema using SQLAlchemy metadata."""
 
-        try:
-            from alembic import command
-            from alembic.config import Config
-        except ImportError:
-            logger.debug("Alembic not installed, skipping migrations")
-            return
-
-        alembic_cfg = Config(str(_find_alembic_ini()))
-        alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
-        alembic_cfg.set_main_option("script_location", str(_find_alembic_dir()))
-        command.upgrade(alembic_cfg, "head")
-
-    def stamp_head(self) -> None:
-        """Mark the current schema as up-to-date (for migrating from inline schema management)."""
-
-        try:
-            from alembic import command
-            from alembic.config import Config
-        except ImportError:
-            logger.debug("Alembic not installed, skipping stamp")
-            return
-
-        alembic_cfg = Config(str(_find_alembic_ini()))
-        alembic_cfg.set_main_option("sqlalchemy.url", str(self.engine.url))
-        alembic_cfg.set_main_option("script_location", str(_find_alembic_dir()))
-        command.stamp(alembic_cfg, "head")
+        logger.debug("Alembic migrations are disabled; creating schema from metadata")
+        self.create_schema()
 
     def ensure_per_user_todo_indexes(self) -> None:
         """Ensure per-user todo tables have the planned_at column and indexes.
@@ -159,24 +135,3 @@ def _quote_identifier(value: str) -> str:
 
     return '"' + value.replace('"', '""') + '"'
 
-
-def _find_alembic_ini() -> Path:
-    """Locate alembic.ini relative to AMTODO_ROOT."""
-    from config import server_root
-
-    root = server_root()
-    ini_path = root / "alembic.ini"
-    if ini_path.is_file():
-        return ini_path
-    raise FileNotFoundError(f"alembic.ini not found at {ini_path}")
-
-
-def _find_alembic_dir() -> Path:
-    """Locate the alembic scripts directory relative to AMTODO_ROOT."""
-    from config import server_root
-
-    root = server_root()
-    dir_path = root / "alembic"
-    if dir_path.is_dir():
-        return dir_path
-    raise FileNotFoundError(f"alembic directory not found at {dir_path}")
