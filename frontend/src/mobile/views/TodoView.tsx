@@ -232,8 +232,29 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
     );
   }
 
-  function addTodo() {
+  async function addTodo() {
+    if (creating) return;
     setCreating(true);
+    try {
+      const result = await api.createTodo(t("todo.newTodo"), startOfDateKeyEpoch(selectedDayKey), {
+        due_at: null,
+        description: null,
+        priority: 0,
+        tag: null,
+      });
+      const created = { ...result.todo, attachment_count: result.todo.attachment_count ?? 0 };
+      setTodos((items) => [...items, created]);
+      setDetailId(created.id);
+      onConnectionError?.(null);
+    } catch (error: unknown) {
+      if (error instanceof TypeError) {
+        onConnectionError?.("network", t("connection.cannotConnectDesc"));
+      } else {
+        onConnectionError?.("token", error instanceof Error ? error.message : t("todo.createFailed"));
+      }
+    } finally {
+      setCreating(false);
+    }
   }
 
   function prevWeek() {
@@ -321,6 +342,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
             type="button"
             className="datebar-side-btn datebar-add-btn"
             onClick={() => void addTodo()}
+            disabled={creating}
             title={t("todo.addTodo")}
           >
             <img src={addIcon} alt="" />
@@ -545,7 +567,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         </div>
       </div>
       <div className="todo-bottom-bar">
-        <button type="button" className="add-todo-button todo-bottom-primary" onClick={() => void addTodo()}>
+        <button type="button" className="add-todo-button todo-bottom-primary" onClick={() => void addTodo()} disabled={creating}>
           <img src={addIcon} alt="" />
           {t("todo.addTodo")}
         </button>
@@ -590,6 +612,7 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
         type="button"
         className="mobile-fab"
         onClick={() => void addTodo()}
+        disabled={creating}
         title={t("todo.addTodo")}
       >
         +
@@ -609,28 +632,6 @@ export function TodoView({ api, calendarDays = 7, weekStart = 0, cachedDateKey, 
                   : item
               ))
             );
-          }}
-        />
-      ) : null}
-
-      {creating ? (
-        <TodoDetailModal
-          todo={{
-            id: 0, title: "", description: null,
-            planned_at: startOfDateKeyEpoch(selectedDayKey),
-            due_at: null, completed: false, priority: 0, tag: null,
-            created_at: 0, updated_at: 0, completed_at: null,
-            attachment_count: 0, extra_fields: null,
-          }}
-          api={api}
-          createMode
-          onClose={() => setCreating(false)}
-          onDelete={() => {}}
-          onUpdate={() => {}}
-          onCreate={(todo) => {
-            setTodos((items) => [...items, { ...todo, attachment_count: todo.attachment_count ?? 0 }]);
-            onConnectionError?.(null);
-            setCreating(false);
           }}
         />
       ) : null}
