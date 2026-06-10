@@ -3338,6 +3338,11 @@ button {
   color: #5c5650;
 }
 
+.twp-btn-clear {
+  background: rgba(220, 53, 69, 0.08);
+  color: #b4232f;
+}
+
 .twp-btn-confirm {
   background: var(--status-primary-base, #1a7f72);
   color: #fff;

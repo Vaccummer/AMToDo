@@ -384,7 +384,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                 value={dueDate}
                 onChange={(dateKey) => {
                   setDueDate(dateKey);
-                  if (dateKey && !dueTime) setDueTime("00:00:00");
+                  if (!dateKey) {
+                    setDueTime("");
+                  } else if (!dueTime) {
+                    setDueTime("00:00:00");
+                  }
                 }}
                 hasError={datetimeValidation.dueDateError}
                 theme="green"
@@ -393,6 +397,11 @@ export function TodoDetailModal({ todo: initial, api, onClose, onDelete, onUpdat
                 className="modal-datetime-time"
                 value={dueTime}
                 onChange={setDueTime}
+                onClear={() => {
+                  setDueDate("");
+                  setDueTime("");
+                }}
+                clearLabel={t("common.clear")}
               />
             </div>
             {datetimeValidation.message ? (

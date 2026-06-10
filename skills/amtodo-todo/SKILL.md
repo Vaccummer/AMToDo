@@ -48,17 +48,28 @@ uncertain. Use `agent-guide` for detailed API shape if CLI output is not enough.
 
 Use Unix epoch timestamps in seconds.
 
-- Todo `--planned-at` and `--date` are optional.
+- Todo `--planned-at` is `planned_at` (planned/scheduled date).
+- Todo `--date` is `due_at` (deadline/due date), not the normal planned date.
 - Schedule `--from` and `--to` are required for create/update time ranges.
 - List/search/stat ranges are half-open: `from <= value < to`.
 - `schedule list` defaults to `from=now`, `to=from+86400` when omitted.
 - Prefer explicit `--from` and `--to` for deterministic results.
+
+When interpreting natural language for todos:
+
+- If the user says "create a todo for tomorrow", "tomorrow's todo", "明天的待办", "下周一提醒我做 X", etc., treat the date as the todo's planned date and set `--planned-at`.
+- Leave `--date`/`due_at` empty unless the user explicitly mentions a deadline, due date, "截止", "到期", "deadline", or "due".
+- If both planned time and deadline are mentioned, set both: `--planned-at` for when it is planned, `--date` for when it is due.
+- If the user gives only a date without a time, use the start of that local day for `--planned-at` unless the user/context indicates another time.
+- Use the user's locale/timezone context when converting relative dates like today, tomorrow, this Friday, or next week.
 
 ## Todos
 
 Create:
 
 ```powershell
+# "Tomorrow's todo" -> planned date only; do not set --date unless a deadline is stated.
+uv run amtodo todo add "Buy printer paper" --planned-at 1778486400
 uv run amtodo todo add "Write release notes" --planned-at 1778400000 --date 1778493600 --priority 2 --tag release -m "Draft changelog"
 uv run amtodo todo add "Review build" --extra '{"area":"desktop"}'
 ```

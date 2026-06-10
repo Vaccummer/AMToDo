@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Props = {
   value: string;
   onChange: (value: string) => void;
+  onClear?: () => void;
+  clearLabel?: string;
   className?: string;
   id?: string;
 };
@@ -110,7 +112,7 @@ function Column({ count, value, onChange, opened }: ColumnProps) {
 
 /* ── Main Picker ── */
 
-export function TimeWheelPicker({ value, onChange, className, id }: Props) {
+export function TimeWheelPicker({ value, onChange, onClear, clearLabel = "Clear", className, id }: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<[number, number, number]>(() => parseValue(value));
   const containerRef = useRef<HTMLDivElement>(null);
@@ -162,6 +164,11 @@ export function TimeWheelPicker({ value, onChange, className, id }: Props) {
   function handleNow() {
     const now = new Date();
     setDraft([now.getHours(), now.getMinutes(), now.getSeconds()]);
+  }
+
+  function handleClear() {
+    onClear?.();
+    setOpen(false);
   }
 
   const handleColumnChange = useCallback(
@@ -229,6 +236,11 @@ export function TimeWheelPicker({ value, onChange, className, id }: Props) {
             <Column count={60} value={draft[2]} onChange={(v) => handleColumnChange("s", v)} opened={open} />
           </div>
           <div className="twp-popup-actions">
+            {onClear ? (
+              <button type="button" className="twp-btn twp-btn-clear" onClick={handleClear}>
+                {clearLabel}
+              </button>
+            ) : null}
             <button type="button" className="twp-btn twp-btn-now" onClick={handleNow}>
               Now
             </button>

@@ -110,6 +110,7 @@ def todo_add(
             description=description,
             priority=priority,
             tag=tag,
+            extra_fields=extra_json,
         ), settings)
         return
 

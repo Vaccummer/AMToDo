@@ -79,8 +79,9 @@ class AMTodoClient:
         description: str | None = None,
         priority: int = 0,
         tag: str | None = None,
+        extra_fields: str = "{}",
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"title": title, "priority": priority}
+        body: dict[str, Any] = {"title": title, "priority": priority, "extra_fields": extra_fields}
         if planned_at is not None:
             body["planned_at"] = planned_at
         if due_at is not None:
