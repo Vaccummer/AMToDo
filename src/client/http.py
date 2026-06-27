@@ -314,8 +314,14 @@ class AMTodoClient:
         description: str | None = None,
         location: str | None = None,
         category: str | None = None,
+        extra_fields: str = "{}",
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"title": title, "start_at": start_at, "end_at": end_at}
+        body: dict[str, Any] = {
+            "title": title,
+            "start_at": start_at,
+            "end_at": end_at,
+            "extra_fields": extra_fields,
+        }
         if description is not None:
             body["description"] = description
         if location is not None:

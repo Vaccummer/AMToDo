@@ -105,6 +105,26 @@ uv run amtodo todo stats --from 1778428800 --to 1778688000
 `remove` moves items to trash; use trash commands for restore or permanent
 delete.
 
+## Notifications
+
+Create/list:
+
+```powershell
+uv run amtodo notify add "Stand up" --trigger 1778493600 -m "Daily sync" --extra '{"channel":"desktop"}'
+uv run amtodo notify list --from 1778428800 --to 1778688000
+```
+
+Inspect/update/remove:
+
+```powershell
+uv run amtodo notify show 1
+uv run amtodo notify update 1 --title "Updated reminder" --trigger 1778500000 --extra '{"status":"snoozed"}'
+uv run amtodo notify remove 1
+```
+
+`remove` moves notifications to trash; use trash commands for restore or
+permanent delete.
+
 ## Schedules
 
 Create/list/search:

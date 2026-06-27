@@ -20,6 +20,7 @@ from models.user import User
 from serialization import attachment_to_dict, notification_to_dict, schedule_to_dict, todo_to_dict, user_to_dict_with_token
 from services import (
     AttachmentService,
+    NotificationDraft,
     NotificationService,
     NotificationUpdate,
     ScheduleDraft,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 app = typer.Typer(invoke_without_command=True, no_args_is_help=True)
 todo_app = typer.Typer(no_args_is_help=True)
 schedule_app = typer.Typer(no_args_is_help=True)
+notify_app = typer.Typer(no_args_is_help=True)
 user_app = typer.Typer(no_args_is_help=True)
 admin_app = typer.Typer(no_args_is_help=True)
 cache_app = typer.Typer(no_args_is_help=True)
@@ -345,6 +347,8 @@ def todo_update(
             fields["priority"] = priority
         if tag is not None:
             fields["tag"] = tag
+        if extra_json is not None:
+            fields["extra_fields"] = extra_json
         _run_http(lambda client: client.todo_update(todo_id, **fields), settings)
         return
 
@@ -517,6 +521,7 @@ def schedule_add(
         _run_http(lambda client: client.schedule_create(
             title=title, start_at=start_at, end_at=end_at,
             description=description, location=location, category=category,
+            extra_fields=extra_json,
         ), settings)
         return
 
@@ -707,6 +712,8 @@ def schedule_update(
             fields["location"] = location
         if category is not None:
             fields["category"] = category
+        if extra_json is not None:
+            fields["extra_fields"] = extra_json
         _run_http(lambda client: client.schedule_update(schedule_id, **fields), settings)
         return
 
@@ -837,6 +844,184 @@ def schedule_stats(
                 "stats": stats,
             }
         )
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+# ── notification commands ──
+
+
+@notify_app.command("add")
+def notify_add(
+    title: str = typer.Argument(..., help="Notification title."),
+    trigger_at: int = typer.Option(..., "--trigger", help="Unix epoch trigger timestamp in seconds."),
+    description: str | None = typer.Option(None, "--description", "-m", help="Optional details."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
+) -> None:
+    """Add a notification."""
+
+    extra_json = _parse_extra_json(extra)
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(
+            lambda client: client.notification_create(
+                title=title,
+                trigger_at=trigger_at,
+                description=description,
+                extra_fields=extra_json,
+            ),
+            settings,
+        )
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_notification_service(uow, context.clock)
+            notification = service.create(
+                NotificationDraft(
+                    title=title,
+                    trigger_at=trigger_at,
+                    description=description,
+                    extra_fields=extra_json,
+                )
+            )
+            uow.session.flush()
+            mentions = service.get_mentions(notification.id)
+            _echo_json({"ok": True, "notification": notification_to_dict(notification, mentions)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@notify_app.command("list")
+def notify_list(
+    start_at: int | None = typer.Option(None, "--from", "-f", help="Optional Unix epoch trigger range start in seconds."),
+    end_at: int | None = typer.Option(None, "--to", "-t", help="Optional Unix epoch trigger range end in seconds."),
+) -> None:
+    """List notifications in a trigger epoch range."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.notification_list(start_at=start_at, end_at=end_at), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_notification_service(uow, context.clock)
+            notifications = service.list_between(start_at, end_at)
+            mentions_map = service.get_mentions_batch([n.id for n in notifications])
+
+        _echo_json(
+            {
+                "ok": True,
+                "range": {"start_at": start_at, "end_at": end_at},
+                "count": len(notifications),
+                "notifications": [
+                    notification_to_dict(notification, mentions_map.get(notification.id, []))
+                    for notification in notifications
+                ],
+            }
+        )
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@notify_app.command("show")
+def notify_show(notification_id: int = typer.Argument(..., help="Notification id.")) -> None:
+    """Show a notification by id."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.notification_get(notification_id), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_notification_service(uow, context.clock)
+            notification = service.show(notification_id)
+            mentions = service.get_mentions(notification.id)
+            _echo_json({"ok": True, "notification": notification_to_dict(notification, mentions)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@notify_app.command("update")
+def notify_update(
+    notification_id: int = typer.Argument(..., help="Notification id."),
+    title: str | None = typer.Option(None, "--title", help="New title."),
+    trigger_at: int | None = typer.Option(None, "--trigger", help="New Unix epoch trigger timestamp."),
+    description: str | None = typer.Option(None, "--description", "-m", help="New details."),
+    extra: str | None = typer.Option(None, "--extra", "-E", help='Extra fields as JSON string, e.g. \'{"key": "value"}\'.'),
+) -> None:
+    """Update mutable notification fields."""
+
+    extra_json: str | None = _parse_extra_json(extra) if extra is not None else None
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        fields: dict[str, object] = {}
+        if title is not None:
+            fields["title"] = title
+        if trigger_at is not None:
+            fields["trigger_at"] = trigger_at
+        if description is not None:
+            fields["description"] = description
+        if extra_json is not None:
+            fields["extra_fields"] = extra_json
+        _run_http(lambda client: client.notification_update(notification_id, **fields), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_notification_service(uow, context.clock)
+            update_kwargs: dict[str, object] = dict(
+                title=title,
+                trigger_at=trigger_at,
+                description=description,
+            )
+            if extra_json is not None:
+                update_kwargs["extra_fields"] = extra_json
+            notification = service.update(
+                notification_id,
+                NotificationUpdate(**update_kwargs),
+            )
+            uow.session.flush()
+            mentions = service.get_mentions(notification.id)
+            _echo_json({"ok": True, "notification": notification_to_dict(notification, mentions)})
+    except AMToDoError as exc:
+        _exit_with_error(exc)
+
+
+@notify_app.command("remove")
+def notify_remove(notification_id: int = typer.Argument(..., help="Notification id.")) -> None:
+    """Remove a notification by id."""
+
+    settings = load_cli_settings()
+    if settings.server_url:
+        _run_http(lambda client: client.notification_remove(notification_id), settings)
+        return
+
+    context = create_application_context(settings)
+    context.database.create_schema()
+
+    try:
+        with UnitOfWork(context.database) as uow:
+            service = _make_notification_service(uow, context.clock)
+            service.remove(notification_id)
+            uow.session.flush()
+            _echo_json({"ok": True})
     except AMToDoError as exc:
         _exit_with_error(exc)
 
@@ -1839,6 +2024,7 @@ def _purge_notifications_http(client: "AMTodoClient", ids: list[int]) -> dict[st
 
 app.add_typer(todo_app, name="todo", help="Manage ToDo items.")
 app.add_typer(schedule_app, name="schedule", help="Manage schedule items.")
+app.add_typer(notify_app, name="notify", help="Manage notifications.")
 app.add_typer(user_app, name="user", help="User self-service (me, update, regen-token).")
 app.add_typer(admin_app, name="admin", help="Admin user management (create, list, delete, update, regen-token).")
 app.add_typer(cache_app, name="cache", help="Manage local caches.")
