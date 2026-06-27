@@ -5,7 +5,7 @@ import { useConfirm } from "./ConfirmDialog";
 import type { UploadProgress } from "../../lib/chunked-upload";
 import type { DownloadProgress } from "../../lib/chunked-download";
 import { getAttachmentBlob } from "../../lib/attachmentCache";
-import { getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, hasCachedAttachmentOrPartial, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
+import { cacheNativeFileFromLocalUri, cacheUploadedContent, getAttachmentCachePath, getAttachmentUri, getCachedAttachmentUri, hasCachedAttachmentOrPartial, isNative as isNativePlatform, getNativeFilePath, deleteCachedAttachment } from "../../lib/attachmentDiskCache";
 import type { NativeAttachmentFile } from "../../lib/native-attachment";
 import { captureNativeAttachmentMedia, isNativeAttachmentUploadAvailable, pickNativeAttachmentFiles } from "../../lib/native-attachment";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
@@ -566,12 +566,21 @@ export function AttachmentManager({
       for (const file of selected) {
         const key = `${file.name}-${file.size}`;
         setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total: file.size, percent: 0, phase: "uploading" } }));
+        let uploadResult: any = null;
         try {
-          await uploadFile(file, (progress) => {
+          uploadResult = await uploadFile(file, (progress) => {
             setUploadProgress((prev) => ({ ...prev, [key]: progress }));
           }, ac.signal);
         } finally {
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        }
+        // Cache the uploaded file locally so it can be previewed without re-downloading
+        if (uploadResult?.ok && uploadResult?.attachment) {
+          const attachment = uploadResult.attachment as import("../../api/client").AttachmentMetadata;
+          try {
+            const content = await file.arrayBuffer();
+            await cacheUploadedContent(content, attachment);
+          } catch { /* cache write is best-effort */ }
         }
       }
       // Refresh attachment list — failure here is non-fatal (upload already succeeded)
@@ -612,12 +621,20 @@ export function AttachmentManager({
         const total = Math.max(file.size, 0);
         const key = `${file.name}-${file.size}`;
         setUploadProgress((prev) => ({ ...prev, [key]: { loaded: 0, total, percent: 0, phase: "uploading" } }));
+        let uploadResult: any = null;
         try {
-          await uploadNativeFile(file, (progress) => {
+          uploadResult = await uploadNativeFile(file, (progress) => {
             setUploadProgress((prev) => ({ ...prev, [key]: progress }));
           }, ac.signal);
         } finally {
           setUploadProgress((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        }
+        // Cache the native file in disk cache so it can be previewed without re-downloading
+        if (uploadResult?.ok && uploadResult?.attachment) {
+          const attachment = uploadResult.attachment as import("../../api/client").AttachmentMetadata;
+          try {
+            await cacheNativeFileFromLocalUri(file.uri, attachment);
+          } catch { /* cache write is best-effort */ }
         }
       }
       try {

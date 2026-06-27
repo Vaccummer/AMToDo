@@ -15,6 +15,7 @@
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Capacitor } from "@capacitor/core";
 
+import { Filesystem as Fs } from "@capacitor/filesystem";
 import write_blob from "capacitor-blob-writer";
 import type { AttachmentMetadata, ScheduleAttachmentMetadata } from "../api/client";
 import type { AttachmentDownloadChunkResponse } from "../api/client";
@@ -380,6 +381,56 @@ export async function clearDiskCache(): Promise<void> {
   try { await Filesystem.rmdir({ path: CACHE_DIR, directory: Directory.Cache, recursive: true }); } catch { /* */ }
   metaIndex.clear();
 }
+
+/**
+ * Cache uploaded file bytes into the native disk cache so it can be previewed
+ * without re-downloading.  For native attachments with a local file URI,
+ * prefer {@link cacheNativeFileFromLocalUri} to avoid re-reading into memory.
+ */
+export async function cacheUploadedContent(
+  content: ArrayBuffer,
+  meta: CacheableMeta,
+): Promise<void> {
+  if (!isNative()) return;
+  const path = getAttachmentCachePath(meta);
+  try { await Filesystem.deleteFile({ path: cacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
+  try { await Filesystem.deleteFile({ path: partialCacheFilePath(path), directory: Directory.Cache }); } catch { /* */ }
+  await writeContent(content, meta, path);
+}
+
+/**
+ * Copy a locally-accessible file (picked from the native file system) directly
+ * into the attachment disk cache, avoiding an extra read into JS memory.
+ */
+export async function cacheNativeFileFromLocalUri(
+  sourceUri: string,
+  meta: CacheableMeta,
+): Promise<void> {
+  if (!isNative()) return;
+  const cachePath = getAttachmentCachePath(meta);
+  const dest = cacheFilePath(cachePath);
+  await ensureParentDir(cachePath);
+  try { await Filesystem.deleteFile({ path: dest, directory: Directory.Cache }); } catch { /* */ }
+  try { await Filesystem.deleteFile({ path: partialCacheFilePath(cachePath), directory: Directory.Cache }); } catch { /* */ }
+  try {
+    const stat = await Fs.stat({ path: sourceUri });
+    if (stat.type !== "file") throw new Error("not a file");
+    const data = await Fs.readFile({ path: sourceUri });
+    await Filesystem.writeFile({
+      path: dest,
+      data: data.data as string,
+      directory: Directory.Cache,
+      recursive: true,
+    });
+  } catch {
+    const converted = Capacitor.convertFileSrc(sourceUri);
+    const blob = await fetch(converted).then((r) => r.blob());
+    const content = await blob.arrayBuffer();
+    await writeContent(content, meta, cachePath);
+  }
+  metaIndex.set(cachePath, { updated_at: meta.updated_at, plain_size_bytes: meta.plain_size_bytes });
+}
+
 
 /**
  * Get total size of cached files on disk (traverses nested directories).
