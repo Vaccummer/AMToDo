@@ -761,6 +761,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (isWorking) return MOB.connecting;
     if (viewState === "online" && wsEnabled) return MOB.disconnect;
     if (viewState === "interrupted") return MOB.reconnectNow;
+    if (viewState === "error") return MOB.reconnectNow;
     return MOB.connect;
   }
 

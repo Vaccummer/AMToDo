@@ -609,6 +609,7 @@ export function SettingsModal({ settings: initial, onUpdateField, onSaveConnecti
     if (isWorking) return t("settings.mobileConnecting");
     if (viewState === "online" && wsEnabled) return t("settings.mobileDisconnect");
     if (viewState === "interrupted") return t("settings.mobileReconnectNow");
+    if (viewState === "error") return t("settings.mobileReconnectNow");
     return t("settings.connectionLogin");
   }
 
